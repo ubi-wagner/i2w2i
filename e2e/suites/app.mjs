@@ -11,7 +11,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  BASE, PHONES, RUN, acceptInvite, adminPage, check, createCode, createEvent, db, finish, fixture, joinWithCode, page, uploadFiles,
+  ADMIN, BASE, PHONES, RUN, acceptInvite, adminPage, check, createCode, createEvent, db, finish, fixture, joinWithCode, login, page, uploadFiles,
 } from '../lib.mjs';
 
 const ece = createRequire(import.meta.url)('http_ece');
@@ -114,11 +114,14 @@ await new Promise((r) => setTimeout(r, 4000));
 check(received.length === afterOff, 'after turning notifications off, nothing more arrives');
 
 // ── Screens ─────────────────────────────────────────────────────────────────
-// As if the host tapped "Allow" (headless browsers start with notifications blocked).
-await host.context().grantPermissions(['notifications'], { origin: BASE });
-await host.goto(ev.manage);
-await host.getByRole('button', { name: 'Turn on notifications' }).waitFor({ timeout: 8000 }).catch(() => {});
-check(await host.getByRole('button', { name: 'Turn on notifications' }).isVisible(), 'hosts see “Turn on notifications” on the manage page');
+// A phone that hasn't been asked yet. (Set explicitly: headless browsers report
+// "denied" whatever the test grants.)
+const fresh = await page();
+await fresh.addInitScript(() => { Object.defineProperty(Notification, 'permission', { get: () => 'default' }); });
+await login(fresh, ADMIN.email, ADMIN.password);
+await fresh.goto(ev.manage);
+await fresh.getByRole('button', { name: 'Turn on notifications' }).waitFor({ timeout: 8000 }).catch(() => {});
+check(await fresh.getByRole('button', { name: 'Turn on notifications' }).isVisible(), 'hosts see “Turn on notifications” on the manage page');
 await host.goto(`${BASE}/account`);
 check(await host.getByRole('heading', { name: 'Notifications' }).isVisible(), 'the account page has a Notifications section');
 
@@ -126,7 +129,7 @@ check(await host.getByRole('heading', { name: 'Notifications' }).isVisible(), 't
 const blocked = await page();
 await blocked.context().grantPermissions([], { origin: BASE });
 await blocked.addInitScript(() => { Object.defineProperty(Notification, 'permission', { get: () => 'denied' }); });
-await (await import('../lib.mjs')).login(blocked, (await import('../lib.mjs')).ADMIN.email, (await import('../lib.mjs')).ADMIN.password);
+await login(blocked, ADMIN.email, ADMIN.password);
 await blocked.goto(`${BASE}/account`);
 await blocked.getByText('Notifications are blocked for i2w2i').waitFor({ timeout: 8000 }).catch(() => {});
 check(await blocked.getByText('Notifications are blocked for i2w2i').isVisible(), 'if notifications are blocked, the page explains how to allow them');
