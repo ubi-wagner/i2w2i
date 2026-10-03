@@ -34,7 +34,10 @@ export interface UploadRow {
   hidden: boolean;
   featured: boolean;
   caption: string;
+  overlay: Record<string, unknown> | null;
   created_at: Date;
+  /** Present when the query counts comments. */
+  comment_count?: number;
 }
 
 export interface GalleryItem {
@@ -51,6 +54,10 @@ export interface GalleryItem {
   filename: string;
   sizeBytes: number;
   mine: boolean;
+  caption: string;
+  comments: number;
+  /** Frame/filter manifest, for videos (framed at playback) and re-rendering. */
+  overlay: Record<string, unknown> | null;
   /** Managers only: who/what/where for this upload. */
   details?: { label: string; value: string; href?: string }[];
 }
@@ -91,7 +98,13 @@ export async function toGallery(rows: UploadRow[], ctx: EventCtx, opts: { origin
         filename: u.filename,
         sizeBytes: Number(u.size_bytes),
         mine,
+        caption: u.caption,
+        comments: u.comment_count ?? 0,
+        overlay: u.overlay,
       };
     }),
   );
 }
+
+/** Ready uploads for a gallery, with comment counts. RLS decides which rows come back. */
+export const GALLERY_SQL_COLUMNS = `u.*, (SELECT count(*)::int FROM events.comments c WHERE c.upload_id = u.id AND c.deleted_at IS NULL) AS comment_count`;

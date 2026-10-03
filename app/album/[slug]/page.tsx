@@ -9,7 +9,7 @@ import { loadAlbum } from '@/lib/events/album';
 import { rateLimit } from '@/lib/rate-limit';
 import { requestMeta } from '@/lib/request-meta';
 import { withCtx } from '@/lib/events/db';
-import { toGallery, type UploadRow } from '@/lib/events/queries';
+import { GALLERY_SQL_COLUMNS, toGallery, type UploadRow } from '@/lib/events/queries';
 import { publicEvent } from '@/lib/events/session';
 import { leaveAlbum } from './actions';
 import { JoinForm } from './JoinForm';
@@ -80,8 +80,8 @@ export default async function AlbumPage({ params, searchParams }: Params) {
   }
 
   const rows = await withCtx(album.ctx, (tx) => tx<UploadRow[]>`
-    SELECT * FROM events.uploads WHERE event_id = ${event.id} AND status = 'ready'
-     ORDER BY featured DESC, created_at DESC LIMIT 1000`);
+    SELECT ${tx.unsafe(GALLERY_SQL_COLUMNS)} FROM events.uploads u WHERE u.event_id = ${event.id} AND u.status = 'ready'
+     ORDER BY u.featured DESC, u.created_at DESC LIMIT 2000`);
   // Hidden items only reach managers; keep them out of the public grid here too.
   const visible = rows.filter((r) => !r.hidden);
   const items = await toGallery(visible, album.ctx, { originals: album.canManage });
@@ -119,6 +119,7 @@ export default async function AlbumPage({ params, searchParams }: Params) {
         <h2 className="text-lg font-semibold">{album.canView ? 'Album' : 'Your uploads'}</h2>
         <Gallery
           items={items}
+          downloadUrl={`/album/${slug}/api/download`}
           empty={album.canView ? 'No photos yet. Be the first!' : 'Nothing from you yet. Your photos and videos will show here.'}
         />
         {!album.canView && <p className="text-sm text-stone-500">The hosts will share the full album later.</p>}

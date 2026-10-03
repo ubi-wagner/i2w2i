@@ -1,5 +1,7 @@
 import 'server-only';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
 import { appendFile, mkdir, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
@@ -145,6 +147,13 @@ export async function objectSize(key: string): Promise<number | null> {
     if ((err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) return null;
     throw err;
   }
+}
+
+/** The whole object as a Node stream (for zip downloads). */
+export async function readStream(key: string): Promise<Readable> {
+  if (storageDriver === 'local') return createReadStream(/*turbopackIgnore: true*/ localPath(key));
+  const res = await s3().send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+  return res.Body as Readable;
 }
 
 /** The first `bytes` of an object (for reading photo metadata), or null. */

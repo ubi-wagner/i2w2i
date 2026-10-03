@@ -54,3 +54,15 @@ export function formatBytes(n: number): string {
   }
   return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
 }
+
+/** Readable, unique file names for a zip: "Gina 01.jpg", "Gina 02.mov", ... */
+export function zipEntryNames(items: { uploader: string; filename: string; key: string; original: boolean }[]): string[] {
+  const counts = new Map<string, number>();
+  return items.map((it) => {
+    const who = it.uploader.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 40) || 'Guest';
+    const n = (counts.get(who) ?? 0) + 1;
+    counts.set(who, n);
+    const ext = /\.([a-z0-9]{1,5})$/i.exec(it.key)?.[1]?.toLowerCase() ?? 'bin';
+    return `${who} ${String(n).padStart(2, '0')}.${ext}`;
+  });
+}

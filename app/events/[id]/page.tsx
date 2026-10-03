@@ -6,11 +6,11 @@ import { Gallery } from '@/components/events/Gallery';
 import { requireApp } from '@/lib/apps';
 import { decryptCode } from '@/lib/events/codes';
 import { withCtx } from '@/lib/events/db';
-import { canManage, canOwn, eventForCtx, toGallery, type UploadRow } from '@/lib/events/queries';
+import { canManage, canOwn, eventForCtx, GALLERY_SQL_COLUMNS, toGallery, type UploadRow } from '@/lib/events/queries';
 import { albumUrl, qrLink, qrSvg } from '@/lib/events/qr';
 import { formatBytes } from '@/lib/events/rules';
 import { userCtx } from '@/lib/events/session';
-import { addMember, changeAccessCode, moderateUpload, removeGuest, removeMember } from '../actions';
+import { addMember, changeAccessCode, moderateUpload, moderateUploads, removeGuest, removeMember } from '../actions';
 import { describeDevice } from '@/lib/device';
 import { describeAction, eventActivity, namesByDevice, shortDevice, uploadDetails, type ActivityRow } from '@/lib/events/forensics';
 import { CodeForm } from './CodeForm';
@@ -57,7 +57,9 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                  (SELECT count(*)::int FROM events.guests g WHERE g.access_code_id = c.id) AS guests
             FROM events.access_codes c WHERE c.event_id = ${id} ORDER BY c.created_at`
       : [],
-    uploads: await tx<UploadRow[]>`SELECT * FROM events.uploads WHERE event_id = ${id} AND status = 'ready' ORDER BY created_at DESC`,
+    uploads: await tx<UploadRow[]>`
+      SELECT ${tx.unsafe(GALLERY_SQL_COLUMNS)} FROM events.uploads u
+       WHERE u.event_id = ${id} AND u.status = 'ready' ORDER BY u.created_at DESC`,
     guests: await tx<GuestRow[]>`
       SELECT g.id, g.display_name, g.via, g.created_at, g.last_seen_at, g.revoked_at, c.label,
              (SELECT count(*)::int FROM events.uploads u WHERE u.uploader_guest_id = g.id AND u.status = 'ready') AS uploads
@@ -235,7 +237,8 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           </div>
           <Gallery
             items={gallery}
-            moderation={{ eventId: id, action: moderateUpload }}
+            downloadUrl={`/album/${event.slug}/api/download`}
+            moderation={{ eventId: id, action: moderateUpload, bulkAction: moderateUploads }}
             empty="Nothing yet. Share a code or QR, or add some yourself from the album page."
           />
           <details className="text-sm text-stone-600">

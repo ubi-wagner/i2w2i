@@ -197,3 +197,31 @@ export async function removeGuest(form: FormData): Promise<void> {
   await logActivity({ eventId: id, action: 'guest.removed', userId: user.id, guestId, actorName: user.display_name, detail: { hide_uploads: hide } });
   revalidatePath(`/events/${id}`);
 }
+
+/** Bulk moderation of selected uploads: hide, show, feature, unfeature or delete. */
+export async function moderateUploads(form: FormData): Promise<void> {
+  const { user, ctx: c } = await ctx();
+  const id = str(form, 'event_id');
+  const action = str(form, 'action');
+  const ids = form.getAll('upload_id').map(String).filter((v) => /^[0-9a-f-]{36}$/.test(v)).slice(0, 1000);
+  if (!ids.length || !['hide', 'show', 'feature', 'unfeature', 'delete'].includes(action)) return;
+  const removed = await withCtx(c, async (tx) => {
+    const where = tx`event_id = ${id} AND id = ANY(${ids}::uuid[])`;
+    if (action === 'hide') await tx`UPDATE events.uploads SET hidden = true WHERE ${where}`;
+    if (action === 'show') await tx`UPDATE events.uploads SET hidden = false WHERE ${where}`;
+    if (action === 'feature') await tx`UPDATE events.uploads SET featured = true WHERE ${where}`;
+    if (action === 'unfeature') await tx`UPDATE events.uploads SET featured = false WHERE ${where}`;
+    if (action === 'delete') {
+      return tx<{ id: string; original_key: string; preview_key: string | null }[]>`
+        DELETE FROM events.uploads WHERE ${where} RETURNING id, original_key, preview_key`;
+    }
+    return [];
+  });
+  for (const r of removed) {
+    await deleteObject(r.original_key).catch(() => {});
+    if (r.preview_key) await deleteObject(r.preview_key).catch(() => {});
+  }
+  await audit(user.id, `events.upload.bulk_${action}`, id, { count: ids.length });
+  await logActivity({ eventId: id, action: `upload.bulk_${action}`, userId: user.id, actorName: user.display_name, detail: { count: ids.length, ids } });
+  revalidatePath(`/events/${id}`);
+}

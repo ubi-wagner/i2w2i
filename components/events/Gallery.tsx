@@ -1,18 +1,39 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GalleryItem } from '@/lib/events/queries';
 
 interface Props {
   items: GalleryItem[];
   empty: string;
-  /** Owners/curators: hide, feature, delete. */
-  moderation?: { eventId: string; action: (form: FormData) => Promise<void> };
+  /** Enables Select + "Download selected" (a zip, streamed by the server). */
+  downloadUrl?: string;
+  /** Owners/curators: hide, star, delete, one at a time or in bulk. */
+  moderation?: {
+    eventId: string;
+    action: (form: FormData) => Promise<void>;
+    bulkAction?: (form: FormData) => Promise<void>;
+  };
+  /** Extra panel in the lightbox (comments). */
+  renderExtra?: (item: GalleryItem) => React.ReactNode;
 }
 
-export function Gallery({ items, empty, moderation }: Props) {
+function dayLabel(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+export function Gallery({ items, empty, downloadUrl, moderation, renderExtra }: Props) {
   const [open, setOpen] = useState<number | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const downloadForm = useRef<HTMLFormElement>(null);
   const item = open === null ? null : items[open];
+
+  // Forget selections of items that went away (deleted, hidden elsewhere).
+  useEffect(() => {
+    setSelected((s) => new Set([...s].filter((id) => items.some((i) => i.id === id))));
+  }, [items]);
 
   useEffect(() => {
     if (open === null) return;
@@ -25,29 +46,153 @@ export function Gallery({ items, empty, moderation }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, items.length]);
 
+  const days = useMemo(() => {
+    const groups: { day: string; label: string; items: { item: GalleryItem; index: number }[] }[] = [];
+    items.forEach((it, index) => {
+      const day = new Date(it.createdAt).toDateString();
+      let g = groups.find((x) => x.day === day);
+      if (!g) groups.push((g = { day, label: dayLabel(it.createdAt), items: [] }));
+      g.items.push({ item: it, index });
+    });
+    return groups;
+  }, [items]);
+
+  const people = useMemo(() => [...new Set(items.map((i) => i.uploaderName))].sort(), [items]);
+
   if (!items.length) return <p className="text-stone-600">{empty}</p>;
 
+  const canSelect = Boolean(downloadUrl || moderation?.bulkAction);
+  const toggle = (id: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const addAll = (ids: string[]) =>
+    setSelected((s) => {
+      const allIn = ids.every((id) => s.has(id));
+      const n = new Set(s);
+      for (const id of ids) {
+        if (allIn) n.delete(id);
+        else n.add(id);
+      }
+      return n;
+    });
+
+  async function bulk(action: string) {
+    if (!moderation?.bulkAction || !selected.size) return;
+    if (action === 'delete' && !confirm(`Delete ${selected.size} item${selected.size > 1 ? 's' : ''} for good?`)) return;
+    setBusy(true);
+    const f = new FormData();
+    f.set('event_id', moderation.eventId);
+    f.set('action', action);
+    for (const id of selected) f.append('upload_id', id);
+    try {
+      await moderation.bulkAction(f);
+      if (action === 'delete') setSelected(new Set());
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <>
-      <ul className="grid grid-cols-3 gap-1 sm:grid-cols-4 sm:gap-2 lg:grid-cols-5">
-        {items.map((it, i) => (
-          <li key={it.id} className={`relative ${it.hidden ? 'opacity-40' : ''}`}>
-            <button type="button" onClick={() => setOpen(i)} className="block aspect-square w-full overflow-hidden rounded-md bg-stone-200" aria-label={`Open ${it.kind} from ${it.uploaderName}`}>
-              {it.kind === 'photo' ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={it.src} alt="" loading="lazy" className="h-full w-full object-cover" />
-              ) : (
-                <span className="relative block h-full w-full">
-                  <video src={`${it.src}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                  <span className="absolute inset-0 flex items-center justify-center text-3xl text-white drop-shadow">▶</span>
-                </span>
+    <div className="space-y-3">
+      {canSelect && (
+        <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-xl bg-white/95 p-1 text-sm backdrop-blur">
+          {!selecting ? (
+            <button type="button" className="btn-secondary py-1" onClick={() => setSelecting(true)}>Select</button>
+          ) : (
+            <>
+              <span className="font-medium" aria-live="polite">{selected.size} selected</span>
+              <button type="button" className="btn-secondary py-1" onClick={() => setSelected(new Set(items.map((i) => i.id)))}>All</button>
+              <button type="button" className="btn-secondary py-1" onClick={() => setSelected(new Set())}>None</button>
+              {people.length > 1 && (
+                <select
+                  className="rounded-lg border border-stone-300 bg-white px-2 py-1"
+                  value=""
+                  onChange={(e) => e.target.value && addAll(items.filter((i) => i.uploaderName === e.target.value).map((i) => i.id))}
+                  aria-label="Select everything from one person"
+                >
+                  <option value="">From person…</option>
+                  {people.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
               )}
-            </button>
-            {it.featured && <span className="absolute left-1 top-1 rounded bg-brand px-1 text-xs text-white">★</span>}
-            {it.hidden && <span className="absolute right-1 top-1 rounded bg-stone-800 px-1 text-xs text-white">Hidden</span>}
-          </li>
-        ))}
-      </ul>
+              {downloadUrl && (
+                <button type="button" className="btn py-1" disabled={!selected.size} onClick={() => downloadForm.current?.submit()}>
+                  Download{selected.size ? ` (${selected.size})` : ''}
+                </button>
+              )}
+              {moderation?.bulkAction && (
+                <>
+                  <button type="button" className="btn-secondary py-1" disabled={busy || !selected.size} onClick={() => bulk('hide')}>Hide</button>
+                  <button type="button" className="btn-secondary py-1" disabled={busy || !selected.size} onClick={() => bulk('show')}>Show</button>
+                  <button type="button" className="btn-secondary py-1" disabled={busy || !selected.size} onClick={() => bulk('feature')}>Star</button>
+                  <button type="button" className="btn-secondary py-1" disabled={busy || !selected.size} onClick={() => bulk('unfeature')}>Unstar</button>
+                  <button type="button" className="btn-secondary py-1 text-red-700" disabled={busy || !selected.size} onClick={() => bulk('delete')}>Delete</button>
+                </>
+              )}
+              <button type="button" className="ml-auto px-2 py-1 text-stone-600 underline" onClick={() => { setSelecting(false); setSelected(new Set()); }}>Done</button>
+            </>
+          )}
+          {downloadUrl && (
+            <form ref={downloadForm} method="post" action={downloadUrl} className="hidden">
+              {[...selected].map((id) => <input key={id} type="hidden" name="id" value={id} />)}
+            </form>
+          )}
+        </div>
+      )}
+
+      {days.map((g) => (
+        <section key={g.day} className="space-y-1">
+          {(days.length > 1 || selecting) && (
+            <div className="flex items-center justify-between text-sm text-stone-600">
+              <h3>{g.label}</h3>
+              {selecting && (
+                <button type="button" className="text-brand underline" onClick={() => addAll(g.items.map((x) => x.item.id))}>
+                  {g.items.every((x) => selected.has(x.item.id)) ? 'Unselect day' : 'Select day'}
+                </button>
+              )}
+            </div>
+          )}
+          <ul className="grid grid-cols-3 gap-1 sm:grid-cols-4 sm:gap-2 lg:grid-cols-5">
+            {g.items.map(({ item: it, index: i }) => {
+              const isSel = selected.has(it.id);
+              return (
+                <li key={it.id} className={`relative ${it.hidden ? 'opacity-40' : ''}`}>
+                  <button
+                    type="button"
+                    onClick={() => (selecting ? toggle(it.id) : setOpen(i))}
+                    className={`block aspect-square w-full overflow-hidden rounded-md bg-stone-200 ${isSel ? 'ring-4 ring-brand ring-offset-1' : ''}`}
+                    aria-label={`${selecting ? (isSel ? 'Unselect' : 'Select') : 'Open'} ${it.kind} from ${it.uploaderName}`}
+                    aria-pressed={selecting ? isSel : undefined}
+                  >
+                    {it.kind === 'photo' ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={it.src} alt={it.caption || ''} loading="lazy" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="relative block h-full w-full">
+                        <video src={`${it.src}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                        <span className="absolute inset-0 flex items-center justify-center text-3xl text-white drop-shadow">▶</span>
+                      </span>
+                    )}
+                  </button>
+                  {selecting && (
+                    <span className={`pointer-events-none absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-sm text-white shadow ${isSel ? 'bg-brand' : 'bg-black/30'}`}>
+                      {isSel ? '✓' : ''}
+                    </span>
+                  )}
+                  {it.featured && <span className="absolute left-1 top-1 rounded bg-brand px-1 text-xs text-white">★</span>}
+                  {it.hidden && !selecting && <span className="absolute right-1 top-1 rounded bg-stone-800 px-1 text-xs text-white">Hidden</span>}
+                  {it.comments > 0 && !selecting && (
+                    <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-xs text-white">💬 {it.comments}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
 
       {item && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black/95 text-white" role="dialog" aria-modal="true">
@@ -58,11 +203,12 @@ export function Gallery({ items, empty, moderation }: Props) {
           <div className="flex min-h-0 grow items-center justify-center px-2" onClick={() => setOpen(null)}>
             {item.kind === 'photo' ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.src} alt="" className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
+              <img src={item.src} alt={item.caption || ''} className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
             ) : (
               <video src={item.src} controls autoPlay playsInline className="max-h-full max-w-full" onClick={(e) => e.stopPropagation()} />
             )}
           </div>
+          {item.caption && <p className="px-4 pt-2 text-center">{item.caption}</p>}
           {item.details && item.details.length > 0 && (
             <details className="mx-auto w-full max-w-xl px-4 text-sm">
               <summary className="cursor-pointer text-center text-stone-300">Details</summary>
@@ -76,6 +222,7 @@ export function Gallery({ items, empty, moderation }: Props) {
               </dl>
             </details>
           )}
+          {renderExtra?.(item)}
           <div className="flex flex-wrap items-center justify-center gap-4 p-3 text-sm">
             <button type="button" disabled={open === 0} onClick={() => setOpen((i) => (i ?? 1) - 1)} className="px-2 disabled:opacity-30">← Prev</button>
             {item.originalUrl && <a href={item.originalUrl} className="underline">Download original</a>}
@@ -106,6 +253,6 @@ export function Gallery({ items, empty, moderation }: Props) {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

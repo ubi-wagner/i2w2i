@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, fileExtension, formatBytes, isValidSlug, slugify, uploadKind, uploadProblem } from '@/lib/events/rules';
+import { cleanName, fileExtension, formatBytes, isValidSlug, slugify, uploadKind, uploadProblem, zipEntryNames } from '@/lib/events/rules';
 import { codeHmac, decryptCode, encryptCode, normalizeCode, qrHash, qrToken } from '@/lib/events/codes';
 
 describe('slugify', () => {
@@ -35,6 +35,18 @@ describe('uploads', () => {
     expect(cleanName('  Aunt   May ')).toBe('Aunt May');
     expect(cleanName('   ')).toBeNull();
     expect(formatBytes(900_000_000)).toBe('858 MB');
+  });
+});
+
+describe('zip names', () => {
+  it('numbers files per person and keeps the stored extension', () => {
+    expect(
+      zipEntryNames([
+        { uploader: 'Gina', filename: 'IMG_1.HEIC', key: 'e/1/preview.jpg', original: false },
+        { uploader: 'Gina', filename: 'clip.mov', key: 'e/2/original.mov', original: true },
+        { uploader: 'Bea / "B"', filename: 'x', key: 'e/3/original.jpg', original: true },
+      ]),
+    ).toEqual(['Gina 01.jpg', 'Gina 02.mov', 'Bea  B 01.jpg']);
   });
 });
 
