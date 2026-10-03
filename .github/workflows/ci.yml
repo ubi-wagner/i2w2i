@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, claude/main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: i2w2i
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: i2w2i
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U i2w2i" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://i2w2i:ci@localhost:5432/i2w2i
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Migrations apply cleanly and are idempotent
+        run: |
+          npm run migrate
+          npm run migrate:check
+      - name: Bootstrap is idempotent
+        env:
+          BOOTSTRAP_ADMIN_EMAIL: admin@example.com
+          BOOTSTRAP_ADMIN_PASSWORD: ci-password-123
+        run: |
+          npm run bootstrap-admin
+          npm run bootstrap-admin
+      - run: npm run build
