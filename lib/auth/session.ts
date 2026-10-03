@@ -7,7 +7,8 @@ import type { PlatformRole } from '../access';
 import { hashToken, newToken } from './tokens';
 
 export const SESSION_COOKIE = 'i2w2i_session';
-const SESSION_DAYS = 30;
+/** Sliding: each visit (at most hourly) pushes expiry this far out again. */
+export const SESSION_DAYS = 90;
 
 export interface CurrentUser {
   id: string;
@@ -50,7 +51,12 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
        AND s.revoked_at IS NULL AND s.expires_at > now() AND u.is_active`;
   const row = rows[0];
   if (!row) return null;
-  if (row.stale) await sql`UPDATE core.sessions SET last_seen_at = now() WHERE id = ${row.session_id}`;
+  // Someone who keeps using the app stays signed in; the cookie is renewed in proxy.ts.
+  if (row.stale) {
+    await sql`UPDATE core.sessions SET last_seen_at = now(),
+                     expires_at = greatest(expires_at, now() + make_interval(days => ${SESSION_DAYS}))
+               WHERE id = ${row.session_id}`;
+  }
   const { session_id: _s, stale: _st, ...user } = row;
   return user;
 });

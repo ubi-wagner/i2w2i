@@ -147,15 +147,43 @@ Phones suspend pages when people switch apps, and venue networks drop.
 - Anyone who can see items can download a selection as a zip, streamed by the server one file at a time. Viewers get gallery copies; managers and the uploader get originals.
 - Managers hide, show, star, unstar or delete in bulk.
 
+### Review before anyone else sees it
+
+Nothing a guest, invitee or family member uploads is shown to anyone but them and the event's hosts (owners and helpers) until a host approves it. This is the uploads RLS policy (migration 008), so it covers the album, the public page, zips, originals and comments alike.
+
+- Hosts' and helpers' own uploads are approved automatically.
+- An approval is for the exact bytes the host looked at. Upload links last 10 minutes (`UPLOAD_URL_TTL`), each one extends `writable_until`, and the database refuses an approval while any link could still change the files. Phones fetch fresh links when one runs out.
+- Once approved, the uploader can't change it (no new frame, caption or gallery copy). Before approval they can; each change restarts the 10 minutes.
+- Hosts see a "waiting for your OK" banner and queue on the manage page (approve one at a time from the photo view, by selection, or all at once), and a count on their event cards. Uploaders see "Waiting" on their own photos.
+
 ### Comments, gifts, frames
 
 - **Comments:** anyone who can see the album can comment (accounts as themselves, guests under their name). Authors and managers remove comments.
 - **Gift links:** Venmo, PayPal or Cash App handles and registry links (https only), shown on the album with a QR each. Money never passes through i2w2i.
+
+### Event pages
+
+Hosts write their event's page in one editor with a live preview (manage page, "Your event page"):
+
+- **Look** (`events.theme`): Enchanted forest, Garden or Classic. Colours are CSS variables under `[data-theme]` in `app/globals.css` (Tailwind's `stone` and `brand` read them), so every component follows the theme; drawings are inline SVG in `components/events/ThemeFrame.tsx`. Used on the join page, album, welcome page and printed cards.
+- **Wording, directions, schedule, notes** (`events.page`, jsonb): shape and limits in `lib/events/page.ts` (`cleanPage` is the only way in). They become the invitation-style hero and action buttons (Directions with Google/Apple Maps/Waze, Schedule, Good to know, Send a gift) that open themed sheets.
+- **What's public:** before someone joins, `public_event()` returns only the invitation wording. The address, schedule and notes come from `events.events` under RLS, so only people who can see the album get them.
+- **Invite links made on an event's page** open `/album/<slug>/welcome`: the event's look, choose a password, straight into the album. The link is used up only once the password is accepted.
 - **Frames, filters and captions** are a small manifest on the upload; the original is never touched:
   - photos get their gallery copy re-rendered on the phone;
   - videos are framed and filtered at playback;
   - filters are defined once as colour operations and rendered as both CSS and pixel math, since older Safari has no canvas filters;
   - the uploader can decorate for a day, until a manager hides the item.
+
+## The installable app and notifications
+
+i2w2i is a web app people can put on their home screen (Share → Add to Home Screen on iPhone; an install prompt on Android). It then opens full screen at `/`: the person's own landing page with the events they're on ("You're a guest/co-host"), albums published to the whole family, and a tile for each other app they've been given. Guests at a table never need to install anything.
+
+- `app/manifest.ts`, icons in `public/icons/`, and `public/sw.js`, which only shows notifications and opens the right page when one is tapped. It doesn't cache or intercept requests. `public/` must ship with the standalone server (the Dockerfile copies it).
+- **Notifications (web push):** people turn them on per phone (Manage page for hosts, Account page for everyone). On iPhone that only works from the home-screen app, and the page says so. Subscriptions are in `core.push_subscriptions`.
+- **What's sent:** when someone who isn't a host uploads, the event's hosts and helpers get "N new photos are waiting for your OK", batched per event (one alert per ~90 seconds at most; `PUSH_REVIEW_DELAY_MS`). Tapping it opens the review queue. `events.review_summary()` gives the notifier names and counts without a signed-in context.
+- **Keys:** the server makes its VAPID keys on first use and keeps them in `core.settings`; `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` override. Nothing to configure.
+- **Safety:** the server only sends to the browsers' push services (Apple, Google, Mozilla, Microsoft; `isPushEndpoint`), so a subscription can't make it call other addresses. Dead subscriptions (404/410) are removed. Tests use a local HTTPS stand-in (`PUSH_ALLOW_ANY_ENDPOINT=1`, never in production).
 
 ## Who did what, from where
 
@@ -191,9 +219,9 @@ applied migration stops the boot.
 
 ## Sessions
 
-- **Accounts:** a random 256-bit token in the httpOnly cookie `i2w2i_session` (only its SHA-256 is stored). It's checked on every request, so deactivation and "sign out everywhere" are immediate. Sessions last 30 days.
+- **Accounts:** a random 256-bit token in the httpOnly cookie `i2w2i_session` (only its SHA-256 is stored). It's checked on every request, so deactivation and "sign out everywhere" are immediate. Sessions slide: each visit renews them for 90 days (the cookie is renewed on page loads only, never on a POST, so signing out can't be undone).
 - **Guests:** a separate token in the cookie `i2w2i_guest`, scoped to `/album/<slug>`, lasting 60 days.
-- **Emailed links:** single-use. A link only shows a Continue button, so email scanners can't use it up.
+- **Sign-in links:** single-use, handed over as text or QR (there's no email). Opening one signs no one in (message previews fetch links); pressing Continue, or choosing a password on an event's welcome page, does.
 
 ## Plans for the Couples app
 

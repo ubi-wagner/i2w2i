@@ -2,6 +2,7 @@ import { Header } from '@/components/Header';
 import { requireUser } from '@/lib/auth/session';
 import { canUsePassword } from '@/lib/access';
 import { PasswordForm } from './PasswordForm';
+import { NotifyToggle } from '@/components/pwa/NotifyToggle';
 import { signOutEverywhere, updateName } from './actions';
 
 export const metadata = { title: 'Your account' };
@@ -43,6 +44,11 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             <PasswordForm hasPassword={user.has_password} needCurrent={user.has_password && !user.fresh_link} />
           </section>
         )}
+
+        <section className="card space-y-3">
+          <h2 className="text-lg font-semibold">Notifications</h2>
+          <NotifyToggle purpose="For photos waiting for your OK on events you host." />
+        </section>
 
         <section className="card space-y-3">
           <h2 className="text-lg font-semibold">Devices</h2>

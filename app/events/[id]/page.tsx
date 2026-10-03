@@ -10,7 +10,7 @@ import { canManage, canOwn, eventForCtx, GALLERY_SQL_COLUMNS, toGallery, type Up
 import { albumUrl, qrLink, qrSvg } from '@/lib/events/qr';
 import { formatBytes } from '@/lib/events/rules';
 import { userCtx } from '@/lib/events/session';
-import { addMember, changeAccessCode, moderateUpload, moderateUploads, removeGuest, removeLink, removeMember } from '../actions';
+import { addMember, approveAllReady, changeAccessCode, moderateUpload, moderateUploads, removeGuest, removeLink, removeMember } from '../actions';
 import { LinkForm } from './LinkForm';
 import { HostInviteForm, SignInLinkButton } from './PeopleForms';
 import { canIssueLink, type PlatformRole } from '@/lib/access';
@@ -19,6 +19,9 @@ import { describeDevice } from '@/lib/device';
 import { describeAction, eventActivity, namesByDevice, shortDevice, uploadDetails, type ActivityRow } from '@/lib/events/forensics';
 import { CodeForm } from './CodeForm';
 import { SettingsForm } from './SettingsForm';
+import { PageEditor } from './PageEditor';
+import { NotifyToggle } from '@/components/pwa/NotifyToggle';
+import { cleanPage } from '@/lib/events/page';
 
 export const metadata = { title: 'Manage event' };
 
@@ -33,7 +36,7 @@ interface Code {
   code_revoked_at: Date | null; qr_revoked_at: Date | null; guests: number;
 }
 
-const ROLE = { owner: 'Owner', curator: 'Curator', invitee: 'Invitee' } as const;
+const ROLE = { owner: 'Co-host', curator: 'Helper', invitee: 'Guest' } as const;
 
 export default async function ManageEvent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -50,7 +53,8 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
     members: await tx<Member[]>`
       SELECT m.user_id, m.role, u.display_name, u.email, u.platform_role, u.created_by, u.is_active
         FROM events.members m JOIN core.users u ON u.id = m.user_id
-       WHERE m.event_id = ${id} ORDER BY m.role, u.display_name`,
+       WHERE m.event_id = ${id}
+       ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'curator' THEN 1 ELSE 2 END, u.display_name`,
     people: await tx<Person[]>`
       SELECT u.id, u.display_name, u.email FROM core.users u
        WHERE u.is_active AND NOT EXISTS (SELECT 1 FROM events.members m WHERE m.event_id = ${id} AND m.user_id = u.id)
@@ -80,15 +84,21 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
   const qrLinks = codes.map((c) => (c.qr_revoked_at ? null : qrLink(event.slug, c.id, c.qr_version)));
   const qrs = await Promise.all(qrLinks.map((l) => (l ? qrSvg(l) : null)));
   const totalBytes = uploads.reduce((n, u) => n + Number(u.size_bytes), 0);
+  // Not yet approved: nobody but the uploader and the hosts sees these.
+  const queue = gallery.filter((g) => g.pending && !g.hidden);
+  const readyNow = queue.filter((g) => !g.reviewInMinutes).length;
+  const pg = cleanPage(event.page);
   const steps = [
+    { href: '#page', label: 'Make the page yours: look, wording, directions, schedule', done: event.theme !== 'classic' || Boolean(pg.kicker || pg.address || pg.schedule.length) },
     { href: '#people', label: 'Add the people helping with this event', done: members.length > 1 },
     { href: '#codes', label: 'Make a guest code and print its QR card', done: codes.length > 0 },
     { href: '#photos', label: 'Add the first photos from the album page', done: uploads.length > 0 },
-    { href: '#details', label: 'Publish the album when you’re ready', done: event.status === 'published' },
+    { href: '#publishing', label: 'Publish the album when you’re ready', done: event.status === 'published' },
   ];
   const sections: [string, string][] = [
-    ['#details', 'Details'], ['#people', 'People'],
+    ['#page', 'Page'], ['#publishing', 'Publishing'], ['#people', 'People'],
     ...(owner ? ([['#codes', 'Codes & QR'], ['#gifts', 'Gifts']] as [string, string][]) : []),
+    ...(queue.length ? ([['#review', `To review (${queue.length})`]] as [string, string][]) : []),
     ['#guests', `Guests (${guests.length})`], ['#photos', `Photos (${uploads.length})`], ['#activity', 'Activity'],
   ];
 
@@ -107,6 +117,17 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           </div>
           <div className="w-full"><CopyText text={albumUrl(event.slug)} label="Copy album link" /></div>
         </div>
+
+        {queue.length > 0 && (
+          <a href="#review" className="flex items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-amber-950 hover:border-amber-500">
+            <span><b>{queue.length} new {queue.length === 1 ? 'photo is' : 'photos are'} waiting for your OK.</b> Nobody else sees {queue.length === 1 ? 'it' : 'them'} until you approve.</span>
+            <span className="shrink-0 font-medium underline">Review</span>
+          </a>
+        )}
+
+        <section aria-label="Notifications" className="rounded-2xl border border-stone-200 bg-white px-5 py-4">
+          <NotifyToggle purpose="Get a notification on this phone when guests’ photos are waiting for your OK." />
+        </section>
 
         {owner && steps.some((st) => !st.done) && (
           <section className="card space-y-2 border-brand/40 bg-brand-light/40">
@@ -130,26 +151,52 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           </ul>
         </nav>
 
-        <section id="details" className="scroll-mt-14 card space-y-4">
-          <h2 className="text-lg font-semibold">Details &amp; publishing</h2>
-          <SettingsForm
-            event={{
-              id: event.id, title: event.title, location: event.location, description: event.description,
-              starts_on: event.starts_on ? event.starts_on.toISOString().slice(0, 10) : '',
-              status: event.status, audience: event.audience, chat_enabled: event.chat_enabled,
+        <section id="page" className="scroll-mt-14 card space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Your event page</h2>
+            <p className="text-sm text-stone-600">What guests see when they scan a card or open the album. Changes show in the preview as you type.</p>
+          </div>
+          <PageEditor
+            eventId={event.id}
+            slug={event.slug}
+            hasGiftLinks={links.length > 0}
+            initial={{
+              title: event.title,
+              startsOn: event.starts_on ? event.starts_on.toISOString().slice(0, 10) : '',
+              location: event.location,
+              description: event.description,
+              theme: event.theme,
+              giftNote: event.gift_note,
+              page: cleanPage(event.page),
             }}
           />
         </section>
 
+        <section id="publishing" className="scroll-mt-14 card space-y-4">
+          <h2 className="text-lg font-semibold">Publishing</h2>
+          <SettingsForm event={{ id: event.id, status: event.status, audience: event.audience, chat_enabled: event.chat_enabled }} />
+        </section>
+
         <section id="people" className="scroll-mt-14 card space-y-4">
           <h2 className="text-lg font-semibold">People on this event</h2>
-          <p className="text-sm text-stone-600">Invitees see the album, add photos and join the group chat. Curators also moderate. Owners also manage people and codes.</p>
+          <p className="text-sm text-stone-600"><b>Guests</b> see the album, add photos and join the group chat. <b>Helpers</b> can also hide photos. <b>Co-hosts</b> run everything on this page, like you.</p>
           <ul className="divide-y divide-stone-100">
             {members.map((m) => (
               <li key={m.user_id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span>{m.display_name}{m.user_id === user.id && <span className="text-stone-500"> (you)</span>} <span className="text-sm text-stone-500">{m.email}</span></span>
                 <span className="flex items-center gap-3 text-sm">
-                  <span className="rounded-full bg-stone-100 px-2 py-0.5">{ROLE[m.role as keyof typeof ROLE]}</span>
+                  {owner && m.user_id !== user.id ? (
+                    <form action={addMember} className="flex items-center gap-1">
+                      <input type="hidden" hidden name="event_id" value={id} />
+                      <input type="hidden" hidden name="user_id" value={m.user_id} />
+                      <select name="role" defaultValue={m.role} aria-label={`${m.display_name}’s role`} className="rounded-full border border-stone-200 bg-stone-100 px-2 py-0.5">
+                        {Object.entries(ROLE).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                      <button className="text-brand hover:underline">Save</button>
+                    </form>
+                  ) : (
+                    <span className="rounded-full bg-stone-100 px-2 py-0.5">{ROLE[m.role as keyof typeof ROLE]}</span>
+                  )}
                   {owner && m.user_id !== user.id && (
                     <form action={removeMember}>
                       <input type="hidden" hidden name="event_id" value={id} />
@@ -159,7 +206,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                   )}
                 </span>
                 {owner && canIssueLink(user, { id: m.user_id, platform_role: m.platform_role, created_by: m.created_by, is_active: m.is_active }) && (
-                  <SignInLinkButton userId={m.user_id} />
+                  <SignInLinkButton userId={m.user_id} eventId={id} />
                 )}
               </li>
             ))}
@@ -175,9 +222,9 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                 </select>
               </div>
               <select name="role" className="input w-auto" defaultValue="invitee" aria-label="Role">
-                <option value="invitee">Invitee</option>
-                <option value="curator">Curator</option>
-                <option value="owner">Owner</option>
+                <option value="invitee">Guest</option>
+                <option value="curator">Helper</option>
+                <option value="owner">Co-host</option>
               </select>
               <button className="btn">Add</button>
             </form>
@@ -296,6 +343,33 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
             </ul>
           )}
         </section>
+
+        {queue.length > 0 && (
+          <section id="review" className="scroll-mt-14 card space-y-4 border-amber-300">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Waiting for your OK ({queue.length})</h2>
+                <p className="text-sm text-stone-600">Only the person who added each one, and you hosts, can see these. Approve to add them to the album; hide or delete anything that shouldn’t be there.</p>
+              </div>
+              {readyNow > 0 && (
+                <form action={approveAllReady}>
+                  <input type="hidden" hidden name="event_id" value={id} />
+                  <button className="btn bg-green-700 hover:bg-green-800">Approve {readyNow === queue.length ? 'all' : readyNow} {readyNow === 1 ? 'photo' : 'photos'}</button>
+                </form>
+              )}
+            </div>
+            {readyNow < queue.length && (
+              <p className="text-sm text-amber-800">Some are still finishing on the guest’s phone and can be approved in a few minutes.</p>
+            )}
+            <Gallery
+              items={queue}
+              reviewQueue
+              downloadUrl={`/album/${event.slug}/api/download`}
+              moderation={{ eventId: id, action: moderateUpload, bulkAction: moderateUploads }}
+              empty="Nothing waiting."
+            />
+          </section>
+        )}
 
         <section id="photos" className="scroll-mt-14 card space-y-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">

@@ -6,6 +6,8 @@ import { MAX_PREVIEW_BYTES, MAX_UPLOAD_BYTES } from '@/lib/events/limits';
 import { completeParts, missingParts } from '@/lib/events/parts';
 import { cleanOverlay, isPlain } from '@/lib/events/overlay';
 import { completeMultipart, deleteObject, listParts, objectSize, partUploadUrls, uploadUrl } from '@/lib/storage';
+import { writableUntil } from '@/lib/events/review';
+import { queueReviewNotice } from '@/lib/push';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,7 +59,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     const manifest = overlay && !isPlain(overlay) ? overlay : null;
     const [r] = await withCtx(album.ctx, (tx) => tx<{ ok: boolean }[]>`
       SELECT events.set_overlay(${id}, ${manifest ? tx.json(manifest as never) : null}, ${manifest?.caption ?? ''}) AS ok`);
-    if (!r?.ok) return json({ error: 'This can’t be decorated anymore.' }, 403);
+    if (!r?.ok) return json({ error: 'The hosts have already added this to the album, so it can’t be changed now.' }, 403);
     await logActivity({
       eventId: album.event.id, action: 'upload.decorate', userId: album.isMember ? album.user!.id : null,
       guestId: album.isMember ? null : (album.guest?.id ?? null), uploadId: id, actorName: album.uploaderName, detail: { overlay: manifest },
@@ -66,6 +68,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   }
 
   if (u.status !== 'pending') return json({ ok: true, complete: true });
+
+  // Every link handed out keeps the upload unapprovable until it expires.
+  if (body.action === 'url' || body.action === 'parts' || body.action === 'preview') {
+    await withCtx(album.ctx, (tx) => tx`
+      UPDATE events.uploads SET writable_until = greatest(writable_until, ${writableUntil()})
+       WHERE id = ${id} AND status = 'pending'`);
+  }
 
   switch (body.action) {
     case 'status': {
@@ -129,5 +138,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       photo: u.kind === 'photo' ? await readPhotoMeta(u.original_key) : null,
     },
   });
+  // Hosts' and helpers' own uploads need no review; anyone else's waits for them.
+  if (!album.canManage) queueReviewNotice(album.event.id);
   return json({ ok: true, complete: true });
 }

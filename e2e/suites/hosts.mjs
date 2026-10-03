@@ -1,7 +1,7 @@
 // Without email: hosts invite people onto their event and hand out one-time
 // links (as text or QR), which also serve as password resets. Only the admin
 // may issue links for accounts a host didn't create.
-import { BASE, RUN, acceptInvite, adminPage, check, createEvent, db, finish, invite, login, page } from '../lib.mjs';
+import { BASE, RUN, acceptInvite, adminPage, approveAll, check, createCode, createEvent, db, finish, fixture, invite, joinWithCode, login, page, phonePage, setAudience, tiles, uploadFiles } from '../lib.mjs';
 
 const admin = await adminPage();
 const hostLink = await invite(admin, `Holly Host ${RUN}`, `holly-${RUN}@example.com`, 'creator');
@@ -12,12 +12,12 @@ const ev = await createEvent(holly, `Hosted ${RUN}`, `hosted-${RUN}`);
 
 // Holly invites a brand-new person straight onto her event
 await holly.goto(ev.manage);
-const form = holly.locator('form', { has: holly.getByText('Invite someone', { exact: true }) });
+const form = holly.locator('form', { has: holly.getByText('Invite someone by name and email', { exact: true }) });
 await form.getByLabel('Name').fill(`Nina New ${RUN}`);
 await form.getByLabel('Email').fill(`nina-${RUN}@example.com`);
 await form.getByRole('button', { name: 'Invite' }).click();
 const ninaLink = await form.getByLabel('One-time link').inputValue();
-check(ninaLink.includes('/auth/link?token='), 'host gets a one-time link for the new person');
+check(ninaLink.includes(`/album/${ev.slug}/welcome?token=`), 'host gets a one-time link that opens the event’s own welcome page');
 await form.getByRole('button', { name: 'QR' }).click();
 check(await form.getByLabel('QR code for the link').locator('svg').isVisible(), '…and can show it as a QR to scan in person');
 const [nina] = await db`SELECT platform_role, created_by FROM core.users WHERE email = ${`nina-${RUN}@example.com`}`;
@@ -57,13 +57,17 @@ await holly.locator('li', { hasText: `nina-${RUN}@example.com` }).getByRole('but
 const reset = await holly.locator('li', { hasText: `nina-${RUN}@example.com` }).getByLabel('One-time link').inputValue();
 const ninaPhone = await page();
 await ninaPhone.goto(reset);
-await ninaPhone.getByRole('button', { name: 'Continue' }).click();
-await ninaPhone.waitForURL(/\/account\?reset=1/);
-check(!(await ninaPhone.locator('#current').isVisible()), 'after a reset link, no old password is asked for');
+check(await ninaPhone.getByLabel('Choose a new password').isVisible(), 'a reset link opens the event page asking only for a new password');
+await ninaPhone.fill('#password', 'short');
+await ninaPhone.fill('#confirm', 'short');
+await ninaPhone.getByRole('button', { name: 'See the photos' }).click();
+await ninaPhone.getByRole('alert').waitFor();
+check(await ninaPhone.getByRole('button', { name: 'See the photos' }).isVisible(), 'a too-short password is explained and doesn’t use up the link');
 await ninaPhone.fill('#password', 'nina-password-2');
 await ninaPhone.fill('#confirm', 'nina-password-2');
-await ninaPhone.getByRole('button', { name: 'Change password' }).click();
-await ninaPhone.getByText('Password saved.').waitFor();
+await ninaPhone.getByRole('button', { name: 'See the photos' }).click();
+await ninaPhone.waitForURL(`${BASE}/album/${ev.slug}`);
+check(true, 'choosing the password goes straight into the album');
 await login(await page(), `nina-${RUN}@example.com`, 'nina-password-2');
 check(true, 'she signs in with the new password');
 await ninaPage.goto(BASE + '/');
@@ -79,7 +83,13 @@ check(await ninaPhone.locator('#current').isVisible(), 'normal password change a
 // Admin can make a link for anyone (e.g. Fred), from People
 await admin.goto(BASE + '/admin');
 await admin.locator('li.card', { hasText: `fred-${RUN}@example.com` }).getByRole('button', { name: 'New sign-in link' }).click();
-check((await admin.locator('li.card', { hasText: `fred-${RUN}@example.com` }).getByLabel('One-time link').inputValue()).includes('/auth/link?token='), 'admin can make a sign-in link for anyone');
+const fredReset = await admin.locator('li.card', { hasText: `fred-${RUN}@example.com` }).getByLabel('One-time link').inputValue();
+check(fredReset.includes('/auth/link?token='), 'admin can make a sign-in link for anyone');
+const fredPhone = await page();
+await fredPhone.goto(fredReset);
+await fredPhone.getByRole('button', { name: 'Continue' }).click();
+await fredPhone.waitForURL(/\/account\?reset=1/);
+check(!(await fredPhone.locator('#current').isVisible()), 'after the admin’s reset link, no old password is asked for');
 
 // Album card for sharing a public album
 await holly.goto(ev.manage);
@@ -91,4 +101,52 @@ check(await holly.getByText('See the photos').isVisible() && (await holly.locato
 // A member can't invite people onto the event
 await fred.goto(ev.manage);
 check(!fred.url().endsWith(ev.id), 'members can’t open the manage page to invite');
+
+// Holly makes Sasha a co-host: Sasha then runs the event just like Holly
+await holly.goto(ev.manage);
+await form.getByLabel('Name').fill(`Sasha Cohost ${RUN}`);
+await form.getByLabel('Email').fill(`sasha-${RUN}@example.com`);
+await form.getByLabel('Their role').selectOption('owner');
+await form.getByRole('button', { name: 'Invite' }).click();
+await form.getByText(`Send Sasha Cohost ${RUN} this link`).waitFor();
+const sashaLink = await form.getByLabel('One-time link').inputValue();
+check(sashaLink !== ninaLink, 'a second invite shows the new person’s link, never the previous one');
+const sasha = await acceptInvite(sashaLink, 'sasha-password-1');
+check(sasha.url() === `${BASE}/album/${ev.slug}`, 'the co-host chooses a password on the event’s page and lands in the album');
+await sasha.getByRole('link', { name: 'Manage' }).click();
+await sasha.waitForURL(ev.manage);
+check(await sasha.getByText('Invite someone by name and email').isVisible(), 'a co-host can open the manage page and invite people');
+// …and change someone's role: Fred becomes a helper
+const fredOnSasha = sasha.locator('li', { hasText: `fred-${RUN}@example.com` });
+await fredOnSasha.getByLabel(/role$/).selectOption('curator');
+await fredOnSasha.getByRole('button', { name: 'Save' }).click();
+await sasha.waitForLoadState('networkidle');
+const [fredRole] = await db`SELECT m.role FROM events.members m JOIN core.users u ON u.id = m.user_id WHERE m.event_id = ${ev.id} AND u.email = ${`fred-${RUN}@example.com`}`;
+check(fredRole?.role === 'curator', 'a co-host can change someone’s role on the event');
+// …and, though only a family-member account, re-link people she invited (a lost password)
+const sform = sasha.locator('form', { has: sasha.getByText('Invite someone by name and email', { exact: true }) });
+await sform.getByLabel('Name').fill(`Pia ${RUN}`);
+await sform.getByLabel('Email').fill(`pia-${RUN}@example.com`);
+await sform.getByRole('button', { name: 'Invite' }).click();
+await sform.getByText(`Send Pia ${RUN} this link`).waitFor();
+await sasha.reload();
+const piaRow = sasha.locator('li', { hasText: `pia-${RUN}@example.com` });
+await piaRow.getByRole('button', { name: 'New sign-in link' }).click();
+check((await piaRow.getByLabel('One-time link').inputValue()).includes('/welcome?token='), 'a co-host who is a family member can make a new sign-in link for someone she invited');
+check(!(await sasha.locator('li', { hasText: `fred-${RUN}@example.com` }).getByRole('button', { name: 'New sign-in link' }).isVisible()), '…but not for anyone else');
+
+// The co-host runs the day: makes a table code, approves a guest's photo and publishes the album
+await createCode(sasha, ev, `TBL${RUN}`.slice(0, 12).toUpperCase());
+check(true, 'a co-host makes a table code and QR card');
+const tableGuest = await phonePage();
+await joinWithCode(tableGuest, ev.slug, 'Table Guest', `TBL${RUN}`.slice(0, 12));
+await uploadFiles(tableGuest, [fixture('portrait.jpg')]);
+await setAudience(sasha, ev, 'published', 'public');
+check(true, 'a co-host publishes the album');
+const outsider = await page();
+await outsider.goto(`${BASE}/album/${ev.slug}`);
+check((await tiles(outsider).count()) === 0, 'the guest’s photo stays private until a host approves it');
+await approveAll(sasha, ev);
+await outsider.reload();
+check((await tiles(outsider).count()) === 1, 'the co-host approves it and the public album shows it');
 await finish();

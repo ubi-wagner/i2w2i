@@ -43,7 +43,7 @@ export function InviteForm() {
         </div>
       </fieldset>
       {state.error && <p className="text-sm text-red-600" role="alert">{state.error}</p>}
-      <LinkResult state={state} />
+      {!pending && <LinkResult state={state} />}
       <button className="btn" disabled={pending}>Invite</button>
       <p className="text-xs text-stone-500">They get a one-time link, then choose a password for next time.</p>
     </form>
@@ -59,7 +59,7 @@ export function ResendButton({ userId }: { userId: string }) {
         <button className="text-sm text-brand hover:underline" disabled={pending}>New sign-in link</button>
       </form>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-      <LinkResult state={state} />
+      {!pending && <LinkResult state={state} />}
     </div>
   );
 }

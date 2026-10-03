@@ -11,6 +11,10 @@ const PUBLIC = [
   /^\/album\//,
   // Dev/CI stand-in for the bucket; authorized by the signature in the URL.
   /^\/api\/storage\/local$/,
+  // The installable app: manifest, service worker and icons must load signed out.
+  /^\/manifest\.webmanifest$/,
+  /^\/sw\.js$/,
+  /^\/icons\//,
 ];
 
 const DEVICE_COOKIE = 'i2w2i_device';
@@ -34,10 +38,30 @@ function withDevice(req: NextRequest, res?: NextResponse): NextResponse {
   return out;
 }
 
+const SESSION_COOKIE = 'i2w2i_session';
+const SESSION_DAYS = 90; // matches lib/auth/session.ts
+
+// Keep the session cookie alive while it's in use (the database still decides
+// whether it's valid). Page loads only: a POST may be signing out, and this
+// must never put back a cookie that the response is clearing.
+function renewSession(req: NextRequest, res: NextResponse): NextResponse {
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  if (token && req.method === 'GET' && req.headers.get('sec-fetch-dest') === 'document') {
+    res.cookies.set(SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: SESSION_DAYS * 86_400,
+    });
+  }
+  return res;
+}
+
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
-  if (PUBLIC.some((re) => re.test(pathname))) return withDevice(req);
-  if (req.cookies.has('i2w2i_session')) return withDevice(req);
+  if (PUBLIC.some((re) => re.test(pathname))) return renewSession(req, withDevice(req));
+  if (req.cookies.has(SESSION_COOKIE)) return renewSession(req, withDevice(req));
   const url = req.nextUrl.clone();
   url.pathname = '/login';
   url.search = pathname === '/' ? '' : `?next=${encodeURIComponent(pathname + search)}`;

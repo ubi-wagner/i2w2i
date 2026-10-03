@@ -10,10 +10,13 @@ import { issueLink } from '@/lib/auth/links';
 import { sql } from '@/lib/db';
 import { rateLimit } from '@/lib/rate-limit';
 import { logActivity } from '@/lib/events/activity';
-import { withCtx } from '@/lib/events/db';
+import { withCtx, type Tx } from '@/lib/events/db';
 import { userCtx } from '@/lib/events/session';
 import { codeHmac, encryptCode, normalizeCode, qrHash, qrToken } from '@/lib/events/codes';
 import { isValidSlug, slugify } from '@/lib/events/rules';
+import { isTheme } from '@/lib/events/themes';
+import { cleanPage } from '@/lib/events/page';
+import { eventInviteUrl } from '@/lib/events/qr';
 import { defaultLabel, LINK_KINDS, linkUrl, type LinkKind } from '@/lib/events/links';
 import { deleteObject } from '@/lib/storage';
 
@@ -67,26 +70,61 @@ export async function createEvent(_prev: FormState, form: FormData): Promise<For
   redirect(`/events/${id}`);
 }
 
+/** Publishing: who sees the album, and whether there's a group chat. */
 export async function updateEvent(_prev: FormState, form: FormData): Promise<FormState> {
   const { user, ctx: c } = await ctx();
   const id = str(form, 'event_id');
-  const title = str(form, 'title', 120);
-  if (!title) return { error: 'The event needs a name.' };
-  const startsOn = /^\d{4}-\d{2}-\d{2}$/.test(str(form, 'starts_on')) ? str(form, 'starts_on') : null;
   const status = form.get('status') === 'published' ? 'published' : 'draft';
   const audience = ['public', 'family', 'invitees'].includes(str(form, 'audience')) ? str(form, 'audience') : 'invitees';
   const rows = await withCtx(c, (tx) => tx`
     UPDATE events.events
-       SET title = ${title}, starts_on = ${startsOn}, location = ${str(form, 'location', 200)},
-           description = ${str(form, 'description')}, status = ${status}, audience = ${audience},
-           chat_enabled = ${form.get('chat_enabled') === 'on'},
+       SET status = ${status}, audience = ${audience}, chat_enabled = ${form.get('chat_enabled') === 'on'},
            published_at = CASE WHEN ${status} = 'published' THEN coalesce(published_at, now()) ELSE published_at END
      WHERE id = ${id}
     RETURNING id`);
-  if (!rows.length) return { error: 'Only the event’s owners and curators can change it.' };
+  if (!rows.length) return { error: 'Only the event’s hosts and helpers can change it.' };
   await audit(user.id, 'events.update', id, { status, audience });
   revalidatePath(`/events/${id}`);
-  return { message: status === 'published' ? 'Saved. The album is published.' : 'Saved.' };
+  revalidatePath('/album/[slug]', 'page');
+  // The form resets after the action; these keep it showing what was saved.
+  const fields = { status, audience, chat_enabled: form.get('chat_enabled') === 'on' ? 'on' : '' };
+  return { message: status === 'published' ? 'Saved. The album is published.' : 'Saved. The album is a draft.', fields };
+}
+
+export interface PageInput {
+  eventId: string;
+  title: string;
+  startsOn: string;
+  location: string;
+  description: string;
+  theme: string;
+  giftNote: string;
+  page: unknown;
+}
+
+/** Everything guests see on the event's pages, saved together from the page editor. */
+export async function updatePage(input: PageInput): Promise<FormState> {
+  const { user, ctx: c } = await ctx();
+  const clip = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const id = clip(input?.eventId, 40);
+  const title = clip(input?.title, 120);
+  if (!/^[0-9a-f-]{36}$/.test(id)) return { error: 'Something went wrong. Reload and try again.' };
+  if (!title) return { error: 'The event needs a name.' };
+  const startsOn = /^\d{4}-\d{2}-\d{2}$/.test(clip(input.startsOn, 10)) ? clip(input.startsOn, 10) : null;
+  const theme = isTheme(input.theme) ? input.theme : 'classic';
+  const page = cleanPage(input.page);
+  const rows = await withCtx(c, (tx) => tx`
+    UPDATE events.events
+       SET title = ${title}, starts_on = ${startsOn}, location = ${clip(input.location, 200)},
+           description = ${clip(input.description, 2000)}, theme = ${theme}, gift_note = ${clip(input.giftNote, 500)},
+           page = ${tx.json(page as unknown as Parameters<typeof tx.json>[0])}
+     WHERE id = ${id}
+    RETURNING id`);
+  if (!rows.length) return { error: 'Only the event’s hosts and helpers can change its page.' };
+  await audit(user.id, 'events.page', id, { theme });
+  revalidatePath(`/events/${id}`);
+  revalidatePath('/album/[slug]', 'page');
+  return { message: 'Saved. Guests see it now.' };
 }
 
 export async function addMember(form: FormData): Promise<void> {
@@ -95,6 +133,7 @@ export async function addMember(form: FormData): Promise<void> {
   const userId = str(form, 'user_id');
   const role = ['owner', 'curator', 'invitee'].includes(str(form, 'role')) ? str(form, 'role') : 'invitee';
   if (!userId) return;
+  if (userId === user.id && role !== 'owner') return; // don't demote yourself out of managing
   await withCtx(c, (tx) => tx`
     INSERT INTO events.members (event_id, user_id, role, added_by) VALUES (${id}, ${userId}, ${role}, ${user.id})
     ON CONFLICT (event_id, user_id) DO UPDATE SET role = EXCLUDED.role`);
@@ -173,6 +212,7 @@ export async function moderateUpload(form: FormData): Promise<void> {
     if (action === 'show') await tx`UPDATE events.uploads SET hidden = false WHERE id = ${uploadId}`;
     if (action === 'feature') await tx`UPDATE events.uploads SET featured = true WHERE id = ${uploadId}`;
     if (action === 'unfeature') await tx`UPDATE events.uploads SET featured = false WHERE id = ${uploadId}`;
+    if (action === 'approve') await tx`UPDATE events.uploads SET approved_at = now(), approved_by = ${user.id} WHERE id = ${uploadId} AND ${approvable(tx)}`;
     if (action === 'delete') {
       return tx<{ original_key: string; preview_key: string | null }[]>`
         DELETE FROM events.uploads WHERE id = ${uploadId} RETURNING original_key, preview_key`;
@@ -183,6 +223,7 @@ export async function moderateUpload(form: FormData): Promise<void> {
     await deleteObject(r.original_key).catch(() => {});
     if (r.preview_key) await deleteObject(r.preview_key).catch(() => {});
   }
+  revalidatePath('/album/[slug]', 'page');
   await audit(user.id, `events.upload.${action}`, id, { upload: uploadId });
   await logActivity({ eventId: id, action: `upload.${action}`, userId: user.id, uploadId, actorName: user.display_name });
   revalidatePath(`/events/${id}`);
@@ -203,19 +244,42 @@ export async function removeGuest(form: FormData): Promise<void> {
   revalidatePath(`/events/${id}`);
 }
 
-/** Bulk moderation of selected uploads: hide, show, feature, unfeature or delete. */
+/**
+ * Finished, not yet approved, and no upload link left that could change it
+ * (the database refuses anything else; see migration 008).
+ */
+function approvable(tx: Tx) {
+  return tx`status = 'ready' AND approved_at IS NULL AND (writable_until IS NULL OR writable_until < now())`;
+}
+
+/** Approves everything in the review queue that can be approved now (hosts looked at the grid first). */
+export async function approveAllReady(form: FormData): Promise<void> {
+  const { user, ctx: c } = await ctx();
+  const id = str(form, 'event_id');
+  const rows = await withCtx(c, (tx) => tx<{ id: string }[]>`
+    UPDATE events.uploads SET approved_at = now(), approved_by = ${user.id}
+     WHERE event_id = ${id} AND NOT hidden AND ${approvable(tx)}
+    RETURNING id`);
+  await audit(user.id, 'events.upload.approve_all', id, { count: rows.length });
+  await logActivity({ eventId: id, action: 'upload.bulk_approve', userId: user.id, actorName: user.display_name, detail: { count: rows.length, ids: rows.map((r) => r.id) } });
+  revalidatePath(`/events/${id}`);
+  revalidatePath('/album/[slug]', 'page');
+}
+
+/** Bulk moderation of selected uploads: approve, hide, show, feature, unfeature or delete. */
 export async function moderateUploads(form: FormData): Promise<void> {
   const { user, ctx: c } = await ctx();
   const id = str(form, 'event_id');
   const action = str(form, 'action');
   const ids = form.getAll('upload_id').map(String).filter((v) => /^[0-9a-f-]{36}$/.test(v)).slice(0, 1000);
-  if (!ids.length || !['hide', 'show', 'feature', 'unfeature', 'delete'].includes(action)) return;
+  if (!ids.length || !['approve', 'hide', 'show', 'feature', 'unfeature', 'delete'].includes(action)) return;
   const removed = await withCtx(c, async (tx) => {
     const where = tx`event_id = ${id} AND id = ANY(${ids}::uuid[])`;
     if (action === 'hide') await tx`UPDATE events.uploads SET hidden = true WHERE ${where}`;
     if (action === 'show') await tx`UPDATE events.uploads SET hidden = false WHERE ${where}`;
     if (action === 'feature') await tx`UPDATE events.uploads SET featured = true WHERE ${where}`;
     if (action === 'unfeature') await tx`UPDATE events.uploads SET featured = false WHERE ${where}`;
+    if (action === 'approve') await tx`UPDATE events.uploads SET approved_at = now(), approved_by = ${user.id} WHERE ${where} AND ${approvable(tx)}`;
     if (action === 'delete') {
       return tx<{ id: string; original_key: string; preview_key: string | null }[]>`
         DELETE FROM events.uploads WHERE ${where} RETURNING id, original_key, preview_key`;
@@ -226,6 +290,7 @@ export async function moderateUploads(form: FormData): Promise<void> {
     await deleteObject(r.original_key).catch(() => {});
     if (r.preview_key) await deleteObject(r.preview_key).catch(() => {});
   }
+  revalidatePath('/album/[slug]', 'page');
   await audit(user.id, `events.upload.bulk_${action}`, id, { count: ids.length });
   await logActivity({ eventId: id, action: `upload.bulk_${action}`, userId: user.id, actorName: user.display_name, detail: { count: ids.length, ids } });
   revalidatePath(`/events/${id}`);
@@ -280,7 +345,8 @@ export async function inviteToEvent(_prev: LinkState, form: FormData): Promise<L
   const id = str(form, 'event_id');
   const name = str(form, 'display_name', 80);
   const typed = str(form, 'email', 254);
-  const role = str(form, 'role') === 'curator' ? 'curator' : 'invitee';
+  const asked = str(form, 'role');
+  const role = asked === 'owner' || asked === 'curator' ? asked : 'invitee';
   const fields = { display_name: name, email: typed, role };
   const email = normalizeEmail(typed);
   if (!email) return { error: 'Enter a valid email address (it’s their username).', fields };
@@ -320,16 +386,25 @@ export async function inviteToEvent(_prev: LinkState, form: FormData): Promise<L
   if (existing && !canIssueLink(user, target)) {
     return { message: `${target.display_name} already has an account and is now on this event. They’ll see it under Events when they sign in.` };
   }
-  return { link: await issueLink(target.id, 'invite'), name: target.display_name };
+  const [ev] = await withCtx(c, (tx) => tx<{ slug: string }[]>`SELECT slug FROM events.events WHERE id = ${id}`);
+  const link = await issueLink(target.id, 'invite');
+  return { link: ev ? eventInviteUrl(link, ev.slug) : link, name: target.display_name };
 }
 
 /** A fresh one-time sign-in link (also the way to reset a forgotten password). */
 export async function issueSignInLink(_prev: LinkState, form: FormData): Promise<LinkState> {
-  const { user } = await ctx();
+  const { user, ctx: c } = await ctx();
   const userId = str(form, 'user_id');
   const [target] = await sql<{ id: string; display_name: string; platform_role: PlatformRole; created_by: string | null; is_active: boolean }[]>`
     SELECT id, display_name, platform_role, created_by, is_active FROM core.users WHERE id = ${userId}`;
   if (!target || !canIssueLink(user, target)) return { error: 'Only Eric can make a sign-in link for this person.' };
   await audit(user.id, 'people.link.issued', target.id);
-  return { link: await issueLink(target.id, 'invite'), name: target.display_name };
+  const link = await issueLink(target.id, 'invite');
+  // From an event's page: the link opens that event's welcome page.
+  const eventId = str(form, 'event_id');
+  if (/^[0-9a-f-]{36}$/.test(eventId)) {
+    const [ev] = await withCtx(c, (tx) => tx<{ slug: string }[]>`SELECT slug FROM events.events WHERE id = ${eventId}`);
+    if (ev) return { link: eventInviteUrl(link, ev.slug), name: target.display_name };
+  }
+  return { link, name: target.display_name };
 }

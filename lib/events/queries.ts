@@ -1,7 +1,9 @@
 import 'server-only';
+import type { ThemeId } from './themes';
 import { createHash } from 'node:crypto';
 import { viewUrl } from '../storage';
 import { withCtx, type EventCtx } from './db';
+import { minutesUntilReviewable } from './review';
 
 export type MemberRole = 'owner' | 'curator' | 'invitee';
 
@@ -15,6 +17,9 @@ export interface EventRow {
   status: 'draft' | 'published';
   audience: 'public' | 'family' | 'invitees';
   chat_enabled: boolean;
+  theme: ThemeId;
+  gift_note: string;
+  page: unknown;
   created_by: string;
   created_at: Date;
 }
@@ -37,6 +42,8 @@ export interface UploadRow {
   caption: string;
   overlay: Record<string, unknown> | null;
   created_at: Date;
+  approved_at: Date | null;
+  writable_until: Date | null;
   /** Present when the query counts comments. */
   comment_count?: number;
 }
@@ -61,6 +68,10 @@ export interface GalleryItem {
   comments: number;
   /** Frame/filter manifest, for videos (framed at playback) and re-rendering. */
   overlay: Record<string, unknown> | null;
+  /** Not yet approved by a host: only the uploader and the hosts see it. */
+  pending: boolean;
+  /** Pending and still changeable by its uploader: minutes until a host can approve it. */
+  reviewInMinutes: number;
   /** Managers only: who/what/where for this upload. */
   details?: { label: string; value: string; href?: string }[];
 }
@@ -110,6 +121,8 @@ export async function toGallery(rows: UploadRow[], ctx: EventCtx, opts: { origin
         caption: u.caption,
         comments: u.comment_count ?? 0,
         overlay: u.overlay,
+        pending: u.approved_at === null,
+        reviewInMinutes: u.approved_at === null ? minutesUntilReviewable(u.writable_until) : 0,
       };
     }),
   );

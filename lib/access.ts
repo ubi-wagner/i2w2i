@@ -57,7 +57,8 @@ export function safeNext(next: string | null | undefined): string {
  * Who may hand someone a one-time sign-in link (an invite, or a password
  * reset now that there's no email). A link signs in as that person, so:
  * the admin may issue one for anyone else; a host only for family-member
- * accounts they invited themselves. Nobody issues one for themselves.
+ * accounts they invited themselves (whatever their own platform role: event
+ * co-hosts are often family members). Nobody issues one for themselves.
  */
 export function canIssueLink(
   actor: { id: string; platform_role: PlatformRole },
@@ -65,5 +66,5 @@ export function canIssueLink(
 ): boolean {
   if (actor.id === target.id || !target.is_active) return false;
   if (actor.platform_role === 'admin') return true;
-  return actor.platform_role === 'creator' && target.platform_role === 'member' && target.created_by === actor.id;
+  return target.platform_role === 'member' && target.created_by === actor.id;
 }

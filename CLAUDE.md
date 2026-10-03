@@ -34,6 +34,10 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
 - **Forms with `useActionState`**: React resets the form after the action, so
   return typed values in the state and use them as `defaultValue`.
 - **Never log sign-in links in production** (`lib/email.ts` handles this).
+- **Installable app:** `public/` (icons, `sw.js`) ships with the standalone
+  server; keep the Dockerfile and CI copying it. The service worker must not
+  cache or intercept requests (uploads, sign-in). Push only ever goes to the
+  browsers' push services (`isPushEndpoint` in `lib/push-rules.ts`).
 - **There is no email.** Invites and resets are one-time links shown to the
   inviter (copy or QR). Who may issue one is `canIssueLink`: admin for
   anyone, hosts only for accounts they created. Don't widen it.
@@ -62,5 +66,11 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
   (`tooManyFailures`/`recordFailure`): a venue shares one Wi-Fi address.
 - **Uploads must survive interruption**: keep the multipart/resume path and
   the IndexedDB queue working; `e2e/suites/uploads.mjs` is the contract.
+- **Uploads are reviewed (migration 008):** nobody but the uploader and the
+  hosts (owners/helpers) sees an upload until a host approves it; hosts' own
+  uploads are approved automatically. An approval covers the exact bytes the
+  host saw: it's only possible once every upload link for it has expired
+  (`writable_until`), and the uploader can't change an approved upload. Never
+  serve an upload to others without going through the uploads RLS policy.
 - **Guests are told** on the join form that name, device and network details
   are recorded. Keep that notice if you change the form.

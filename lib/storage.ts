@@ -33,7 +33,10 @@ const BUCKET = env.AWS_S3_BUCKET_NAME || env.AWS_S3_BUCKET || env.BUCKET;
 
 export const storageDriver: 'bucket' | 'local' = env.STORAGE_DRIVER === 'local' || !BUCKET ? 'local' : 'bucket';
 
-const UPLOAD_URL_TTL = 60 * 60; // seconds
+// Upload links are short-lived: an upload can't be approved for others to see
+// until every link that could still change it has expired (migration 008).
+// Phones fetch fresh links when one runs out.
+export const UPLOAD_URL_TTL = 10 * 60; // seconds
 // View URLs are signed as of the start of the current hour and last two, so
 // the same photo gets the same URL for an hour and phones can cache it
 // instead of re-downloading every thumbnail on each visit.

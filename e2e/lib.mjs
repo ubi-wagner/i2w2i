@@ -86,6 +86,14 @@ export async function invite(admin, name, email, role = 'member') {
 export async function acceptInvite(link, password, opts = {}) {
   const p = await page(opts);
   await p.goto(link);
+  // Links made on an event's page open its welcome page: one step to the album.
+  if (link.includes('/welcome?')) {
+    await p.fill('#password', password);
+    await p.fill('#confirm', password);
+    await p.getByRole('button', { name: 'See the photos' }).click();
+    await p.waitForURL(/\/album\/[a-z0-9-]+$/);
+    return p;
+  }
   await p.getByRole('button', { name: 'Continue' }).click();
   await p.waitForURL(/\/account\?welcome=1/);
   await p.fill('#password', password);
@@ -163,3 +171,17 @@ export async function storedSha(filename, uploader) {
 }
 
 export const sha = (buf) => createHash('sha256').update(buf).digest('hex');
+
+/**
+ * A host approves everything waiting, from the manage page. Uploads can only
+ * be approved once their upload links have expired (10 minutes); tests
+ * fast-forward that in the database rather than wait.
+ */
+export async function approveAll(host, ev) {
+  await db`UPDATE events.uploads SET writable_until = now() - interval '1 second' WHERE event_id = ${ev.id} AND writable_until > now()`;
+  await host.goto(ev.manage);
+  const review = host.locator('#review');
+  if (!(await review.count())) return;
+  await review.getByRole('button', { name: /^Approve (all|\d+)/ }).click();
+  await review.waitFor({ state: 'detached' });
+}

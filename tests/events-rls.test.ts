@@ -304,6 +304,65 @@ describe.skipIf(!enabled)('events row-level security', () => {
     expect(await setO({ userId: ids.mia })).toBe(false); // hidden by a manager: locked
   });
 
+  it('shows nobody but the uploader and the hosts an upload until a host approves it', async () => {
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.events SET status = 'published', audience = 'public' WHERE id = ${shower}`);
+    await addCode(shower, 'BOTHWAYS', { upload: true, view: true });
+    const gina = await guestFor(`shower-${run}`, 'BOTHWAYS', 'Gina');
+    const vera = await guestFor(`shower-${run}`, 'BOTHWAYS', 'Vera');
+    const sees = (ctx: Ctx, id: string) => as(ctx, (tx) => tx`SELECT id FROM events.uploads WHERE id = ${id}`).then((r) => r.length === 1);
+
+    // A guest and an invitee upload; trying to self-approve on the way in doesn't stick.
+    const [g] = await as({ guest: gina }, (tx) =>
+      tx`INSERT INTO events.uploads ${tx(upload(shower, { guestId: gina.id }, { status: 'ready', approved_at: new Date() }))} RETURNING id, approved_at`);
+    const [m] = await as({ userId: ids.mia }, (tx) =>
+      tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }, { status: 'ready' }))} RETURNING id, approved_at`);
+    expect(g!.approved_at).toBeNull();
+    expect(m!.approved_at).toBeNull();
+
+    for (const id of [g!.id, m!.id]) {
+      expect(await sees({ userId: ids.cara }, id)).toBe(true); // host
+      expect(await sees({ userId: ids.ada, admin: true }, id)).toBe(true); // admin
+      expect(await sees({ guest: vera }, id)).toBe(false); // another guest at the same table
+      expect(await sees({ userId: ids.fay }, id)).toBe(false); // family
+      expect(await sees({}, id)).toBe(false); // the public page
+    }
+    expect(await sees({ guest: gina }, g!.id)).toBe(true); // her own
+    expect(await sees({ guest: gina }, m!.id)).toBe(false);
+    expect(await sees({ userId: ids.mia }, g!.id)).toBe(false); // an invitee doesn't see a guest's
+    // Nor can anyone comment on what they can't see.
+    await expect(
+      as({ guest: vera }, (tx) => tx`INSERT INTO events.comments (event_id, upload_id, guest_id, author_name, body) VALUES (${shower}, ${g!.id}, ${vera.id}, 'v', 'x')`),
+    ).rejects.toThrow(/row-level security/);
+
+    // Uploaders can't approve themselves, even while their upload is still open to them.
+    const [p] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }))} RETURNING id`);
+    await expect(as({ userId: ids.mia }, (tx) => tx`UPDATE events.uploads SET approved_at = now() WHERE id = ${p!.id}`)).rejects.toThrow(/only hosts approve/);
+
+    // While any upload link could still change it, not even a host can approve it.
+    await owner`UPDATE events.uploads SET writable_until = now() + interval '5 minutes' WHERE id = ${g!.id}`;
+    await expect(as({ userId: ids.cara }, (tx) => tx`UPDATE events.uploads SET approved_at = now() WHERE id = ${g!.id}`)).rejects.toThrow(/still be changed/);
+    await owner`UPDATE events.uploads SET writable_until = now() - interval '1 minute' WHERE id = ${g!.id}`;
+
+    // Before approval the uploader may still decorate; that keeps it unapprovable for a while.
+    expect((await as({ guest: gina }, (tx) => tx`SELECT events.set_overlay(${g!.id}, ${tx.json({ frame: 'hearts' })}, 'Hi') AS ok`))[0]!.ok).toBe(true);
+    await expect(as({ userId: ids.cara }, (tx) => tx`UPDATE events.uploads SET approved_at = now() WHERE id = ${g!.id}`)).rejects.toThrow(/still be changed/);
+    await owner`UPDATE events.uploads SET writable_until = now() - interval '1 minute' WHERE id = ${g!.id}`;
+
+    // A host approves: now everyone who can see the album sees it.
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.uploads SET approved_at = now(), approved_by = ${ids.cara} WHERE id = ${g!.id}`);
+    expect(await sees({ guest: vera }, g!.id)).toBe(true);
+    expect(await sees({}, g!.id)).toBe(true);
+    expect(await sees({ userId: ids.fay }, g!.id)).toBe(true);
+    expect(await sees({}, m!.id)).toBe(false); // the other one is still waiting
+
+    // Once approved, the uploader can't change it any more (no swapping the picture or caption).
+    expect((await as({ guest: gina }, (tx) => tx`SELECT events.set_overlay(${g!.id}, ${tx.json({ frame: 'polaroid' })}, 'Ha') AS ok`))[0]!.ok).toBe(false);
+    // A host's own uploads need no review.
+    const [h] = await as({ userId: ids.cara }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.cara }, { status: 'ready' }))} RETURNING id`);
+    expect(await sees({}, h!.id)).toBe(true);
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.events SET audience = 'invitees' WHERE id = ${shower}`);
+  });
+
   it('cleans up only unfinished uploads past the grace period', async () => {
     const [stale] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }))} RETURNING id`);
     const [fresh] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }))} RETURNING id`);

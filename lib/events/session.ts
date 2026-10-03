@@ -4,6 +4,7 @@ import { sql } from '../db';
 import { getCurrentUser, type CurrentUser } from '../auth/session';
 import { hashToken, newToken } from '../auth/tokens';
 import { ANON, type EventCtx } from './db';
+import type { ThemeId } from './themes';
 
 // Guest sessions: code/QR holders get a cookie scoped to one album's path,
 // so it is only ever sent to /album/<slug>/...
@@ -19,6 +20,9 @@ export interface PublicEvent {
   location: string;
   status: 'draft' | 'published';
   audience: 'public' | 'family' | 'invitees';
+  theme: ThemeId;
+  /** Invitation wording only (see PUBLIC_PAGE_KEYS); clean with cleanPage. */
+  page_public: unknown;
 }
 
 export interface Guest {

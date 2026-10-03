@@ -22,7 +22,7 @@ export function JoinForm({ slug, token }: { slug: string; token?: string }) {
       {!token && (
         <div>
           <label className="label" htmlFor="code">Album code</label>
-          <input className="input font-mono uppercase" id="code" name="code" required autoCapitalize="characters" autoComplete="off" maxLength={40} defaultValue={state.code} placeholder="From your invitation or table card" />
+          <input className="input font-mono uppercase" id="code" name="code" required autoCapitalize="characters" autoComplete="off" maxLength={40} defaultValue={state.code} placeholder="On your card" />
         </div>
       )}
       {state.error && <p className="text-sm text-red-600" role="alert">{state.error}</p>}

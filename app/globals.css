@@ -2,6 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Colour channels (r g b). Event themes redefine them under [data-theme]. */
+:root {
+  --stone-50: 250 250 249; --stone-100: 245 245 244; --stone-200: 231 229 228; --stone-300: 214 211 209;
+  --stone-400: 168 162 158; --stone-500: 120 113 108; --stone-600: 87 83 78; --stone-700: 68 64 60;
+  --stone-800: 41 37 36; --stone-900: 28 25 23; --stone-950: 12 10 9;
+  --brand: 124 58 237; --brand-dark: 91 33 182; --brand-light: 237 233 254;
+  --surface: 255 255 255; --surface-alpha: 1; --on-brand: 255 255 255;
+}
+
+/* Enchanted forest: the invitation's deep green, gold type, fireflies. Dark,
+   so the stone scale runs the other way. */
+[data-theme='woodland'] {
+  --stone-50: 13 31 23; --stone-100: 22 44 33; --stone-200: 44 70 55; --stone-300: 66 94 77;
+  --stone-400: 122 142 122; --stone-500: 162 175 156; --stone-600: 198 203 185; --stone-700: 222 217 197;
+  --stone-800: 236 229 210; --stone-900: 244 237 219; --stone-950: 250 246 235;
+  --brand: 212 176 106; --brand-dark: 234 208 150; --brand-light: 41 56 38;
+  --surface: 14 33 24; --surface-alpha: 0.78; --on-brand: 16 34 25;
+  color-scheme: dark;
+}
+
+/* Garden: ivory paper, sage and ink, like the envelope. */
+[data-theme='garden'] {
+  --stone-50: 248 246 240; --stone-100: 240 237 228; --stone-200: 226 222 210; --stone-300: 208 203 189;
+  --stone-400: 166 160 145; --stone-500: 125 120 106; --stone-600: 92 88 76; --stone-700: 70 67 58;
+  --stone-800: 50 48 41; --stone-900: 38 36 31; --stone-950: 24 23 20;
+  --brand: 107 127 90; --brand-dark: 79 96 64; --brand-light: 232 236 222;
+  --surface: 255 255 252; --surface-alpha: 1; --on-brand: 255 255 255;
+}
+
+[data-theme] .bg-white { background-color: rgb(var(--surface) / var(--surface-alpha)); }
+[data-theme] .btn, [data-theme] .bg-brand.text-white { color: rgb(var(--on-brand)); }
+[data-theme='woodland'] .card { backdrop-filter: blur(6px); border-color: rgb(var(--brand) / 0.28); }
+[data-theme='woodland'] .input { background-color: rgb(0 0 0 / 0.22); color: rgb(var(--stone-900)); }
+[data-theme='woodland'] .input::placeholder { color: rgb(var(--stone-500)); }
+
+.theme-bg { background-color: rgb(var(--stone-50)); }
+/* A glow at the top fading to the base colour, however long the page is. */
+[data-theme='woodland'].theme-bg {
+  background: #0c1b13 radial-gradient(ellipse 140% 1000px at 50% 0, #21402f 0%, #142b20 45%, #0c1b13 100%) no-repeat;
+}
+[data-theme='garden'].theme-bg {
+  background: #f3f0e7 radial-gradient(ellipse 140% 1000px at 50% 0, #fdfcf8 0%, #f6f3eb 60%, #f3f0e7 100%) no-repeat;
+}
+
+/* Fireflies drift and glow; still for people who prefer less motion. */
+.firefly {
+  position: absolute; width: 6px; height: 6px; border-radius: 9999px; pointer-events: none;
+  background: radial-gradient(circle, #fff6c8 0%, #f2d572 40%, rgb(242 213 114 / 0) 70%);
+  box-shadow: 0 0 10px 4px rgb(242 213 114 / 0.35);
+  animation: firefly 7s ease-in-out infinite;
+}
+@keyframes firefly {
+  0%, 100% { opacity: 0.15; transform: translate(0, 0); }
+  50% { opacity: 1; transform: translate(10px, -14px); }
+}
+@media (prefers-reduced-motion: reduce) { .firefly { animation: none; opacity: 0.7; } }
+@media print {
+  .theme-bg, .card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .firefly { animation: none; opacity: 0.8; }
+}
+
 @layer components {
   .card { @apply rounded-2xl border border-stone-200 bg-white p-6 shadow-sm; }
   .input { @apply w-full rounded-lg border border-stone-300 px-3 py-2 text-base focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30; }
