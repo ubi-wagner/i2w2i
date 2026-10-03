@@ -4,6 +4,7 @@ import { readPhotoMeta } from '@/lib/events/exif';
 import { albumOr404, json, sameOrigin } from '@/lib/events/api';
 import { MAX_PREVIEW_BYTES, MAX_UPLOAD_BYTES } from '@/lib/events/limits';
 import { completeParts, missingParts } from '@/lib/events/parts';
+import { cleanOverlay, isPlain } from '@/lib/events/overlay';
 import { completeMultipart, deleteObject, listParts, objectSize, partUploadUrls, uploadUrl } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
@@ -14,9 +15,12 @@ export const dynamic = 'force-dynamic';
 //   parts    URLs for the given multipart part numbers
 //   preview  fresh URL for the preview image
 //   complete confirm the bytes landed, then make the upload visible
+//   decorate save a frame/filter/caption manifest (for a day after upload);
+//            for photos, returns a URL to replace the gallery copy
 interface Body {
   action?: string;
   parts?: number[];
+  overlay?: unknown;
 }
 
 interface Row {
@@ -46,6 +50,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       FROM events.uploads WHERE id = ${id} AND event_id = ${album.event.id}`);
   if (!u || !u.mine) return json({ error: 'Not found' }, 404);
   const declared = Number(u.size_bytes);
+
+  if (body.action === 'decorate') {
+    const overlay = cleanOverlay(body.overlay);
+    if (body.overlay != null && !overlay) return json({ error: 'Unknown frame or filter.' }, 400);
+    const manifest = overlay && !isPlain(overlay) ? overlay : null;
+    const [r] = await withCtx(album.ctx, (tx) => tx<{ ok: boolean }[]>`
+      SELECT events.set_overlay(${id}, ${manifest ? tx.json(manifest as never) : null}, ${manifest?.caption ?? ''}) AS ok`);
+    if (!r?.ok) return json({ error: 'This can’t be decorated anymore.' }, 403);
+    await logActivity({
+      eventId: album.event.id, action: 'upload.decorate', userId: album.isMember ? album.user!.id : null,
+      guestId: album.isMember ? null : (album.guest?.id ?? null), uploadId: id, actorName: album.uploaderName, detail: { overlay: manifest },
+    });
+    return json({ ok: true, previewUrl: u.kind === 'photo' && u.preview_key ? await uploadUrl(u.preview_key, 'image/jpeg') : null });
+  }
+
   if (u.status !== 'pending') return json({ ok: true, complete: true });
 
   switch (body.action) {

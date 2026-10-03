@@ -10,7 +10,9 @@ import { canManage, canOwn, eventForCtx, GALLERY_SQL_COLUMNS, toGallery, type Up
 import { albumUrl, qrLink, qrSvg } from '@/lib/events/qr';
 import { formatBytes } from '@/lib/events/rules';
 import { userCtx } from '@/lib/events/session';
-import { addMember, changeAccessCode, moderateUpload, moderateUploads, removeGuest, removeMember } from '../actions';
+import { addMember, changeAccessCode, moderateUpload, moderateUploads, removeGuest, removeLink, removeMember } from '../actions';
+import { LinkForm } from './LinkForm';
+import type { LinkRow } from '@/components/events/GiftLinks';
 import { describeDevice } from '@/lib/device';
 import { describeAction, eventActivity, namesByDevice, shortDevice, uploadDetails, type ActivityRow } from '@/lib/events/forensics';
 import { CodeForm } from './CodeForm';
@@ -42,7 +44,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
   if (!canManage(ctx, role)) redirect(`/album/${event.slug}`);
   const owner = canOwn(ctx, role);
 
-  const { members, people, codes, uploads, guests, activity } = await withCtx(ctx, async (tx) => ({
+  const { members, people, codes, uploads, guests, activity, links } = await withCtx(ctx, async (tx) => ({
     members: await tx<Member[]>`
       SELECT m.user_id, m.role, u.display_name, u.email
         FROM events.members m JOIN core.users u ON u.id = m.user_id
@@ -66,14 +68,15 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
         FROM events.guests g JOIN events.access_codes c ON c.id = g.access_code_id
        WHERE g.event_id = ${id} ORDER BY g.created_at DESC`,
     activity: await eventActivity(tx, id),
+    links: await tx<LinkRow[]>`SELECT id, kind, label, url FROM events.links WHERE event_id = ${id} ORDER BY sort_order, created_at`,
   }));
   const deviceNames = namesByDevice(activity);
   const lastByGuest = new Map<string, ActivityRow>();
   for (const a of activity) if (a.guest_id && !lastByGuest.has(a.guest_id)) lastByGuest.set(a.guest_id, a);
 
   const gallery = (await toGallery(uploads, ctx, { originals: true })).map((g) => ({ ...g, details: uploadDetails(activity, g.id, deviceNames) }));
-  const links = codes.map((c) => (c.qr_revoked_at ? null : qrLink(event.slug, c.id, c.qr_version)));
-  const qrs = await Promise.all(links.map((l) => (l ? qrSvg(l) : null)));
+  const qrLinks = codes.map((c) => (c.qr_revoked_at ? null : qrLink(event.slug, c.id, c.qr_version)));
+  const qrs = await Promise.all(qrLinks.map((l) => (l ? qrSvg(l) : null)));
   const totalBytes = uploads.reduce((n, u) => n + Number(u.size_bytes), 0);
 
   return (
@@ -166,7 +169,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                         {[c.can_upload && 'Can add photos', c.can_view && 'can see the album'].filter(Boolean).join(', ')} · {c.guests} guests joined
                       </p>
                       {c.code_revoked_at && typed && <p className="text-red-600">Typed code turned off</p>}
-                      {links[i] && <CopyText text={links[i]!} />}
+                      {qrLinks[i] && <CopyText text={qrLinks[i]!} />}
                       <div className="flex flex-wrap gap-3 pt-1">
                         {!c.qr_revoked_at && <Link className="text-brand hover:underline" href={`/events/${id}/codes/${c.id}`}>Print card</Link>}
                         {[
@@ -189,6 +192,28 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
               })}
             </ul>
             <CodeForm eventId={id} />
+          </section>
+        )}
+
+        {owner && (
+          <section className="card space-y-4">
+            <h2 className="text-lg font-semibold">Gifts &amp; payments</h2>
+            <p className="text-sm text-stone-600">Shown on the album with a QR code each, for Venmo, a registry and the like. Money never passes through i2w2i.</p>
+            {links.length > 0 && (
+              <ul className="divide-y divide-stone-100 text-sm">
+                {links.map((l) => (
+                  <li key={l.id} className="flex items-center justify-between gap-3 py-2">
+                    <span><b>{l.label}</b> <a className="text-brand underline" href={l.url} target="_blank" rel="noopener noreferrer">{l.url}</a></span>
+                    <form action={removeLink}>
+                      <input type="hidden" name="event_id" value={id} />
+                      <input type="hidden" name="link_id" value={l.id} />
+                      <button className="text-stone-500 hover:underline">Remove</button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <LinkForm eventId={id} />
           </section>
         )}
 
@@ -238,6 +263,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           <Gallery
             items={gallery}
             downloadUrl={`/album/${event.slug}/api/download`}
+            commentsSlug={event.slug}
             moderation={{ eventId: id, action: moderateUpload, bulkAction: moderateUploads }}
             empty="Nothing yet. Share a code or QR, or add some yourself from the album page."
           />

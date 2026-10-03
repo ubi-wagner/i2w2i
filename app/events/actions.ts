@@ -10,6 +10,7 @@ import { withCtx } from '@/lib/events/db';
 import { userCtx } from '@/lib/events/session';
 import { codeHmac, encryptCode, normalizeCode, qrHash, qrToken } from '@/lib/events/codes';
 import { isValidSlug, slugify } from '@/lib/events/rules';
+import { defaultLabel, LINK_KINDS, linkUrl, type LinkKind } from '@/lib/events/links';
 import { deleteObject } from '@/lib/storage';
 
 // Every action re-derives the requester and runs inside withCtx, so the
@@ -223,5 +224,35 @@ export async function moderateUploads(form: FormData): Promise<void> {
   }
   await audit(user.id, `events.upload.bulk_${action}`, id, { count: ids.length });
   await logActivity({ eventId: id, action: `upload.bulk_${action}`, userId: user.id, actorName: user.display_name, detail: { count: ids.length, ids } });
+  revalidatePath(`/events/${id}`);
+}
+
+export async function addLink(_prev: FormState, form: FormData): Promise<FormState> {
+  const { user, ctx: c } = await ctx();
+  const id = str(form, 'event_id');
+  const kind = str(form, 'kind') as LinkKind;
+  const fields = { kind, value: str(form, 'value', 500), label: str(form, 'label', 80) };
+  if (!LINK_KINDS.some((k) => k.kind === kind)) return { error: 'Pick a kind of link.', fields };
+  const url = linkUrl(kind, fields.value);
+  if (!url) return { error: 'That doesn’t look like a handle or an https:// link.', fields };
+  const label = fields.label || defaultLabel(kind, url);
+  try {
+    await withCtx(c, (tx) => tx`INSERT INTO events.links (event_id, kind, label, url) VALUES (${id}, ${kind}, ${label}, ${url})`);
+  } catch (err) {
+    if (isRlsError(err)) return { error: 'Only owners can add links.', fields };
+    throw err;
+  }
+  await audit(user.id, 'events.link.add', id, { kind, url });
+  await logActivity({ eventId: id, action: 'link.add', userId: user.id, actorName: user.display_name, detail: { kind, url } });
+  revalidatePath(`/events/${id}`);
+  return { message: 'Added.' };
+}
+
+export async function removeLink(form: FormData): Promise<void> {
+  const { user, ctx: c } = await ctx();
+  const id = str(form, 'event_id');
+  const linkId = str(form, 'link_id');
+  await withCtx(c, (tx) => tx`DELETE FROM events.links WHERE id = ${linkId} AND event_id = ${id}`);
+  await audit(user.id, 'events.link.remove', id, { link: linkId });
   revalidatePath(`/events/${id}`);
 }

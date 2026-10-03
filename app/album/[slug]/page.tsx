@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { Chat } from '@/components/events/Chat';
 import { Gallery } from '@/components/events/Gallery';
+import { GiftLinks, type LinkRow } from '@/components/events/GiftLinks';
 import { Uploader } from '@/components/events/Uploader';
 import { logActivity } from '@/lib/events/activity';
 import { loadAlbum } from '@/lib/events/album';
@@ -79,9 +80,12 @@ export default async function AlbumPage({ params, searchParams }: Params) {
     );
   }
 
-  const rows = await withCtx(album.ctx, (tx) => tx<UploadRow[]>`
-    SELECT ${tx.unsafe(GALLERY_SQL_COLUMNS)} FROM events.uploads u WHERE u.event_id = ${event.id} AND u.status = 'ready'
-     ORDER BY u.featured DESC, u.created_at DESC LIMIT 2000`);
+  const { rows, links } = await withCtx(album.ctx, async (tx) => ({
+    rows: await tx<UploadRow[]>`
+      SELECT ${tx.unsafe(GALLERY_SQL_COLUMNS)} FROM events.uploads u WHERE u.event_id = ${event.id} AND u.status = 'ready'
+       ORDER BY u.featured DESC, u.created_at DESC LIMIT 2000`,
+    links: await tx<LinkRow[]>`SELECT id, kind, label, url FROM events.links WHERE event_id = ${event.id} ORDER BY sort_order, created_at`,
+  }));
   // Hidden items only reach managers; keep them out of the public grid here too.
   const visible = rows.filter((r) => !r.hidden);
   const items = await toGallery(visible, album.ctx, { originals: album.canManage });
@@ -120,10 +124,13 @@ export default async function AlbumPage({ params, searchParams }: Params) {
         <Gallery
           items={items}
           downloadUrl={`/album/${slug}/api/download`}
+          commentsSlug={slug}
           empty={album.canView ? 'No photos yet. Be the first!' : 'Nothing from you yet. Your photos and videos will show here.'}
         />
         {!album.canView && <p className="text-sm text-stone-500">The hosts will share the full album later.</p>}
       </section>
+
+      <GiftLinks links={links} />
 
       {album.chat && (
         <section className="mx-auto max-w-2xl space-y-3">

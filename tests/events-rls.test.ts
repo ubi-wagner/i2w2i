@@ -244,6 +244,66 @@ describe.skipIf(!enabled)('events row-level security', () => {
     ).rejects.toThrow(/permission denied/);
   });
 
+  it('lets album viewers comment as themselves; authors and managers remove comments', async () => {
+    // A ready, visible upload in the shower album (published to the family by an earlier test? reset to invitees).
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.events SET status = 'published', audience = 'invitees' WHERE id = ${shower}`);
+    const [u] = await as({ userId: ids.cara }, (tx) =>
+      tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.cara }, { status: 'ready' }))} RETURNING id`);
+    const add = (ctx: Ctx, fields: Record<string, unknown>) =>
+      as(ctx, (tx) => tx`INSERT INTO events.comments ${tx({ event_id: shower, upload_id: u!.id, author_name: 'x', body: 'hi', user_id: null, guest_id: null, ...fields })} RETURNING id`);
+
+    const [mine] = await add({ userId: ids.mia }, { user_id: ids.mia });
+    await expect(add({ userId: ids.mia }, { user_id: ids.cara })).rejects.toThrow(/row-level security/); // as someone else
+    await expect(add({ userId: ids.otto }, { user_id: ids.otto })).rejects.toThrow(/row-level security/); // can't see album
+    const viewer = await guestFor(`shower-${run}`, 'VIEW-ONLY', 'Val');
+    await add({ guest: viewer }, { guest_id: viewer.id });
+    const uploader = await guestFor(`shower-${run}`, 'CB1106', 'Una'); // upload-only code
+    await expect(add({ guest: uploader }, { guest_id: uploader.id })).rejects.toThrow(/row-level security/);
+
+    // Hidden uploads can't be commented on by viewers.
+    const [hid] = await as({ userId: ids.cara }, (tx) =>
+      tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.cara }, { status: 'ready', hidden: true }))} RETURNING id`);
+    await expect(
+      as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.comments (event_id, upload_id, user_id, author_name, body) VALUES (${shower}, ${hid!.id}, ${ids.mia}, 'm', 'x')`),
+    ).rejects.toThrow(/row-level security/);
+
+    // Someone else's comment can't be removed by an invitee; the owner can.
+    const theirs = await as({ guest: viewer }, (tx) => tx`SELECT id FROM events.comments WHERE guest_id = ${viewer.id}`);
+    expect((await as({ userId: ids.mia }, (tx) => tx`UPDATE events.comments SET deleted_at = now() WHERE id = ${theirs[0]!.id} RETURNING id`)).length).toBe(0);
+    expect((await as({ userId: ids.mia }, (tx) => tx`UPDATE events.comments SET deleted_at = now() WHERE id = ${mine!.id} RETURNING id`)).length).toBe(1);
+    expect((await as({ userId: ids.cara }, (tx) => tx`UPDATE events.comments SET deleted_at = now() WHERE id = ${theirs[0]!.id} RETURNING id`)).length).toBe(1);
+    await expect(as({ userId: ids.cara }, (tx) => tx`DELETE FROM events.comments`)).rejects.toThrow(/permission denied/);
+  });
+
+  it('shows gift links to whoever sees the event; only owners edit them', async () => {
+    await as({ userId: ids.cara }, (tx) => tx`INSERT INTO events.links (event_id, kind, label, url) VALUES (${shower}, 'venmo', 'Venmo', 'https://venmo.com/u/cassie')`);
+    await expect(
+      as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.links (event_id, kind, label, url) VALUES (${shower}, 'link', 'x', 'https://evil.example')`),
+    ).rejects.toThrow(/row-level security/);
+    await expect(
+      as({ userId: ids.cara }, (tx) => tx`INSERT INTO events.links (event_id, kind, label, url) VALUES (${shower}, 'link', 'x', 'javascript:alert(1)')`),
+    ).rejects.toThrow(/check constraint/);
+    expect((await as({ userId: ids.mia }, (tx) => tx`SELECT id FROM events.links WHERE event_id = ${shower}`)).length).toBe(1);
+    expect((await as({ userId: ids.otto }, (tx) => tx`SELECT id FROM events.links WHERE event_id = ${shower}`)).length).toBe(0);
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.events SET audience = 'public' WHERE id = ${shower}`);
+    expect((await as({}, (tx) => tx`SELECT id FROM events.links WHERE event_id = ${shower}`)).length).toBe(1);
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.events SET audience = 'invitees' WHERE id = ${shower}`);
+  });
+
+  it('lets only the uploader decorate their own photo', async () => {
+    const [u] = await as({ userId: ids.mia }, (tx) =>
+      tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }, { status: 'ready' }))} RETURNING id`);
+    const setO = (ctx: Ctx) => as(ctx, (tx) => tx`SELECT events.set_overlay(${u!.id}, ${tx.json({ frame: 'hearts' })}, 'Cheers!') AS ok`).then((r) => r[0]!.ok);
+    expect(await setO({ userId: ids.cara })).toBe(false); // not the uploader, even as owner
+    expect(await setO({})).toBe(false);
+    expect(await setO({ userId: ids.mia })).toBe(true);
+    const [row] = await as({ userId: ids.mia }, (tx) => tx`SELECT overlay, caption FROM events.uploads WHERE id = ${u!.id}`);
+    expect(row!.overlay).toEqual({ frame: 'hearts' });
+    expect(row!.caption).toBe('Cheers!');
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.uploads SET hidden = true WHERE id = ${u!.id}`);
+    expect(await setO({ userId: ids.mia })).toBe(false); // hidden by a manager: locked
+  });
+
   it('never lets the app role read access codes or guests anonymously', async () => {
     expect((await as({}, (tx) => tx`SELECT id FROM events.access_codes`)).length).toBe(0);
     expect((await as({}, (tx) => tx`SELECT id FROM events.guests`)).length).toBe(0);

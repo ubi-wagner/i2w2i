@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { collectClientInfo } from '@/lib/client-info';
-import { PART_SIZE, PREVIEW_LONG_EDGE } from '@/lib/events/limits';
+import { renderPreview } from '@/lib/compositor';
+import { isPlain, type Overlay } from '@/lib/events/overlay';
+import { Decorator } from './Decorator';
+import { PART_SIZE } from '@/lib/events/limits';
 import { formatBytes, uploadProblem } from '@/lib/events/rules';
 import { listUploads, patchUpload, removeUpload, saveUpload, type StoredUpload } from '@/lib/upload-store';
 import { NUDGE_EVENT, PausedError, put, withRetries } from '@/lib/upload-transfer';
@@ -34,6 +37,9 @@ interface Item {
   status: Status;
   progress: number;
   note?: string;
+  /** Frame/filter/caption chosen for this item, and the one the server has. */
+  overlay?: Overlay | null;
+  savedOverlay?: Overlay | null;
 }
 
 const CONCURRENCY = 2;
@@ -49,28 +55,6 @@ function fileType(f: File): string {
   if (f.type) return f.type;
   const ext = /\.([a-z0-9]+)$/i.exec(f.name)?.[1]?.toLowerCase() ?? '';
   return EXT_TYPES[ext] ?? 'application/octet-stream';
-}
-
-/** Downscaled JPEG for galleries, or null if this browser can't decode the photo (e.g. HEIC outside Safari). */
-async function makePreview(file: File): Promise<Blob | null> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = new Image();
-    img.decoding = 'async';
-    img.src = url;
-    await img.decode();
-    const scale = Math.min(1, PREVIEW_LONG_EDGE / Math.max(img.naturalWidth, img.naturalHeight));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
-    // Drawing straight to a small canvas keeps under iOS's canvas size limit.
-    canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
-  } catch {
-    return null;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }
 
 class HttpError extends Error {
@@ -144,7 +128,9 @@ export function Uploader({ slug, name }: { slug: string; name: string }) {
         await patchUpload(key, { serverId, mode, partCount });
       }
       const itemUrl = `${base}/${serverId}`;
-      const preview = isPhoto ? makePreview(file) : Promise.resolve(null);
+      // Plain preview made while the original uploads; a decorated one is
+      // rendered at the end from whatever frame the person picked meanwhile.
+      const plainPreview = isPhoto ? renderPreview(file, null) : Promise.resolve(null);
 
       // Up to two passes: if completion reports missing parts, send them.
       for (let pass = 0; pass < 3; pass++) {
@@ -197,13 +183,16 @@ export function Uploader({ slug, name }: { slug: string; name: string }) {
         }
 
         update(key, { status: 'finishing', progress: 1, note: undefined });
-        const blob = await preview;
+        const chosen = itemsRef.current.find((x) => x.key === key)?.overlay ?? null;
+        const blob = isPhoto && chosen && !isPlain(chosen) ? await renderPreview(file, chosen) : await plainPreview;
         if (blob) {
           previewUrl ??= (await api<{ previewUrl: string | null }>(itemUrl, { action: 'preview' })).previewUrl;
           if (previewUrl) await put(previewUrl, blob, 'image/jpeg').catch(() => {});
         }
         try {
           await api(itemUrl, { action: 'complete' });
+          if (chosen && !isPlain(chosen)) await api(itemUrl, { action: 'decorate', overlay: chosen }).catch(() => {});
+          update(key, { savedOverlay: chosen });
           break;
         } catch (err) {
           // Parts missing (e.g. a part was lost): go round again for just those.
@@ -214,7 +203,7 @@ export function Uploader({ slug, name }: { slug: string; name: string }) {
           throw err;
         }
       }
-      update(key, { status: 'done', note: undefined, progress: 1, file: null });
+      update(key, { status: 'done', note: undefined, progress: 1 });
       await removeUpload(key);
     },
     [base, update],
@@ -337,6 +326,44 @@ export function Uploader({ slug, name }: { slug: string; name: string }) {
     for (const [k, file] of reattached) void patchUpload(k, { file });
   }
 
+  const [decorating, setDecorating] = useState<string | null>(null);
+  const decoratingItem = items.find((x) => x.key === decorating);
+
+  // Applies a frame to an upload that already finished (or re-decorates).
+  // Pending uploads pick up the chosen frame when they finish; anything
+  // chosen after that (or in the last second) is applied by the effect below.
+  const applying = useRef(new Set<string>());
+  const applyOverlay = useCallback(
+    async (key: string, overlay: Overlay) => {
+      const it = itemsRef.current.find((x) => x.key === key);
+      if (!it || it.status !== 'done' || !it.serverId || !it.file) return;
+      applying.current.add(key);
+      update(key, { note: 'Saving frame…' });
+      try {
+        const res = await api<{ previewUrl: string | null }>(`${base}/${it.serverId}`, { action: 'decorate', overlay });
+        if (res.previewUrl && it.type.startsWith('image/')) {
+          const blob = await renderPreview(it.file, overlay);
+          if (blob) await put(res.previewUrl, blob, 'image/jpeg');
+        }
+        update(key, { savedOverlay: overlay, note: isPlain(overlay) ? undefined : 'Frame saved ✓' });
+        router.refresh();
+      } catch (err) {
+        update(key, { savedOverlay: overlay, note: (err as Error).message });
+      } finally {
+        applying.current.delete(key);
+      }
+    },
+    [base, router, update],
+  );
+
+  useEffect(() => {
+    for (const it of items) {
+      if (it.status === 'done' && it.overlay && it.overlay !== it.savedOverlay && !applying.current.has(it.key)) {
+        void applyOverlay(it.key, it.overlay);
+      }
+    }
+  }, [items, applyOverlay]);
+
   function dismiss(key: string) {
     running.current.get(key)?.abort();
     setItems((xs) => xs.filter((x) => x.key !== key));
@@ -396,12 +423,29 @@ export function Uploader({ slug, name }: { slug: string; name: string }) {
                   {it.status === 'failed' ? 'Try again' : 'Resume'}
                 </button>
               )}
+              {it.file && ['queued', 'uploading', 'finishing', 'done', 'paused'].includes(it.status) && (
+                <button type="button" className="mt-2 mr-4 text-brand underline" onClick={() => setDecorating(it.key)}>
+                  {it.overlay && !isPlain(it.overlay) ? 'Change frame' : 'Add frame'}
+                </button>
+              )}
               {it.status !== 'done' && it.status !== 'uploading' && it.status !== 'finishing' && (
                 <button type="button" className="mt-2 text-stone-500 underline" onClick={() => dismiss(it.key)}>Remove</button>
               )}
             </li>
           ))}
         </ul>
+      )}
+
+      {decoratingItem?.file && (
+        <Decorator
+          file={decoratingItem.file}
+          initial={decoratingItem.overlay}
+          onClose={() => setDecorating(null)}
+          onSave={(o) => {
+            setDecorating(null);
+            update(decoratingItem.key, { overlay: o });
+          }}
+        />
       )}
     </div>
   );

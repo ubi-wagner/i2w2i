@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GalleryItem } from '@/lib/events/queries';
+import { Comments } from './Comments';
+import { FramedVideo } from './FramedVideo';
+import type { Overlay } from '@/lib/events/overlay';
 
 interface Props {
   items: GalleryItem[];
@@ -14,15 +17,15 @@ interface Props {
     action: (form: FormData) => Promise<void>;
     bulkAction?: (form: FormData) => Promise<void>;
   };
-  /** Extra panel in the lightbox (comments). */
-  renderExtra?: (item: GalleryItem) => React.ReactNode;
+  /** Album slug: shows comments in the lightbox. */
+  commentsSlug?: string;
 }
 
 function dayLabel(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-export function Gallery({ items, empty, downloadUrl, moderation, renderExtra }: Props) {
+export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug }: Props) {
   const [open, setOpen] = useState<number | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -205,7 +208,7 @@ export function Gallery({ items, empty, downloadUrl, moderation, renderExtra }: 
               // eslint-disable-next-line @next/next/no-img-element
               <img src={item.src} alt={item.caption || ''} className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
             ) : (
-              <video src={item.src} controls autoPlay playsInline className="max-h-full max-w-full" onClick={(e) => e.stopPropagation()} />
+              <FramedVideo src={item.src} overlay={item.overlay as Overlay | null} className="max-h-[70vh] max-w-full" />
             )}
           </div>
           {item.caption && <p className="px-4 pt-2 text-center">{item.caption}</p>}
@@ -222,7 +225,7 @@ export function Gallery({ items, empty, downloadUrl, moderation, renderExtra }: 
               </dl>
             </details>
           )}
-          {renderExtra?.(item)}
+          {commentsSlug && <Comments slug={commentsSlug} uploadId={item.id} />}
           <div className="flex flex-wrap items-center justify-center gap-4 p-3 text-sm">
             <button type="button" disabled={open === 0} onClick={() => setOpen((i) => (i ?? 1) - 1)} className="px-2 disabled:opacity-30">← Prev</button>
             {item.originalUrl && <a href={item.originalUrl} className="underline">Download original</a>}
