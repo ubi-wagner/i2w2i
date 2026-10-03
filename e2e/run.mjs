@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Runs every end-to-end suite against a running server and reports.
 //   BASE_URL (default http://localhost:3000), E2E_DATABASE_URL or DATABASE_URL,
-//   E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD (the bootstrap admin), LOCAL_STORAGE_DIR.
+//   E2E_ADMIN_EMAIL / E2E_ADMIN_USERNAME / E2E_ADMIN_PASSWORD (the bootstrap admin), LOCAL_STORAGE_DIR.
 //   The server under test needs PUSH_ALLOW_ANY_ENDPOINT=1 and PUSH_REVIEW_DELAY_MS=1500
 //   (the app suite runs its own stand-in push service on port 4999).
 //   node e2e/run.mjs [suite ...]

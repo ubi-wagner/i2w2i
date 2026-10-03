@@ -12,12 +12,15 @@ export default function FaqHelp() {
 
       <Section id="everyone" title="For everyone">
         <div className="space-y-3">
-          <Question q="I forgot my password, or my link stopped working" open>
-            <p>There’s no reset email. Ask the person who invited you (or Eric) for a new sign-in link. Open it and pick a new password.</p>
-            <p>Links work once and expire after 7 days, so an old link from a text won’t work again. That’s on purpose.</p>
+          <Question q="I forgot my password" open>
+            <p>Ask the person who added you (or Eric) to reset it. They’ll give you a new one; nothing is emailed.</p>
+            <p>Usernames and passwords are lower case. Check there are no spaces before or after.</p>
+          </Question>
+          <Question q="Can I change my username or password?">
+            <p>Yes. Sign in, tap your name at the top to open your account page, and change either one. Changing your password signs you out on your other phones and computers.</p>
           </Question>
           <Question q="Do I need to download an app?">
-            <p>No. i2w2i works in your phone’s web browser. If you’d like an icon on your home screen, see <Link href="/help/start#link" className="text-brand underline">Coming back later</Link>.</p>
+            <p>No. i2w2i works in your phone’s web browser. If you’d like an icon on your home screen, see <Link href="/help/start#signin-first" className="text-brand underline">Coming back later</Link>.</p>
           </Question>
           <Question q="Why does my photo say “Waiting”?">
             <p>Every photo a guest adds is looked at by one of the hosts before anyone else can see it. Until then, only you and the hosts can see it. Nothing is wrong; it just hasn’t been approved yet.</p>
@@ -43,8 +46,8 @@ export default function FaqHelp() {
 
       <Section id="hosts" title="For hosts">
         <div className="space-y-3">
-          <Question q="Someone forgot their password, or their link didn’t work">
-            <p>Under <b>People on this event</b>, tap <K>New sign-in link</K> under their name and text it to them, just like an invite. They open it and pick a new password. You can do this for people you invited; Eric can for anyone.</p>
+          <Question q="Someone forgot their password">
+            <p>Under <b>People on this event</b>, tap <K>Reset password</K> under their name and pass on the new one, just like when you added them. Their old password stops working. You can do this for people you added; Eric can for anyone.</p>
           </Question>
           <Question q="Who can approve photos?">
             <p>Co-hosts, helpers and Eric. Photos that co-hosts and helpers add themselves go straight in.</p>

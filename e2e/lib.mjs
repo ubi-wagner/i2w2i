@@ -11,7 +11,12 @@ import postgres from 'postgres';
 export const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
 export const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 export const STORAGE_DIR = process.env.LOCAL_STORAGE_DIR ?? '/tmp/i2w2i-storage';
-export const ADMIN = { email: process.env.E2E_ADMIN_EMAIL ?? 'eric@example.com', password: process.env.E2E_ADMIN_PASSWORD ?? 'supersecret123' };
+// The bootstrap admin: made from an email, so its username is the part before the @.
+export const ADMIN = {
+  email: process.env.E2E_ADMIN_EMAIL ?? 'eric@example.com',
+  username: process.env.E2E_ADMIN_USERNAME ?? 'eric',
+  password: process.env.E2E_ADMIN_PASSWORD ?? 'supersecret123',
+};
 export const RUN = randomBytes(3).toString('hex');
 
 export const fixture = (name) => join(FIXTURES, name);
@@ -53,15 +58,16 @@ export async function phonePage(kind = 'iphone') {
   return page(PHONES[kind]);
 }
 
-export async function login(p, email, password) {
+/** Signs in with a username (or, for accounts made before usernames, an email). */
+export async function login(p, username, password) {
   await p.goto(BASE + '/login');
   // The tab only shows when email sign-in links are configured.
   const tab = p.getByRole('button', { name: 'Password', exact: true });
   if (await tab.isVisible()) await tab.click();
-  await p.fill('#email', email);
+  await p.fill('#username', username);
   await p.fill('#password', password);
   await p.getByRole('button', { name: 'Sign in' }).click();
-  await p.waitForURL(BASE + '/');
+  await p.waitForURL((u) => !u.pathname.startsWith('/login'));
 }
 
 export async function adminPage() {
@@ -70,36 +76,46 @@ export async function adminPage() {
   return p;
 }
 
-/** Invites someone from the People page; returns their one-time link. */
-export async function invite(admin, name, email, role = 'member') {
-  await admin.goto(BASE + '/admin');
-  await admin.fill('#display_name', name);
-  await admin.fill('#email', email);
-  if (role === 'creator') await admin.locator('input[value=creator]').check();
-  await admin.getByRole('button', { name: 'Invite' }).click();
-  const link = admin.locator('section').first().locator('input[readonly]');
-  await link.waitFor();
-  return link.inputValue();
+/** Reads the username and password from a "pass these on" box inside `scope`. */
+export async function readCredentials(scope) {
+  const user = scope.getByLabel('Their username');
+  await user.waitFor();
+  return { username: await user.innerText(), password: await scope.getByLabel('Their password').innerText() };
 }
 
-/** Accepts an invite link in a fresh context and sets a password. Returns the page. */
-export async function acceptInvite(link, password, opts = {}) {
+/** Fills the new-person fields (name, username, starting password) inside `scope`. */
+async function fillNewPerson(scope, name, username, password) {
+  await scope.getByLabel('Name', { exact: true }).fill(name);
+  await scope.getByLabel('Username', { exact: true }).fill(username);
+  if (password) await scope.getByLabel('Starting password').fill(password);
+}
+
+/** Adds someone from the People page; returns the username and password to pass on. */
+export async function invite(admin, name, username, role = 'member', password) {
+  await admin.goto(BASE + '/admin');
+  const form = admin.locator('form', { has: admin.getByRole('button', { name: 'Add person' }) });
+  await fillNewPerson(form, name, username, password);
+  if (role === 'creator') await form.locator('input[value=creator]').check();
+  await form.getByRole('button', { name: 'Add person' }).click();
+  return readCredentials(form);
+}
+
+/** A host adds a brand-new person to their event (on its Manage page); returns their credentials. */
+export async function hostInvite(host, ev, name, username, role = 'invitee', password) {
+  if (new URL(host.url()).pathname !== new URL(ev.manage).pathname) await host.goto(ev.manage);
+  const form = eventInviteForm(host);
+  await fillNewPerson(form, name, username, password);
+  await form.getByLabel('Their role').selectOption(role);
+  await form.getByRole('button', { name: 'Add to this event' }).click();
+  return readCredentials(form);
+}
+
+export const eventInviteForm = (p) => p.locator('form', { has: p.getByText('Add someone new', { exact: true }) });
+
+/** Signs in as a newly added person in a fresh browser. Returns the page. */
+export async function acceptInvite(creds, opts = {}) {
   const p = await page(opts);
-  await p.goto(link);
-  // Links made on an event's page open its welcome page: one step to the album.
-  if (link.includes('/welcome?')) {
-    await p.fill('#password', password);
-    await p.fill('#confirm', password);
-    await p.getByRole('button', { name: 'See the photos' }).click();
-    await p.waitForURL(/\/album\/[a-z0-9-]+$/);
-    return p;
-  }
-  await p.getByRole('button', { name: 'Continue' }).click();
-  await p.waitForURL(/\/account\?welcome=1/);
-  await p.fill('#password', password);
-  await p.fill('#confirm', password);
-  await p.getByRole('button', { name: 'Set password' }).click();
-  await p.getByText('Password saved.').waitFor();
+  await login(p, creds.username, creds.password);
   return p;
 }
 

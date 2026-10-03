@@ -6,7 +6,7 @@ import {
 
 const pw = 'matrix-password-1';
 const slug = `matrix-${RUN}`;
-const email = (n) => `${n}-${RUN}@example.com`;
+const user = (n) => `${n}-${RUN}`;
 
 // ── Cast ────────────────────────────────────────────────────────────────────
 const admin = await adminPage();
@@ -15,15 +15,14 @@ for (const [key, name, role] of [
   ['cara', 'Cara Creator', 'creator'], ['cody', 'Cody Curator', 'member'], ['ivy', 'Ivy Invitee', 'member'],
   ['fay', 'Fay Family', 'member'], ['dan', 'Dan Deactivated', 'member'],
 ]) {
-  const link = await invite(admin, `${name} ${RUN}`, email(key), role);
-  people[key] = await acceptInvite(link, pw);
+  people[key] = await acceptInvite(await invite(admin, `${name} ${RUN}`, user(key), role, pw));
 }
 const { cara, cody, ivy, fay, dan } = people;
 
 const ev = await createEvent(cara, `Matrix ${RUN}`, slug);
-await addToEvent(cara, ev, `Cody Curator ${RUN} (${email('cody')})`, 'curator');
-await addToEvent(cara, ev, `Ivy Invitee ${RUN} (${email('ivy')})`, 'invitee');
-await addToEvent(cara, ev, `Dan Deactivated ${RUN} (${email('dan')})`, 'invitee');
+await addToEvent(cara, ev, `Cody Curator ${RUN} (${user('cody')})`, 'curator');
+await addToEvent(cara, ev, `Ivy Invitee ${RUN} (${user('ivy')})`, 'invitee');
+await addToEvent(cara, ev, `Dan Deactivated ${RUN} (${user('dan')})`, 'invitee');
 await createCode(cara, ev, `UP${RUN}`, { view: false, label: 'upload only' });
 await createCode(cara, ev, `VIEW${RUN}`, { upload: false, label: 'view only' });
 await createCode(cara, ev, `BOTH${RUN}`, { label: 'both' });
@@ -145,7 +144,7 @@ check((await probe(vic)).tiles === 3, 'curator hides a photo; viewers stop seein
 await setAudience(cara, ev, 'published', 'invitees');
 check((await probe(dan)).upload, 'Dan (invitee) has access before deactivation');
 await admin.goto(BASE + '/admin');
-await admin.locator('li.card', { hasText: email('dan') }).getByRole('button', { name: 'Deactivate' }).click();
+await admin.locator('li.card', { hasText: user('dan') }).getByRole('button', { name: 'Deactivate' }).click();
 await admin.waitForTimeout(700);
 check((await probe(dan)).join, 'deactivated account loses access immediately');
 
@@ -172,7 +171,7 @@ check(true, 'a turned-off code no longer lets anyone in');
 // Sign-in still works for everyone else; the family member who isn't on the event sees it in no list
 await fay.goto(BASE + '/events');
 check(!(await fay.getByText(`Matrix ${RUN}`).isVisible()), 'event is not listed for people not on it');
-await login(await page(), email('ivy'), pw);
-check(true, 'invitee signs in with email + password');
+await login(await page(), user('ivy'), pw);
+check(true, 'invitee signs in with username + password');
 
 await finish();

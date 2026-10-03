@@ -8,13 +8,13 @@ const GUIDES = [
     href: '/help/start',
     title: 'Getting started',
     who: 'For everyone',
-    text: 'Opening the link you were sent, picking a password, seeing and adding photos, and putting i2w2i on your phone.',
+    text: 'Signing in with the username and password you were given, seeing and adding photos, and putting i2w2i on your phone.',
   },
   {
     href: '/help/hosting',
     title: 'Running an event',
     who: 'For hosts and helpers',
-    text: 'Your event page, inviting people, QR cards for the tables, approving photos and choosing who sees the album.',
+    text: 'Your event page, adding people, QR cards for the tables, approving photos and choosing who sees the album.',
   },
   {
     href: '/help/faq',
@@ -47,9 +47,9 @@ export default function HelpHome() {
       <section className="card space-y-3">
         <h2 className="text-xl font-semibold">The short version</h2>
         <ul className="space-y-2">
-          <li><b>Got a link in a text?</b> Tap it, pick a password, and you’re in.</li>
+          <li><b>Got a username and password?</b> Go to <b>i2w2i.com</b>, type them in, and you’re in.</li>
           <li><b>At a party?</b> Scan the card on the table with your phone’s camera and type your name. No account needed.</li>
-          <li><b>Coming back?</b> Go to <b>i2w2i.com</b> and sign in with your email and password, or tap the i2w2i icon on your phone.</li>
+          <li><b>Coming back?</b> Tap the i2w2i icon on your phone, or go to <b>i2w2i.com</b> and sign in again.</li>
           <li><b>Hosting?</b> Start with <Link href="/help/hosting" className="text-brand underline">Running an event</Link>.</li>
         </ul>
       </section>

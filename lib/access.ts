@@ -42,6 +42,26 @@ export function canManagePeople(role: PlatformRole): boolean {
   return role === 'admin';
 }
 
+/** Usernames: 2–32 of a–z, 0–9, . _ -, starting with a letter or digit. Case doesn't matter. */
+export const USERNAME_PATTERN = '[a-z0-9][a-z0-9._\\-]{1,31}';
+
+export function normalizeUsername(raw: string): string | null {
+  const u = raw.trim().toLowerCase();
+  return new RegExp(`^${USERNAME_PATTERN}$`).test(u) ? u : null;
+}
+
+/** A username to suggest from someone's name: "Grandma Rose" → "grandma.rose". */
+export function usernameFromName(name: string): string {
+  const u = name
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '')
+    .slice(0, 32)
+    .replace(/\.+$/, '');
+  return u.length >= 2 ? u : '';
+}
+
 export function normalizeEmail(raw: string): string | null {
   const e = raw.trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 254 ? e : null;
@@ -54,13 +74,13 @@ export function safeNext(next: string | null | undefined): string {
 }
 
 /**
- * Who may hand someone a one-time sign-in link (an invite, or a password
- * reset now that there's no email). A link signs in as that person, so:
- * the admin may issue one for anyone else; a host only for family-member
- * accounts they invited themselves (whatever their own platform role: event
- * co-hosts are often family members). Nobody issues one for themselves.
+ * Who may set a new password for someone (a forgotten password: there's no
+ * email). That's as good as signing in as them, so: the admin may do it for
+ * anyone else; a host only for family-member accounts they made themselves
+ * (whatever their own platform role: event co-hosts are often family
+ * members). Nobody does it for themselves (that's the account page).
  */
-export function canIssueLink(
+export function canResetPassword(
   actor: { id: string; platform_role: PlatformRole },
   target: { id: string; platform_role: PlatformRole; created_by: string | null; is_active: boolean },
 ): boolean {

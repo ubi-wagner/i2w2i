@@ -12,8 +12,8 @@ import { formatBytes } from '@/lib/events/rules';
 import { userCtx } from '@/lib/events/session';
 import { addMember, approveAllReady, changeAccessCode, moderateUpload, moderateUploads, removeGuest, removeLink, removeMember } from '../actions';
 import { LinkForm } from './LinkForm';
-import { HostInviteForm, SignInLinkButton } from './PeopleForms';
-import { canIssueLink, type PlatformRole } from '@/lib/access';
+import { HostInviteForm, ResetPasswordButton } from './PeopleForms';
+import { canResetPassword, type PlatformRole } from '@/lib/access';
 import type { LinkRow } from '@/components/events/GiftLinks';
 import { describeDevice } from '@/lib/device';
 import { describeAction, eventActivity, namesByDevice, shortDevice, uploadDetails, type ActivityRow } from '@/lib/events/forensics';
@@ -25,8 +25,8 @@ import { cleanPage } from '@/lib/events/page';
 
 export const metadata = { title: 'Manage event' };
 
-interface Member { user_id: string; role: string; display_name: string; email: string; platform_role: PlatformRole; created_by: string | null; is_active: boolean }
-interface Person { id: string; display_name: string; email: string }
+interface Member { user_id: string; role: string; display_name: string; username: string; platform_role: PlatformRole; created_by: string | null; is_active: boolean }
+interface Person { id: string; display_name: string; username: string }
 interface GuestRow {
   id: string; display_name: string; via: string; created_at: Date; last_seen_at: Date; revoked_at: Date | null;
   label: string; uploads: number;
@@ -51,12 +51,12 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
 
   const { members, people, codes, uploads, guests, activity, links } = await withCtx(ctx, async (tx) => ({
     members: await tx<Member[]>`
-      SELECT m.user_id, m.role, u.display_name, u.email, u.platform_role, u.created_by, u.is_active
+      SELECT m.user_id, m.role, u.display_name, u.username, u.platform_role, u.created_by, u.is_active
         FROM events.members m JOIN core.users u ON u.id = m.user_id
        WHERE m.event_id = ${id}
        ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'curator' THEN 1 ELSE 2 END, u.display_name`,
     people: await tx<Person[]>`
-      SELECT u.id, u.display_name, u.email FROM core.users u
+      SELECT u.id, u.display_name, u.username FROM core.users u
        WHERE u.is_active AND NOT EXISTS (SELECT 1 FROM events.members m WHERE m.event_id = ${id} AND m.user_id = u.id)
        ORDER BY u.display_name`,
     codes: owner
@@ -184,7 +184,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           <ul className="divide-y divide-stone-100">
             {members.map((m) => (
               <li key={m.user_id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span>{m.display_name}{m.user_id === user.id && <span className="text-stone-500"> (you)</span>} <span className="text-sm text-stone-500">{m.email}</span></span>
+                <span>{m.display_name}{m.user_id === user.id && <span className="text-stone-500"> (you)</span>} <span className="font-mono text-sm text-stone-500">{m.username}</span></span>
                 <span className="flex items-center gap-3 text-sm">
                   {owner && m.user_id !== user.id ? (
                     <form action={addMember} className="flex items-center gap-1">
@@ -206,8 +206,8 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                     </form>
                   )}
                 </span>
-                {owner && canIssueLink(user, { id: m.user_id, platform_role: m.platform_role, created_by: m.created_by, is_active: m.is_active }) && (
-                  <SignInLinkButton userId={m.user_id} eventId={id} />
+                {owner && canResetPassword(user, { id: m.user_id, platform_role: m.platform_role, created_by: m.created_by, is_active: m.is_active }) && (
+                  <ResetPasswordButton userId={m.user_id} />
                 )}
               </li>
             ))}
@@ -219,7 +219,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
               <div className="grow">
                 <label className="label" htmlFor="user_id">Or add someone who already has an account</label>
                 <select className="input" id="user_id" name="user_id" required>
-                  {people.map((p) => <option key={p.id} value={p.id}>{p.display_name} ({p.email})</option>)}
+                  {people.map((p) => <option key={p.id} value={p.id}>{p.display_name} ({p.username})</option>)}
                 </select>
               </div>
               <select name="role" className="input w-auto" defaultValue="invitee" aria-label="Role">

@@ -41,9 +41,12 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
 - **Help pages** (`app/help`, public) describe the real screens. Change a
   screen they show, update them; pictures in `public/help-img/` come from a
   made-up event, never real names, codes or QR cards.
-- **There is no email.** Invites and resets are one-time links shown to the
-  inviter (copy or QR). Who may issue one is `canIssueLink`: admin for
-  anyone, hosts only for accounts they created. Don't widen it.
+- **There is no email.** People sign in with a username and password that
+  whoever added them chose and passed on (`lib/auth/accounts.ts`). Never
+  show or log a password except in that one box to the person who made it.
+  Who may reset someone's password is `canResetPassword`: admin for anyone,
+  hosts only for accounts they created. Don't widen it. A typed username
+  that's taken is refused, never treated as "add that existing person".
 
 ## Events app rules
 - **Every `events.*` query runs in `withCtx(ctx, …)`** (`lib/events/db.ts`).

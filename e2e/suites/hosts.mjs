@@ -1,95 +1,85 @@
-// Without email: hosts invite people onto their event and hand out one-time
-// links (as text or QR), which also serve as password resets. Only the admin
-// may issue links for accounts a host didn't create.
-import { BASE, RUN, acceptInvite, adminPage, approveAll, check, createCode, createEvent, db, finish, fixture, invite, joinWithCode, login, page, phonePage, setAudience, tiles, uploadFiles } from '../lib.mjs';
+// Without email: hosts add people to their event with a username and a
+// starting password they pass on themselves, and reset forgotten passwords
+// the same way. Only the admin may reset accounts a host didn't create.
+import { BASE, RUN, acceptInvite, addToEvent, adminPage, approveAll, check, createCode, createEvent, db, eventInviteForm, finish, fixture, hostInvite, invite, joinWithCode, login, page, phonePage, readCredentials, setAudience, tiles, uploadFiles } from '../lib.mjs';
 
 const admin = await adminPage();
-const hostLink = await invite(admin, `Holly Host ${RUN}`, `holly-${RUN}@example.com`, 'creator');
-const holly = await acceptInvite(hostLink, 'holly-password-1');
-const fredLink = await invite(admin, `Fred Family ${RUN}`, `fred-${RUN}@example.com`); // invited by the admin, not Holly
-const fred = await acceptInvite(fredLink, 'fred-password-1');
+const holly = await acceptInvite(await invite(admin, `Holly Host ${RUN}`, `holly-${RUN}`, 'creator'));
+const fred = await acceptInvite(await invite(admin, `Fred Family ${RUN}`, `fred-${RUN}`)); // added by the admin, not Holly
 const ev = await createEvent(holly, `Hosted ${RUN}`, `hosted-${RUN}`);
 
-// Holly invites a brand-new person straight onto her event
-await holly.goto(ev.manage);
-const form = holly.locator('form', { has: holly.getByText('Invite someone by name and email', { exact: true }) });
-await form.getByLabel('Name').fill(`Nina New ${RUN}`);
-await form.getByLabel('Email').fill(`nina-${RUN}@example.com`);
-await form.getByRole('button', { name: 'Invite' }).click();
-const ninaLink = await form.getByLabel('One-time link').inputValue();
-check(ninaLink.includes(`/album/${ev.slug}/welcome?token=`), 'host gets a one-time link that opens the event’s own welcome page');
-await form.getByRole('button', { name: 'QR' }).click();
-check(await form.getByLabel('QR code for the link').locator('svg').isVisible(), '…and can show it as a QR to scan in person');
-const [nina] = await db`SELECT platform_role, created_by FROM core.users WHERE email = ${`nina-${RUN}@example.com`}`;
-const [hollyRow] = await db`SELECT id FROM core.users WHERE email = ${`holly-${RUN}@example.com`}`;
-check(nina?.platform_role === 'member' && nina.created_by === hollyRow.id, 'the new account is a family member account, created by the host');
-const ninaPage = await acceptInvite(ninaLink, 'nina-password-1');
+// Holly adds a brand-new person straight onto her event
+const ninaCreds = await hostInvite(holly, ev, `Nina New ${RUN}`, `nina-${RUN}`);
+check(ninaCreds.username === `nina-${RUN}` && ninaCreds.password.split('-').length === 3, 'the host gets a username and starting password to pass on');
+const form = eventInviteForm(holly);
+check(await form.getByRole('button', { name: 'Copy message' }).isVisible(), '…and a ready-made message to copy');
+const [nina] = await db`SELECT platform_role, created_by, email FROM core.users WHERE username = ${`nina-${RUN}`}`;
+const [hollyRow] = await db`SELECT id FROM core.users WHERE username = ${`holly-${RUN}`}`;
+check(nina?.platform_role === 'member' && nina.created_by === hollyRow.id && nina.email === null, 'the new account is a family member account, created by the host, with no email');
+// The message points at the album's sign-in, so they land in the album
+const ninaPage = await page();
+await ninaPage.goto(`${BASE}/login?next=/album/${ev.slug}`);
+await ninaPage.fill('#username', ninaCreds.username);
+await ninaPage.fill('#password', ninaCreds.password);
+await ninaPage.getByRole('button', { name: 'Sign in' }).click();
+await ninaPage.waitForURL(`${BASE}/album/${ev.slug}`);
+check(true, 'the new person signs in and lands in the event’s album');
 await ninaPage.goto(BASE + '/events');
-check(await ninaPage.getByText(`Hosted ${RUN}`).isVisible(), 'the invited person sees the event right away');
+check(await ninaPage.getByText(`Hosted ${RUN}`).isVisible(), '…and sees the event under Events');
 
-// Holly adds Fred, who already has an account: no link (not hers to reset)
+// Typing an existing username never adds (or takes over) that account
 await holly.goto(ev.manage);
-await form.getByLabel('Name').fill('Fred');
-await form.getByLabel('Email').fill(`FRED-${RUN}@example.com`);
-await form.getByRole('button', { name: 'Invite' }).click();
-await form.getByText('already has an account and is now on this event').waitFor();
-check(!(await form.getByLabel('One-time link').isVisible()), 'adding an existing account gives no sign-in link to the host');
+await form.getByLabel('Name', { exact: true }).fill('Fred');
+await form.getByLabel('Username', { exact: true }).fill(`fred-${RUN}`);
+await form.getByRole('button', { name: 'Add to this event' }).click();
+await form.getByText('Someone already has the username').waitFor();
+check(!(await form.getByLabel('Their password').isVisible()), 'a taken username is refused; no account is touched');
+// People who already have an account are picked from the list instead
+await addToEvent(holly, ev, `Fred Family ${RUN} (fred-${RUN})`);
 await fred.goto(BASE + '/events');
-check(await fred.getByText(`Hosted ${RUN}`).isVisible(), 'the existing account now sees the event');
+check(await fred.getByText(`Hosted ${RUN}`).isVisible(), 'an existing account added from the list now sees the event');
 
-// Reset links: Holly can for Nina, not for Fred or the admin
+// Resets: Holly can for Nina, not for Fred or the admin
 await holly.goto(ev.manage);
-const ninaRow = holly.locator('li', { hasText: `nina-${RUN}@example.com` });
-const fredRow = holly.locator('li', { hasText: `fred-${RUN}@example.com` });
-check(await ninaRow.getByRole('button', { name: 'New sign-in link' }).isVisible(), 'host can make a new sign-in link for people they invited');
-check(!(await fredRow.getByRole('button', { name: 'New sign-in link' }).isVisible()), '…but not for accounts someone else created');
+const ninaRow = holly.locator('li', { hasText: `nina-${RUN}` });
+const fredRow = holly.locator('li', { hasText: `fred-${RUN}` });
+check(await ninaRow.getByRole('button', { name: 'Reset password' }).isVisible(), 'a host can reset the password of people they added');
+check(!(await fredRow.getByRole('button', { name: 'Reset password' }).isVisible()), '…but not of accounts someone else created');
 // Forging the request for someone else is refused too
-const [fredRow2] = await db`SELECT id FROM core.users WHERE email = ${`fred-${RUN}@example.com`}`;
-const linkForm = ninaRow.locator('form', { has: holly.getByRole('button', { name: 'New sign-in link' }) });
-await linkForm.locator('input[name=user_id]').evaluate((el, id) => { el.value = id; }, fredRow2.id);
-await linkForm.getByRole('button', { name: 'New sign-in link' }).click();
-await holly.getByText('Only Eric can make a sign-in link for this person.').waitFor();
-check(true, 'a forged request for someone else’s link is refused');
+const [fredDb] = await db`SELECT id FROM core.users WHERE username = ${`fred-${RUN}`}`;
+const resetForm = ninaRow.locator('form', { has: holly.getByRole('button', { name: 'Reset password' }) });
+await resetForm.locator('input[name=user_id]').evaluate((el, id) => { el.value = id; }, fredDb.id);
+await resetForm.getByRole('button', { name: 'Reset password' }).click();
+await holly.getByText('Only Eric can reset this person’s password.').waitFor();
+check(true, 'a forged reset for someone else is refused');
 
-// Nina forgot her password: Holly makes her a link; Nina picks a new password without the old one
+// Nina forgot her password: Holly gives her a new one
 await holly.reload();
-await holly.locator('li', { hasText: `nina-${RUN}@example.com` }).getByRole('button', { name: 'New sign-in link' }).click();
-const reset = await holly.locator('li', { hasText: `nina-${RUN}@example.com` }).getByLabel('One-time link').inputValue();
-const ninaPhone = await page();
-await ninaPhone.goto(reset);
-check(await ninaPhone.getByLabel('Choose a new password').isVisible(), 'a reset link opens the event page asking only for a new password');
-await ninaPhone.fill('#password', 'short');
-await ninaPhone.fill('#confirm', 'short');
-await ninaPhone.getByRole('button', { name: 'See the photos' }).click();
-await ninaPhone.getByRole('alert').waitFor();
-check(await ninaPhone.getByRole('button', { name: 'See the photos' }).isVisible(), 'a too-short password is explained and doesn’t use up the link');
-await ninaPhone.fill('#password', 'nina-password-2');
-await ninaPhone.fill('#confirm', 'nina-password-2');
-await ninaPhone.getByRole('button', { name: 'See the photos' }).click();
-await ninaPhone.waitForURL(`${BASE}/album/${ev.slug}`);
-check(true, 'choosing the password goes straight into the album');
-await login(await page(), `nina-${RUN}@example.com`, 'nina-password-2');
-check(true, 'she signs in with the new password');
+const ninaRow2 = holly.locator('li', { hasText: `nina-${RUN}` });
+await ninaRow2.getByRole('button', { name: 'Reset password' }).click();
+const ninaNew = await readCredentials(ninaRow2);
+check(ninaNew.username === `nina-${RUN}` && ninaNew.password !== ninaCreds.password, 'the host gets Nina’s new password to pass on');
 await ninaPage.goto(BASE + '/');
-check(ninaPage.url().includes('/login'), 'resetting signed out her other devices');
-const reuse = await page();
-await reuse.goto(reset);
-check(await reuse.getByText('This link has already been used').isVisible(), 'reset links work once');
-
-// Without a fresh link, changing the password still needs the old one
+check(ninaPage.url().includes('/login'), 'the reset signed out her other devices');
+const oldTry = await page();
+await oldTry.goto(BASE + '/login');
+await oldTry.fill('#username', `nina-${RUN}`);
+await oldTry.fill('#password', ninaCreds.password);
+await oldTry.getByRole('button', { name: 'Sign in' }).click();
+await oldTry.getByText('don’t match').waitFor();
+check(true, 'the old password no longer works');
+const ninaPhone = await acceptInvite(ninaNew);
+check(true, 'the new one does');
 await ninaPhone.goto(BASE + '/account');
-check(await ninaPhone.locator('#current').isVisible(), 'normal password change asks for the current password');
+check(await ninaPhone.locator('#current').isVisible(), 'changing it herself asks for the current password (the one she was given)');
 
-// Admin can make a link for anyone (e.g. Fred), from People
+// The admin can reset anyone (e.g. Fred), from People
 await admin.goto(BASE + '/admin');
-await admin.locator('li.card', { hasText: `fred-${RUN}@example.com` }).getByRole('button', { name: 'New sign-in link' }).click();
-const fredReset = await admin.locator('li.card', { hasText: `fred-${RUN}@example.com` }).getByLabel('One-time link').inputValue();
-check(fredReset.includes('/auth/link?token='), 'admin can make a sign-in link for anyone');
-const fredPhone = await page();
-await fredPhone.goto(fredReset);
-await fredPhone.getByRole('button', { name: 'Continue' }).click();
-await fredPhone.waitForURL(/\/account\?reset=1/);
-check(!(await fredPhone.locator('#current').isVisible()), 'after the admin’s reset link, no old password is asked for');
+const fredCard = admin.locator('li.card', { hasText: `fred-${RUN}` });
+await fredCard.getByRole('button', { name: 'Reset password' }).click();
+const fredNew = await readCredentials(fredCard);
+await acceptInvite(fredNew);
+check(fredNew.username === `fred-${RUN}`, 'the admin can reset anyone’s password');
 
 // Album card for sharing a public album
 await holly.goto(ev.manage);
@@ -103,37 +93,27 @@ await fred.goto(ev.manage);
 check(!fred.url().endsWith(ev.id), 'members can’t open the manage page to invite');
 
 // Holly makes Sasha a co-host: Sasha then runs the event just like Holly
-await holly.goto(ev.manage);
-await form.getByLabel('Name').fill(`Sasha Cohost ${RUN}`);
-await form.getByLabel('Email').fill(`sasha-${RUN}@example.com`);
-await form.getByLabel('Their role').selectOption('owner');
-await form.getByRole('button', { name: 'Invite' }).click();
-await form.getByText(`Send Sasha Cohost ${RUN} this link`).waitFor();
-const sashaLink = await form.getByLabel('One-time link').inputValue();
-check(sashaLink !== ninaLink, 'a second invite shows the new person’s link, never the previous one');
-const sasha = await acceptInvite(sashaLink, 'sasha-password-1');
-check(sasha.url() === `${BASE}/album/${ev.slug}`, 'the co-host chooses a password on the event’s page and lands in the album');
+const sashaCreds = await hostInvite(holly, ev, `Sasha Cohost ${RUN}`, `sasha-${RUN}`, 'owner');
+check(sashaCreds.username === `sasha-${RUN}` && sashaCreds.password !== ninaCreds.password, 'a second person shows their own username and password, never the previous one’s');
+const sasha = await acceptInvite(sashaCreds);
+await sasha.goto(`${BASE}/album/${ev.slug}`);
 await sasha.getByRole('link', { name: 'Manage' }).click();
 await sasha.waitForURL(ev.manage);
-check(await sasha.getByText('Invite someone by name and email').isVisible(), 'a co-host can open the manage page and invite people');
+check(await sasha.getByText('Add someone new').isVisible(), 'a co-host can open the manage page and add people');
 // …and change someone's role: Fred becomes a helper
-const fredOnSasha = sasha.locator('li', { hasText: `fred-${RUN}@example.com` });
+const fredOnSasha = sasha.locator('li', { hasText: `fred-${RUN}` });
 await fredOnSasha.getByLabel(/role$/).selectOption('curator');
 await fredOnSasha.getByRole('button', { name: 'Save' }).click();
 await sasha.waitForLoadState('networkidle');
-const [fredRole] = await db`SELECT m.role FROM events.members m JOIN core.users u ON u.id = m.user_id WHERE m.event_id = ${ev.id} AND u.email = ${`fred-${RUN}@example.com`}`;
+const [fredRole] = await db`SELECT m.role FROM events.members m JOIN core.users u ON u.id = m.user_id WHERE m.event_id = ${ev.id} AND u.username = ${`fred-${RUN}`}`;
 check(fredRole?.role === 'curator', 'a co-host can change someone’s role on the event');
-// …and, though only a family-member account, re-link people she invited (a lost password)
-const sform = sasha.locator('form', { has: sasha.getByText('Invite someone by name and email', { exact: true }) });
-await sform.getByLabel('Name').fill(`Pia ${RUN}`);
-await sform.getByLabel('Email').fill(`pia-${RUN}@example.com`);
-await sform.getByRole('button', { name: 'Invite' }).click();
-await sform.getByText(`Send Pia ${RUN} this link`).waitFor();
+// …and, though only a family-member account, reset people she added (a lost password)
+await hostInvite(sasha, ev, `Pia ${RUN}`, `pia-${RUN}`);
 await sasha.reload();
-const piaRow = sasha.locator('li', { hasText: `pia-${RUN}@example.com` });
-await piaRow.getByRole('button', { name: 'New sign-in link' }).click();
-check((await piaRow.getByLabel('One-time link').inputValue()).includes('/welcome?token='), 'a co-host who is a family member can make a new sign-in link for someone she invited');
-check(!(await sasha.locator('li', { hasText: `fred-${RUN}@example.com` }).getByRole('button', { name: 'New sign-in link' }).isVisible()), '…but not for anyone else');
+const piaRow = sasha.locator('li', { hasText: `pia-${RUN}` });
+await piaRow.getByRole('button', { name: 'Reset password' }).click();
+check((await readCredentials(piaRow)).username === `pia-${RUN}`, 'a co-host who is a family member can reset someone she added');
+check(!(await sasha.locator('li', { hasText: `fred-${RUN}` }).getByRole('button', { name: 'Reset password' }).isVisible()), '…but not anyone else');
 
 // The co-host runs the day: makes a table code, approves a guest's photo and publishes the album
 await createCode(sasha, ev, `TBL${RUN}`.slice(0, 12).toUpperCase());

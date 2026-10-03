@@ -5,9 +5,9 @@ import { BASE, RUN, acceptInvite, addToEvent, adminPage, approveAll, check, crea
 
 const slug = `shower-${RUN}`;
 const host = await adminPage();
-const beaLink = await invite(host, `Bea Bridesmaid ${RUN}`, `bea-${RUN}@example.com`);
+const beaCreds = await invite(host, `Bea Bridesmaid ${RUN}`, `bea-${RUN}`, 'member', 'bea-password-1');
 const ev = await createEvent(host, `Cassie's Shower ${RUN}`, slug);
-await addToEvent(host, ev, `Bea Bridesmaid ${RUN} (bea-${RUN}@example.com)`);
+await addToEvent(host, ev, `Bea Bridesmaid ${RUN} (bea-${RUN})`);
 await createCode(host, ev, 'cb-1106', { label: 'Shower guests' });
 await host.goto(ev.manage);
 check(await host.getByText('CB1106', { exact: true }).isVisible(), 'owner sees the typed code again (stored encrypted)');
@@ -50,7 +50,7 @@ await quinn.waitForURL(`${BASE}/album/${slug}`);
 check(await quinn.getByText('Add photos & videos').isVisible(), 'QR guest only gives a name, lands in the album, token gone from the URL');
 
 // Bridesmaid with an account
-const bea = await acceptInvite(beaLink, 'bea-password-1', (await import('../lib.mjs')).PHONES.iphone);
+const bea = await acceptInvite(beaCreds, (await import('../lib.mjs')).PHONES.iphone);
 await bea.goto(`${BASE}/album/${slug}`);
 check(await bea.getByText(`Adding as Bea Bridesmaid ${RUN}`).isVisible(), 'bridesmaid uploads under her account name');
 await uploadFiles(bea, [fixture('portrait.jpg')]);

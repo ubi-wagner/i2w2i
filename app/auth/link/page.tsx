@@ -30,7 +30,7 @@ export default async function LinkPage({ searchParams }: { searchParams: Promise
         ) : (
           <>
             <h1 className="text-xl font-semibold">This link has already been used</h1>
-            <p className="text-stone-600">Sign-in links work once and expire after a while. If you’ve set a password, sign in with it; otherwise ask the person who invited you (or Eric) for a new link.</p>
+            <p className="text-stone-600">Sign-in links work once and expire after a while. Sign in with your username and password instead, or ask the person who added you (or Eric) to reset your password.</p>
             <Link href="/login" className="btn w-full">Sign in with password</Link>
           </>
         )}

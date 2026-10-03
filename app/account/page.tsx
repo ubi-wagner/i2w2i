@@ -2,6 +2,7 @@ import { Header } from '@/components/Header';
 import { requireUser } from '@/lib/auth/session';
 import { canUsePassword } from '@/lib/access';
 import { PasswordForm } from './PasswordForm';
+import { UsernameForm } from './UsernameForm';
 import { NotifyToggle } from '@/components/pwa/NotifyToggle';
 import { signOutEverywhere, updateName } from './actions';
 
@@ -21,7 +22,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       <main className="mx-auto max-w-xl space-y-6 px-4 py-8">
         {welcome && (
           <div className="rounded-xl bg-brand-light p-4 text-brand-dark">
-            Welcome! Choose a password so you can sign in with your email and password next time.
+            Welcome! Choose a password so you can sign in with your username and password next time.
           </div>
         )}
         {reset && (
@@ -31,11 +32,15 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         )}
         <section className="card space-y-4">
           <h1 className="text-xl font-semibold">Your account</h1>
-          <p className="text-sm text-stone-600">{user.email} · {ROLE_LABEL[user.platform_role]}</p>
-          <form action={updateName} className="flex gap-2">
-            <input className="input" name="display_name" defaultValue={user.display_name} aria-label="Display name" maxLength={80} />
-            <button className="btn-secondary">Save</button>
+          <p className="text-sm text-stone-600">{ROLE_LABEL[user.platform_role]}</p>
+          <form action={updateName} className="space-y-1">
+            <label className="label" htmlFor="display_name">Your name</label>
+            <div className="flex gap-2">
+              <input className="input" id="display_name" name="display_name" defaultValue={user.display_name} maxLength={80} />
+              <button className="btn-secondary">Save</button>
+            </div>
           </form>
+          <UsernameForm username={user.username} />
         </section>
 
         {canUsePassword(user.platform_role) && (

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Idempotent first-run setup: makes sure the family and the admin exist.
 //
-//   BOOTSTRAP_ADMIN_EMAIL     required to do anything
+//   BOOTSTRAP_ADMIN_EMAIL     required to do anything (the username is made from it: eric@… → eric)
 //   BOOTSTRAP_ADMIN_NAME      default "Admin"
 //   BOOTSTRAP_ADMIN_PASSWORD  optional; set only if the admin has no password yet
 //   FAMILY_NAME               default "Our Family"

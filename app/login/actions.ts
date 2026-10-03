@@ -3,7 +3,7 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { sql } from '@/lib/db';
-import { canUsePassword, normalizeEmail, safeNext, type PlatformRole } from '@/lib/access';
+import { canUsePassword, normalizeEmail, normalizeUsername, safeNext, type PlatformRole } from '@/lib/access';
 import { verifyPassword } from '@/lib/auth/password';
 import { createSession } from '@/lib/auth/session';
 import { issueLink } from '@/lib/auth/links';
@@ -17,31 +17,39 @@ export interface FormState {
   message?: string;
   /** Echoed back so the field survives React's post-action form reset. */
   email?: string;
+  username?: string;
 }
 
 async function clientIp() {
   return (await headers()).get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
 }
 
+/** Username and password. Accounts made before usernames can also use their email. */
 export async function loginWithPassword(_prev: FormState, form: FormData): Promise<FormState> {
-  const typed = String(form.get('email') ?? '');
-  const email = normalizeEmail(typed);
+  const typed = String(form.get('username') ?? '').trim().slice(0, 254);
   const password = String(form.get('password') ?? '');
-  if (!email || !password) return { error: 'Enter your email and password.', email: typed };
+  if (!typed || !password) return { error: 'Enter your username and password.', username: typed };
+  const email = typed.includes('@') ? normalizeEmail(typed) : null;
+  const username = email ? null : normalizeUsername(typed);
+
+  const [user] = email || username
+    ? await sql<{ id: string; password_hash: string | null; platform_role: PlatformRole }[]>`
+        SELECT id, password_hash, platform_role FROM core.users
+         WHERE ${email ? sql`email = ${email}` : sql`username = ${username}`} AND is_active`
+    : [];
+  // Failures count per account (however it was typed) and per network.
+  const key = `pw:${user?.id ?? typed.toLowerCase()}`;
   const ip = await clientIp();
   const WINDOW = 15 * 60_000;
-  if (tooManyFailures(`pw:${email}`, 8, WINDOW) || tooManyFailures(`pw-ip:${ip}`, 30, WINDOW)) {
-    return { error: 'Too many attempts. Wait a few minutes and try again.', email };
+  if (tooManyFailures(key, 8, WINDOW) || tooManyFailures(`pw-ip:${ip}`, 30, WINDOW)) {
+    return { error: 'Too many attempts. Wait a few minutes and try again.', username: typed };
   }
-
-  const [user] = await sql<{ id: string; password_hash: string | null; platform_role: PlatformRole }[]>`
-    SELECT id, password_hash, platform_role FROM core.users WHERE email = ${email} AND is_active`;
   const ok = await verifyPassword(password, user && canUsePassword(user.platform_role) ? user.password_hash : null);
   if (!user || !ok) {
-    recordFailure(`pw:${email}`, WINDOW);
+    recordFailure(key, WINDOW);
     recordFailure(`pw-ip:${ip}`, WINDOW);
-    await audit(user?.id ?? null, 'login.password.failed', email, { client: parseClient(form.get('client')) });
-    return { error: 'That email and password don’t match. You can also ask for a sign-in link.', email };
+    await audit(user?.id ?? null, 'login.password.failed', typed, { client: parseClient(form.get('client')) });
+    return { error: 'That username and password don’t match.', username: typed };
   }
   await createSession(user.id);
   await audit(user.id, 'login.password', undefined, { client: parseClient(form.get('client')) });
