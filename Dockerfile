@@ -21,7 +21,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/postgres ./node_modules/postgres
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/bcryptjs ./node_modules/bcryptjs
 COPY --chown=nextjs:nodejs db ./db
-COPY --chown=nextjs:nodejs scripts/bootstrap-admin.mjs scripts/check-env.mjs ./scripts/
+COPY --chown=nextjs:nodejs scripts/bootstrap-admin.mjs scripts/check-env.mjs scripts/check-db-role.mjs ./scripts/
 COPY --chown=nextjs:nodejs entrypoint.sh ./entrypoint.sh
 USER nextjs
 EXPOSE 3000

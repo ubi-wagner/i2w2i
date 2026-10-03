@@ -1,5 +1,6 @@
 import 'server-only';
 import postgres from 'postgres';
+import { appDatabaseUrl } from '@/db/urls.mjs';
 
 declare global {
   // Reused across hot reloads in dev so we don't leak connections.
@@ -7,7 +8,7 @@ declare global {
 }
 
 function connect() {
-  const url = process.env.DATABASE_URL;
+  const url = appDatabaseUrl();
   if (!url) throw new Error('DATABASE_URL is not set');
   return postgres(url, { max: Number(process.env.DB_POOL_MAX ?? 10), onnotice: () => {} });
 }

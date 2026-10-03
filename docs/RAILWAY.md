@@ -56,6 +56,7 @@ CI (`.github/workflows/ci.yml`) has two jobs:
    | `FAMILY_NAME` | e.g. `Wagner Family` |
    | `EMAIL_FROM` | `i2w2i <hello@i2w2i.com>` |
    | `RESEND_API_KEY` | later; see Email |
+   | Bucket, `APP_DB_PASSWORD`, `APP_SECRET` | see “Before merging the Events release” |
 
    Don't set `PORT`: Railway provides it and the server uses it.
 
@@ -65,7 +66,8 @@ CI (`.github/workflows/ci.yml`) has two jobs:
    ```
    [entrypoint] listening on :: port 8080
    [env] ok
-   [migrate] applied 001_core.sql
+   [migrate] applied 001_core.sql … 004_activity.sql
+   [db-role] server connects as i2w2i_app
    [bootstrap] created admin you@...
    [bootstrap] admin password set ...
    ✓ Ready
@@ -77,6 +79,56 @@ CI (`.github/workflows/ci.yml`) has two jobs:
 
 8. Sign in at https://i2w2i.com with the password, then **delete
    `BOOTSTRAP_ADMIN_PASSWORD`** from the variables.
+
+## Before merging the Events release (one time)
+
+The Events release adds a storage bucket, a restricted database role and an
+app secret. **Set these up before merging**; if you merge first, the new
+deploy refuses to start (with a clear `[env]` message) and the current one
+keeps serving.
+
+1. **Add the bucket:** in the project, **Add → Bucket**. Note its name
+   (e.g. `Bucket`).
+2. **App service → Variables**, add:
+
+   | Variable | Value |
+   |---|---|
+   | `AWS_S3_BUCKET_NAME` | `${{Bucket.BUCKET}}` |
+   | `AWS_ENDPOINT_URL` | `${{Bucket.ENDPOINT}}` |
+   | `AWS_ACCESS_KEY_ID` | `${{Bucket.ACCESS_KEY_ID}}` |
+   | `AWS_SECRET_ACCESS_KEY` | `${{Bucket.SECRET_ACCESS_KEY}}` |
+   | `AWS_DEFAULT_REGION` | `${{Bucket.REGION}}` |
+   | `APP_DB_PASSWORD` | 40 random letters and digits (password manager); no symbols other than `-` `_` |
+   | `APP_SECRET` | another 40+ random letters and digits. **Never change it**: it backs every QR card and code |
+
+   (Replace `Bucket` with your bucket's name if different; typing `${{` in
+   Railway's editor offers the right names.) Keep `DATABASE_URL` as it is.
+3. Merge `claude/main` → `main`. The deploy log should show:
+
+   ```
+   [env] ok
+   [migrate] applied 002_app_role.sql
+   [migrate] applied 003_events.sql
+   [migrate] applied 004_activity.sql
+   [migrate] i2w2i_app can log in
+   [db-role] server connects as i2w2i_app
+   [storage] bucket CORS allows uploads from https://i2w2i.com, https://www.i2w2i.com
+   ```
+
+   If the `[storage]` line is a WARNING instead, phone uploads won't work
+   yet; send Claude the log.
+
+## Downloading an album
+
+Each photo has "Download original" on the manage page. For everything at
+once, use the bucket credentials (Railway → Bucket → Credentials) with
+[rclone](https://rclone.org) or the AWS CLI:
+
+```sh
+aws s3 sync "s3://<BUCKET>/events/<event id>/" ./album --endpoint-url "<ENDPOINT>"
+```
+
+The event id is in the manage page's address.
 
 ## GitHub settings (recommended)
 

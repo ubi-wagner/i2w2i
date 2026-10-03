@@ -24,6 +24,8 @@ jobs:
           --health-cmd "pg_isready -U i2w2i" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgres://i2w2i:ci@localhost:5432/i2w2i
+      # The server's restricted role; enables the row-level-security tests.
+      APP_DB_PASSWORD: ci_app_password_0123456789abcdef
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,11 +34,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
       - name: Migrations apply cleanly and are idempotent
         run: |
           npm run migrate
           npm run migrate:check
+      - name: Unit and row-level-security tests (as the app role)
+        run: npm test
       - name: Bootstrap is idempotent
         env:
           BOOTSTRAP_ADMIN_EMAIL: admin@example.com
@@ -66,7 +69,9 @@ jobs:
         run: docker build -t i2w2i:ci .
       - name: Refuses to boot without APP_URL
         run: |
-          if docker run --rm --network host -e DATABASE_URL=postgres://i2w2i:ci@127.0.0.1:5432/i2w2i i2w2i:ci; then
+          if docker run --rm --network host -e DATABASE_URL=postgres://i2w2i:ci@127.0.0.1:5432/i2w2i \
+               -e APP_DB_PASSWORD=ci_app_password_0123456789abcdef -e APP_SECRET=ci-app-secret-0123456789abcdefghijkl \
+               -e STORAGE_DRIVER=local i2w2i:ci; then
             echo "container started without APP_URL" && exit 1
           fi
       - name: Boot, migrate, bootstrap, serve
@@ -75,6 +80,9 @@ jobs:
             -e PORT=3000 \
             -e DATABASE_URL=postgres://i2w2i:ci@127.0.0.1:5432/i2w2i \
             -e APP_URL=https://i2w2i.example \
+            -e APP_DB_PASSWORD=ci_app_password_0123456789abcdef \
+            -e APP_SECRET=ci-app-secret-0123456789abcdefghijkl \
+            -e STORAGE_DRIVER=local \
             -e BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
             -e BOOTSTRAP_ADMIN_PASSWORD=ci-password-123 \
             i2w2i:ci
@@ -83,9 +91,11 @@ jobs:
             sleep 2
           done
           docker logs app
+          docker logs app 2>&1 | grep -q "server connects as i2w2i_app"
           curl -fsS http://127.0.0.1:3000/api/health
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/login)" = 200
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/admin)" = 307
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/album/no-such-album)" = 404
       - name: Restart is idempotent
         run: |
           docker restart app
@@ -95,3 +105,56 @@ jobs:
             sleep 2
           done
           docker logs --tail 20 app | grep -q "\[migrate\] up to date"
+
+  # Every end-to-end suite in a real browser against the production build:
+  # accounts, the album flow, the access matrix, interrupted uploads,
+  # selection and zips, frames, comments and gift links.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: i2w2i
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: i2w2i
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U i2w2i" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://i2w2i:ci@localhost:5432/i2w2i
+      APP_DB_PASSWORD: ci_app_password_0123456789abcdef
+      APP_SECRET: ci-app-secret-0123456789abcdefghijkl
+      APP_URL: http://localhost:3000
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_DIR: /tmp/i2w2i-storage
+      HOUSEKEEPING: 'off'
+      E2E_ADMIN_EMAIL: eric@example.com
+      E2E_ADMIN_PASSWORD: supersecret123
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run migrate
+      - name: Admin for the tests
+        env:
+          BOOTSTRAP_ADMIN_EMAIL: eric@example.com
+          BOOTSTRAP_ADMIN_NAME: Eric Wagner
+          BOOTSTRAP_ADMIN_PASSWORD: supersecret123
+        run: npm run bootstrap-admin
+      - run: npm run build
+      - name: Start the production server
+        run: |
+          cp -r .next/static .next/standalone/.next/
+          cd .next/standalone && PORT=3000 HOSTNAME=127.0.0.1 nohup node server.js > /tmp/server.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/api/health && break; sleep 1; done
+      - name: End-to-end suites
+        run: npm run e2e
+      - name: Server log
+        if: failure()
+        run: tail -200 /tmp/server.log

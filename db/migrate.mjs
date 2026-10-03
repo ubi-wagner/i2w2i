@@ -7,17 +7,19 @@
 //   node db/migrate.mjs           apply pending migrations
 //   node db/migrate.mjs --check   report pending/drifted, apply nothing (exit 1 if any)
 //
-// Connects with DATABASE_URL_OWNER if set, else DATABASE_URL. Holds a Postgres
-// advisory lock for the whole run, so two containers booting at once (old and
-// new during a deploy) can't apply the same migration twice.
+// Connects as the owner (DATABASE_URL_OWNER, else DATABASE_URL). Holds a
+// Postgres advisory lock for the whole run, so two containers booting at once
+// (old and new during a deploy) can't apply the same migration twice. Then,
+// if APP_DB_PASSWORD is set, gives the app role that password (db/urls.mjs).
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
+import { APP_ROLE, appPasswordProblem, ownerDatabaseUrl } from './urls.mjs';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
-const url = process.env.DATABASE_URL_OWNER || process.env.DATABASE_URL;
+const url = ownerDatabaseUrl();
 const checkOnly = process.argv.includes('--check');
 
 if (!url) {
@@ -67,6 +69,15 @@ async function main() {
     console.log(`[migrate] applied ${m.name}`);
   }
   if (!pending.length) console.log('[migrate] up to date');
+
+  const pw = process.env.APP_DB_PASSWORD;
+  if (pw) {
+    const problem = appPasswordProblem(pw);
+    if (problem) throw new Error(problem);
+    // ALTER ROLE can't take a bind parameter; the password is restricted to [A-Za-z0-9_-].
+    await sql.unsafe(`ALTER ROLE ${APP_ROLE} LOGIN PASSWORD '${pw}'`);
+    console.log(`[migrate] ${APP_ROLE} can log in`);
+  }
 }
 
 main()

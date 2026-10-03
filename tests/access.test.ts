@@ -28,10 +28,10 @@ describe('visibleApps', () => {
 });
 
 describe('canUsePassword', () => {
-  it('allows admin and creator, not member', () => {
+  it('allows every account to use a password', () => {
     expect(canUsePassword('admin')).toBe(true);
     expect(canUsePassword('creator')).toBe(true);
-    expect(canUsePassword('member')).toBe(false);
+    expect(canUsePassword('member')).toBe(true);
   });
 });
 

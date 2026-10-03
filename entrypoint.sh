@@ -13,5 +13,6 @@ echo "[entrypoint] listening on ${HOSTNAME} port ${PORT:-3000}"
 
 node scripts/check-env.mjs
 node db/migrate.mjs
+node scripts/check-db-role.mjs
 node scripts/bootstrap-admin.mjs
 exec node server.js

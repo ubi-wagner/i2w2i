@@ -4,6 +4,17 @@ A private home for family apps at **i2w2i.com**. One sign-in, one dashboard,
 and each app (Events first, Couples later) in its own part of the site and its
 own Postgres schema.
 
+**Events** (first app): albums for family occasions.
+
+- **Guests:** join by QR card or typed code, with no account or install, and upload photos and videos from any phone. Uploads resume after app switches, reloads and dropped connections.
+- **Accounts:** family members sign in with email and password; invitees chat in the event's group chat.
+- **Hosts:**
+  - publish to invitees, the whole family, or the public;
+  - curate in bulk;
+  - download selections as zips;
+  - see who uploaded what, from which device.
+- **Extras:** comments, frames and filters (originals untouched), and gift/Venmo links with QR codes.
+
 - How it fits together and who can do what: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Deploying on Railway: [docs/RAILWAY.md](docs/RAILWAY.md)
 - Conventions for working in this repo: [CLAUDE.md](CLAUDE.md)
@@ -27,6 +38,7 @@ and the admin page shows invite links so you can send them yourself.
 
 ```sh
 npm run typecheck
-npm test
+npm test            # unit + row-level security (needs DATABASE_URL and APP_DB_PASSWORD)
 npm run build
+npm run e2e         # browser suites against a running build; see e2e/run.mjs
 ```

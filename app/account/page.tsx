@@ -18,7 +18,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       <main className="mx-auto max-w-xl space-y-6 px-4 py-8">
         {welcome && (
           <div className="rounded-xl bg-brand-light p-4 text-brand-dark">
-            Welcome! Set a password so you can sign in without waiting for an email. You can skip this and keep using links.
+            Welcome! Choose a password so you can sign in with your email and password next time. (You can also always ask for an emailed sign-in link.)
           </div>
         )}
         <section className="card space-y-4">

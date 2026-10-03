@@ -1,18 +1,23 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
+import { collectClientInfo } from '@/lib/client-info';
 import { loginWithPassword, requestLoginLink, type FormState } from './actions';
 
 export function LoginForm({ next }: { next: string }) {
-  const [mode, setMode] = useState<'link' | 'password'>('link');
+  const [mode, setMode] = useState<'link' | 'password'>('password');
   const [pwState, pwAction, pwPending] = useActionState<FormState, FormData>(loginWithPassword, {});
   const [linkState, linkAction, linkPending] = useActionState<FormState, FormData>(requestLoginLink, {});
   const state = mode === 'password' ? pwState : linkState;
+  const [client, setClient] = useState('');
+  useEffect(() => {
+    collectClientInfo().then((c) => setClient(JSON.stringify(c))).catch(() => {});
+  }, []);
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 rounded-lg bg-stone-100 p-1 text-sm">
-        {(['link', 'password'] as const).map((m) => (
+        {(['password', 'link'] as const).map((m) => (
           <button
             key={m}
             type="button"
@@ -26,6 +31,7 @@ export function LoginForm({ next }: { next: string }) {
 
       <form action={mode === 'password' ? pwAction : linkAction} className="space-y-4">
         <input type="hidden" name="next" value={next} />
+        <input type="hidden" name="client" value={client} />
         <div>
           <label className="label" htmlFor="email">Email</label>
           <input className="input" id="email" name="email" type="email" autoComplete="email" required defaultValue={state.email} />
@@ -42,7 +48,7 @@ export function LoginForm({ next }: { next: string }) {
           {mode === 'password' ? 'Sign in' : 'Send sign-in link'}
         </button>
       </form>
-      {mode === 'link' && <p className="text-center text-xs text-stone-500">We’ll email you a link that signs you in. No password needed.</p>}
+      {mode === 'link' && <p className="text-center text-xs text-stone-500">Forgot your password? We’ll email you a link that signs you in.</p>}
     </div>
   );
 }

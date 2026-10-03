@@ -21,6 +21,20 @@ if (!appUrl) {
   }
 }
 
+if (prod && !process.env.APP_DB_PASSWORD && !process.env.APP_DATABASE_URL) {
+  problems.push('APP_DB_PASSWORD is not set; the server would connect as the database owner and skip row-level security');
+}
+const appPw = process.env.APP_DB_PASSWORD;
+if (appPw && !/^[A-Za-z0-9_-]{24,128}$/.test(appPw)) problems.push('APP_DB_PASSWORD must be 24-128 letters, digits, - or _');
+
+const secret = process.env.APP_SECRET;
+if (prod && (!secret || secret.length < 32)) problems.push('APP_SECRET must be set to 32+ random characters (protects event codes)');
+
+const bucket = process.env.AWS_S3_BUCKET_NAME || process.env.AWS_S3_BUCKET || process.env.BUCKET;
+if (prod && !bucket && process.env.STORAGE_DRIVER !== 'local') {
+  problems.push('No storage bucket: connect the Railway bucket (AWS_S3_BUCKET_NAME, AWS_ENDPOINT_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)');
+}
+
 if (process.env.BOOTSTRAP_ADMIN_PASSWORD && process.env.BOOTSTRAP_ADMIN_PASSWORD.length < 10) {
   problems.push('BOOTSTRAP_ADMIN_PASSWORD must be at least 10 characters');
 }
