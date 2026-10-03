@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Header } from '@/components/Header';
+import { InstallCard } from '@/components/pwa/InstallCard';
 import { EventCards } from '@/components/events/EventCards';
 import { requireUser } from '@/lib/auth/session';
 import { appsForUser } from '@/lib/apps';
@@ -19,6 +20,7 @@ export default async function Dashboard() {
       <Header user={user} />
       <main className="mx-auto max-w-5xl space-y-8 px-4 py-8">
         <h1 className="text-2xl font-semibold">Hi {user.display_name.split(' ')[0]}</h1>
+        <InstallCard />
         {!apps.length && <div className="card text-stone-600">Nothing has been shared with you yet. Ask the person who invited you, or Eric.</div>}
         {hasEvents && (
           <section className="space-y-3">

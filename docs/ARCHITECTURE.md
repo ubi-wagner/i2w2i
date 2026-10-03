@@ -175,6 +175,16 @@ Hosts write their event's page in one editor with a live preview (manage page, "
   - filters are defined once as colour operations and rendered as both CSS and pixel math, since older Safari has no canvas filters;
   - the uploader can decorate for a day, until a manager hides the item.
 
+## The installable app and notifications
+
+i2w2i is a web app people can put on their home screen (Share → Add to Home Screen on iPhone; an install prompt on Android). It then opens full screen at `/`: the person's own landing page with the events they're on ("You're a guest/co-host"), albums published to the whole family, and a tile for each other app they've been given. Guests at a table never need to install anything.
+
+- `app/manifest.ts`, icons in `public/icons/`, and `public/sw.js`, which only shows notifications and opens the right page when one is tapped. It doesn't cache or intercept requests. `public/` must ship with the standalone server (the Dockerfile copies it).
+- **Notifications (web push):** people turn them on per phone (Manage page for hosts, Account page for everyone). On iPhone that only works from the home-screen app, and the page says so. Subscriptions are in `core.push_subscriptions`.
+- **What's sent:** when someone who isn't a host uploads, the event's hosts and helpers get "N new photos are waiting for your OK", batched per event (one alert per ~90 seconds at most; `PUSH_REVIEW_DELAY_MS`). Tapping it opens the review queue. `events.review_summary()` gives the notifier names and counts without a signed-in context.
+- **Keys:** the server makes its VAPID keys on first use and keeps them in `core.settings`; `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` override. Nothing to configure.
+- **Safety:** the server only sends to the browsers' push services (Apple, Google, Mozilla, Microsoft; `isPushEndpoint`), so a subscription can't make it call other addresses. Dead subscriptions (404/410) are removed. Tests use a local HTTPS stand-in (`PUSH_ALLOW_ANY_ENDPOINT=1`, never in production).
+
 ## Who did what, from where
 
 For accountability (bogus names, inappropriate uploads), every interaction is

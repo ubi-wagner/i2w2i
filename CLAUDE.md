@@ -34,6 +34,10 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
 - **Forms with `useActionState`**: React resets the form after the action, so
   return typed values in the state and use them as `defaultValue`.
 - **Never log sign-in links in production** (`lib/email.ts` handles this).
+- **Installable app:** `public/` (icons, `sw.js`) ships with the standalone
+  server; keep the Dockerfile and CI copying it. The service worker must not
+  cache or intercept requests (uploads, sign-in). Push only ever goes to the
+  browsers' push services (`isPushEndpoint` in `lib/push-rules.ts`).
 - **There is no email.** Invites and resets are one-time links shown to the
   inviter (copy or QR). Who may issue one is `canIssueLink`: admin for
   anyone, hosts only for accounts they created. Don't widen it.

@@ -130,6 +130,9 @@ jobs:
       STORAGE_DRIVER: local
       LOCAL_STORAGE_DIR: /tmp/i2w2i-storage
       HOUSEKEEPING: 'off'
+      # Notifications go to the suite's stand-in push service, quickly.
+      PUSH_ALLOW_ANY_ENDPOINT: '1'
+      PUSH_REVIEW_DELAY_MS: '1500'
       E2E_ADMIN_EMAIL: eric@example.com
       E2E_ADMIN_PASSWORD: supersecret123
     steps:
@@ -150,7 +153,7 @@ jobs:
       - run: npm run build
       - name: Start the production server
         run: |
-          cp -r .next/static .next/standalone/.next/
+          cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
           cd .next/standalone && PORT=3000 HOSTNAME=127.0.0.1 nohup node server.js > /tmp/server.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/api/health && break; sleep 1; done
       - name: End-to-end suites

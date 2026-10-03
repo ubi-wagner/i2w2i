@@ -20,6 +20,7 @@ import { describeAction, eventActivity, namesByDevice, shortDevice, uploadDetail
 import { CodeForm } from './CodeForm';
 import { SettingsForm } from './SettingsForm';
 import { PageEditor } from './PageEditor';
+import { NotifyToggle } from '@/components/pwa/NotifyToggle';
 import { cleanPage } from '@/lib/events/page';
 
 export const metadata = { title: 'Manage event' };
@@ -123,6 +124,10 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
             <span className="shrink-0 font-medium underline">Review</span>
           </a>
         )}
+
+        <section aria-label="Notifications" className="rounded-2xl border border-stone-200 bg-white px-5 py-4">
+          <NotifyToggle purpose="Get a notification on this phone when guests’ photos are waiting for your OK." />
+        </section>
 
         {owner && steps.some((st) => !st.done) && (
           <section className="card space-y-2 border-brand/40 bg-brand-light/40">

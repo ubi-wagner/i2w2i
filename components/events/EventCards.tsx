@@ -14,6 +14,7 @@ interface Row {
 }
 
 const AUDIENCE = { invitees: 'Guests', family: 'Family', public: 'Public' } as const;
+const YOU = { owner: 'You’re a co-host', curator: 'You’re a helper', invitee: 'You’re a guest' } as const;
 
 /**
  * The events someone is on, newest first; the whole card opens the album.
@@ -52,6 +53,9 @@ export async function EventCards({ ctx, empty, limit, shared = false, heading }:
             </div>
             <p className="text-sm text-stone-600">
               {e.starts_on ? e.starts_on.toLocaleDateString(undefined, { timeZone: 'UTC', dateStyle: 'medium' }) : 'No date'} · {e.uploads} photos &amp; videos
+            </p>
+            <p className="text-sm text-stone-500">
+              {shared ? 'Shared with the family' : e.role ? YOU[e.role as keyof typeof YOU] : 'You’re the admin'}
             </p>
             {manages && (
               <div className="flex flex-wrap items-center gap-3">

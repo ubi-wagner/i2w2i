@@ -11,6 +11,10 @@ const PUBLIC = [
   /^\/album\//,
   // Dev/CI stand-in for the bucket; authorized by the signature in the URL.
   /^\/api\/storage\/local$/,
+  // The installable app: manifest, service worker and icons must load signed out.
+  /^\/manifest\.webmanifest$/,
+  /^\/sw\.js$/,
+  /^\/icons\//,
 ];
 
 const DEVICE_COOKIE = 'i2w2i_device';

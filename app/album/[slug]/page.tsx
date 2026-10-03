@@ -5,6 +5,7 @@ import { Chat } from '@/components/events/Chat';
 import { Gallery } from '@/components/events/Gallery';
 import { GiftLinks, type LinkRow } from '@/components/events/GiftLinks';
 import { ActionBar, type EventAction } from '@/components/events/ActionBar';
+import { InstallCard } from '@/components/pwa/InstallCard';
 import { DirectionsPanel, InfoPanel, SchedulePanel } from '@/components/events/EventPanels';
 import { EventHero, ThemeFrame } from '@/components/events/ThemeFrame';
 import { cleanPage } from '@/lib/events/page';
@@ -133,6 +134,12 @@ export default async function AlbumPage({ params, searchParams }: Params) {
           <p className={`mx-auto max-w-2xl whitespace-pre-wrap text-center text-stone-700 ${theme === 'classic' ? '' : 'font-display text-xl italic'}`}>{album.description}</p>
         )}
         <ActionBar actions={actions} />
+
+        {album.user && (
+          <div className="mx-auto max-w-xl">
+            <InstallCard />
+          </div>
+        )}
 
         {album.canUpload && album.uploaderName && (
           <section className="mx-auto max-w-xl">

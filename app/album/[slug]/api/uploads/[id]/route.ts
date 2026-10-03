@@ -7,6 +7,7 @@ import { completeParts, missingParts } from '@/lib/events/parts';
 import { cleanOverlay, isPlain } from '@/lib/events/overlay';
 import { completeMultipart, deleteObject, listParts, objectSize, partUploadUrls, uploadUrl } from '@/lib/storage';
 import { writableUntil } from '@/lib/events/review';
+import { queueReviewNotice } from '@/lib/push';
 
 export const dynamic = 'force-dynamic';
 
@@ -137,5 +138,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       photo: u.kind === 'photo' ? await readPhotoMeta(u.original_key) : null,
     },
   });
+  // Hosts' and helpers' own uploads need no review; anyone else's waits for them.
+  if (!album.canManage) queueReviewNotice(album.event.id);
   return json({ ok: true, complete: true });
 }
