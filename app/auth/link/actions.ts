@@ -14,6 +14,6 @@ export async function continueWithLink(form: FormData): Promise<void> {
   await audit(userId, 'login.link');
   const [u] = await sql<{ platform_role: PlatformRole; has_password: boolean }[]>`
     SELECT platform_role, password_hash IS NOT NULL AS has_password FROM core.users WHERE id = ${userId}`;
-  // Creators get nudged to set a password the first time in.
+  // Anyone without a password is nudged to set one the first time in.
   redirect(u && canUsePassword(u.platform_role) && !u.has_password ? '/account?welcome=1' : '/');
 }

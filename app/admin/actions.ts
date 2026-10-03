@@ -74,11 +74,7 @@ export async function setPlatformRole(form: FormData): Promise<void> {
   const userId = String(form.get('user_id'));
   const role = String(form.get('platform_role')) as PlatformRole;
   if (userId === admin.id || !PLATFORM_ROLES.includes(role)) return;
-  // Members sign in by link only, so a demotion drops any password.
-  await sql`UPDATE core.users
-               SET platform_role = ${role},
-                   password_hash = CASE WHEN ${role} = 'member' THEN NULL ELSE password_hash END
-             WHERE id = ${userId}`;
+  await sql`UPDATE core.users SET platform_role = ${role} WHERE id = ${userId}`;
   await audit(admin.id, 'people.role', userId, { role });
   revalidatePath('/admin');
 }

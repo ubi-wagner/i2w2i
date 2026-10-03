@@ -30,3 +30,26 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
 - **Forms with `useActionState`**: React resets the form after the action, so
   return typed values in the state and use them as `defaultValue`.
 - **Never log sign-in links in production** (`lib/email.ts` handles this).
+
+## Events app rules
+- **Every `events.*` query runs in `withCtx(ctx, …)`** (`lib/events/db.ts`).
+  Row-level security (migration 003) is the real permission check; page code
+  only decides what to show. The server's DB role (`i2w2i_app`) can't bypass
+  RLS. Don't add a bypass connection for convenience.
+- **Resolver boundary (don't reverse this):** access codes and guests may read
+  `events.events`; events, uploads and messages must never read
+  `events.access_codes`. Codes and guest sessions resolve only through the
+  SECURITY DEFINER functions (`resolve_code`, `resolve_qr`, `create_guest`,
+  `resolve_guest`). One authoritative access path: no share links beside it.
+- **Credentials:** typed codes are HMAC'd (lookup) and AES-GCM-encrypted
+  (display) with `APP_SECRET`; QR tokens are derived from it. Changing
+  `APP_SECRET` kills every printed card.
+- **Uploads go phone → bucket via presigned PUT**, never through the server.
+  Originals are never modified; galleries use the phone-made preview
+  (metadata stripped). Only managers and the uploader get originals.
+- **Record interactions with `logActivity()`** (`lib/events/activity.ts`) for
+  anything a guest or member does on an event, and `audit()` for account
+  actions. Both capture IP, device id, user agent and headers; pass the
+  browser's `collectClientInfo()` where there is a form or fetch.
+- **Guests are told** on the join form that name, device and network details
+  are recorded. Keep that notice if you change the form.

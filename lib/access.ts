@@ -32,8 +32,9 @@ export function visibleApps(viewer: Viewer, apps: AppRow[], grants: Map<string, 
     .sort((a, b) => a.sort_order - b.sort_order);
 }
 
-export function canUsePassword(role: PlatformRole): boolean {
-  return role === 'admin' || role === 'creator';
+/** Every account can sign in with a password; emailed links are for invites and recovery. */
+export function canUsePassword(_role: PlatformRole): boolean {
+  return true;
 }
 
 /** Admins may create any role; nobody else manages people. */

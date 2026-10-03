@@ -42,17 +42,18 @@ export function InviteForm() {
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="flex gap-2 rounded-lg border border-stone-200 p-3">
             <input type="radio" name="platform_role" value="member" defaultChecked={state.fields?.platform_role !== 'creator'} />
-            <span><b>Family member</b><br /><span className="text-sm text-stone-600">Views and contributes to what’s shared with them. Signs in by email link.</span></span>
+            <span><b>Family member</b><br /><span className="text-sm text-stone-600">Joins events they’re added to: sees albums, adds photos, chats.</span></span>
           </label>
           <label className="flex gap-2 rounded-lg border border-stone-200 p-3">
             <input type="radio" name="platform_role" value="creator" defaultChecked={state.fields?.platform_role === 'creator'} />
-            <span><b>Creator</b><br /><span className="text-sm text-stone-600">Also creates and runs their own events. Can set a password.</span></span>
+            <span><b>Creator</b><br /><span className="text-sm text-stone-600">Also creates and runs their own events.</span></span>
           </label>
         </div>
       </fieldset>
       {state.error && <p className="text-sm text-red-600" role="alert">{state.error}</p>}
       <LinkResult state={state} />
       <button className="btn" disabled={pending}>Invite</button>
+      <p className="text-xs text-stone-500">They get a one-time link, then choose a password for next time.</p>
     </form>
   );
 }

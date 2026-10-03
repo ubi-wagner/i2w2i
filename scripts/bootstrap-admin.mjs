@@ -10,13 +10,14 @@
 import { createHash, randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import postgres from 'postgres';
+import { ownerDatabaseUrl } from '../db/urls.mjs';
 
 const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
 if (!email) {
   console.log('[bootstrap] BOOTSTRAP_ADMIN_EMAIL not set; skipping');
   process.exit(0);
 }
-const url = process.env.DATABASE_URL_OWNER || process.env.DATABASE_URL;
+const url = ownerDatabaseUrl();
 const sql = postgres(url, { max: 1, onnotice: () => {} });
 
 try {

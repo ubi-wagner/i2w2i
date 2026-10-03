@@ -1,0 +1,144 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { notFound, redirect } from 'next/navigation';
+import { Chat } from '@/components/events/Chat';
+import { Gallery } from '@/components/events/Gallery';
+import { Uploader } from '@/components/events/Uploader';
+import { logActivity } from '@/lib/events/activity';
+import { loadAlbum } from '@/lib/events/album';
+import { rateLimit } from '@/lib/rate-limit';
+import { requestMeta } from '@/lib/request-meta';
+import { withCtx } from '@/lib/events/db';
+import { toGallery, type UploadRow } from '@/lib/events/queries';
+import { publicEvent } from '@/lib/events/session';
+import { leaveAlbum } from './actions';
+import { JoinForm } from './JoinForm';
+
+type Params = { params: Promise<{ slug: string }>; searchParams: Promise<{ t?: string }> };
+
+export async function generateMetadata({ params }: Params): Promise<Metadata> {
+  const { slug } = await params;
+  const e = /^[a-z0-9-]+$/.test(slug) ? await publicEvent(slug) : null;
+  return { title: e?.title ?? 'Album' };
+}
+
+function formatDate(d: Date | null) {
+  return d ? d.toLocaleDateString(undefined, { timeZone: 'UTC', dateStyle: 'long' }) : null;
+}
+
+export default async function AlbumPage({ params, searchParams }: Params) {
+  const { slug } = await params;
+  const { t } = await searchParams;
+  const album = await loadAlbum(slug);
+  if (!album) notFound();
+  const { event } = album;
+
+  // Record visits (including QR scans) by anyone who isn't running the event.
+  if (!album.canManage) {
+    const { deviceId, ip } = await requestMeta();
+    if (rateLimit(`view:${event.id}:${deviceId ?? ip}:${t ? 'qr' : ''}`, 1, 60 * 60_000)) {
+      await logActivity({
+        eventId: event.id,
+        action: t ? 'album.qr_scan' : 'album.view',
+        userId: album.user?.id ?? null,
+        guestId: album.guest?.id ?? null,
+        actorName: album.guest?.display_name ?? album.user?.display_name ?? null,
+      });
+    }
+  }
+
+  // Signed-in people on the event don't need the QR's guest flow.
+  if (t && album.isMember) redirect(`/album/${slug}`);
+  const token = t && /^[A-Za-z0-9_-]{20,100}$/.test(t) ? t : undefined;
+
+  const header = (
+    <header className="space-y-1 text-center">
+      <p className="text-sm uppercase tracking-widest text-brand">{formatDate(event.starts_on) ?? 'Album'}</p>
+      <h1 className="font-serif text-3xl sm:text-4xl">{event.title}</h1>
+      {event.location && <p className="text-stone-600">{event.location}</p>}
+    </header>
+  );
+
+  // Arrived by QR, or has nothing yet: join with a name (and a code).
+  if (token || (!album.canUpload && !album.canView)) {
+    return (
+      <main className="mx-auto max-w-md space-y-6 px-4 py-10">
+        {header}
+        <div className="card space-y-4">
+          <p className="text-center text-stone-700">
+            {token ? 'Welcome! Add your name to share your photos and videos.' : 'Enter the code from your invitation or table card.'}
+          </p>
+          <JoinForm slug={slug} token={token} />
+        </div>
+        {!album.user && (
+          <p className="text-center text-sm text-stone-500">
+            Family member? <Link href={`/login?next=/album/${slug}`} className="text-brand underline">Sign in</Link>
+          </p>
+        )}
+      </main>
+    );
+  }
+
+  const rows = await withCtx(album.ctx, (tx) => tx<UploadRow[]>`
+    SELECT * FROM events.uploads WHERE event_id = ${event.id} AND status = 'ready'
+     ORDER BY featured DESC, created_at DESC LIMIT 1000`);
+  // Hidden items only reach managers; keep them out of the public grid here too.
+  const visible = rows.filter((r) => !r.hidden);
+  const items = await toGallery(visible, album.ctx, { originals: album.canManage });
+
+  return (
+    <main className="mx-auto max-w-5xl space-y-8 px-4 py-8">
+      <nav className="flex items-center justify-between text-sm">
+        <Link href={album.user ? '/' : `/album/${slug}`} className="font-bold text-brand">i2w2i</Link>
+        <div className="flex items-center gap-3 text-stone-600">
+          {album.canManage && <Link href={`/events/${event.id}`} className="hover:underline">Manage</Link>}
+          {album.guest && !album.isMember && (
+            <form action={leaveAlbum}>
+              <input type="hidden" name="slug" value={slug} />
+              <button className="hover:underline">Not {album.guest.display_name}?</button>
+            </form>
+          )}
+        </div>
+      </nav>
+
+      {header}
+      {event.status === 'draft' && (
+        <p className="rounded-xl bg-stone-100 p-3 text-center text-sm text-stone-600">
+          This album isn’t published yet{album.canManage ? '' : ', but you can already add to it'}.
+        </p>
+      )}
+      {album.description && <p className="mx-auto max-w-2xl whitespace-pre-wrap text-center text-stone-700">{album.description}</p>}
+
+      {album.canUpload && album.uploaderName && (
+        <section className="mx-auto max-w-xl">
+          <Uploader slug={slug} name={album.uploaderName} />
+        </section>
+      )}
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">{album.canView ? 'Album' : 'Your uploads'}</h2>
+        <Gallery
+          items={items}
+          empty={album.canView ? 'No photos yet. Be the first!' : 'Nothing from you yet. Your photos and videos will show here.'}
+        />
+        {!album.canView && <p className="text-sm text-stone-500">The hosts will share the full album later.</p>}
+      </section>
+
+      {album.chat && (
+        <section className="mx-auto max-w-2xl space-y-3">
+          <h2 className="text-lg font-semibold">Group chat</h2>
+          <Chat slug={slug} />
+        </section>
+      )}
+
+      {!album.canUpload && !album.user && (
+        <section className="mx-auto max-w-md">
+          <details className="card">
+            <summary className="cursor-pointer font-medium">Have a code? Add your photos</summary>
+            <div className="mt-4"><JoinForm slug={slug} /></div>
+          </details>
+        </section>
+      )}
+    </main>
+  );
+}
