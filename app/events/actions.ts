@@ -95,6 +95,7 @@ export async function addMember(form: FormData): Promise<void> {
   const userId = str(form, 'user_id');
   const role = ['owner', 'curator', 'invitee'].includes(str(form, 'role')) ? str(form, 'role') : 'invitee';
   if (!userId) return;
+  if (userId === user.id && role !== 'owner') return; // don't demote yourself out of managing
   await withCtx(c, (tx) => tx`
     INSERT INTO events.members (event_id, user_id, role, added_by) VALUES (${id}, ${userId}, ${role}, ${user.id})
     ON CONFLICT (event_id, user_id) DO UPDATE SET role = EXCLUDED.role`);
@@ -280,7 +281,8 @@ export async function inviteToEvent(_prev: LinkState, form: FormData): Promise<L
   const id = str(form, 'event_id');
   const name = str(form, 'display_name', 80);
   const typed = str(form, 'email', 254);
-  const role = str(form, 'role') === 'curator' ? 'curator' : 'invitee';
+  const asked = str(form, 'role');
+  const role = asked === 'owner' || asked === 'curator' ? asked : 'invitee';
   const fields = { display_name: name, email: typed, role };
   const email = normalizeEmail(typed);
   if (!email) return { error: 'Enter a valid email address (it’s their username).', fields };

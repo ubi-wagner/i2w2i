@@ -12,7 +12,7 @@ const ev = await createEvent(holly, `Hosted ${RUN}`, `hosted-${RUN}`);
 
 // Holly invites a brand-new person straight onto her event
 await holly.goto(ev.manage);
-const form = holly.locator('form', { has: holly.getByText('Invite someone', { exact: true }) });
+const form = holly.locator('form', { has: holly.getByText('Invite someone by name and email', { exact: true }) });
 await form.getByLabel('Name').fill(`Nina New ${RUN}`);
 await form.getByLabel('Email').fill(`nina-${RUN}@example.com`);
 await form.getByRole('button', { name: 'Invite' }).click();
@@ -91,4 +91,26 @@ check(await holly.getByText('See the photos').isVisible() && (await holly.locato
 // A member can't invite people onto the event
 await fred.goto(ev.manage);
 check(!fred.url().endsWith(ev.id), 'members can’t open the manage page to invite');
+
+// Holly makes Sasha a co-host: Sasha then runs the event just like Holly
+await holly.goto(ev.manage);
+await form.getByLabel('Name').fill(`Sasha Cohost ${RUN}`);
+await form.getByLabel('Email').fill(`sasha-${RUN}@example.com`);
+await form.getByLabel('Their role').selectOption('owner');
+await form.getByRole('button', { name: 'Invite' }).click();
+const sasha = await acceptInvite(await form.getByLabel('One-time link').inputValue(), 'sasha-password-1');
+check(await sasha.getByRole('link', { name: 'Continue →' }).isVisible(), 'the co-host gets a Continue button after choosing a password');
+await sasha.getByRole('link', { name: 'Continue →' }).click();
+await sasha.waitForURL(`${BASE}/album/${ev.slug}`);
+check(true, '…which takes them straight to the album (their only event)');
+await sasha.getByRole('link', { name: 'Manage' }).click();
+await sasha.waitForURL(ev.manage);
+check(await sasha.getByText('Invite someone by name and email').isVisible(), 'a co-host can open the manage page and invite people');
+// …and change someone's role: Fred becomes a helper
+const fredOnSasha = sasha.locator('li', { hasText: `fred-${RUN}@example.com` });
+await fredOnSasha.getByLabel(/role$/).selectOption('curator');
+await fredOnSasha.getByRole('button', { name: 'Save' }).click();
+await sasha.waitForLoadState('networkidle');
+const [fredRole] = await db`SELECT m.role FROM events.members m JOIN core.users u ON u.id = m.user_id WHERE m.event_id = ${ev.id} AND u.email = ${`fred-${RUN}@example.com`}`;
+check(fredRole?.role === 'curator', 'a co-host can change someone’s role on the event');
 await finish();

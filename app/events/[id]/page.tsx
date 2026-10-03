@@ -33,7 +33,7 @@ interface Code {
   code_revoked_at: Date | null; qr_revoked_at: Date | null; guests: number;
 }
 
-const ROLE = { owner: 'Owner', curator: 'Curator', invitee: 'Invitee' } as const;
+const ROLE = { owner: 'Co-host', curator: 'Helper', invitee: 'Guest' } as const;
 
 export default async function ManageEvent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -143,13 +143,24 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
 
         <section id="people" className="scroll-mt-14 card space-y-4">
           <h2 className="text-lg font-semibold">People on this event</h2>
-          <p className="text-sm text-stone-600">Invitees see the album, add photos and join the group chat. Curators also moderate. Owners also manage people and codes.</p>
+          <p className="text-sm text-stone-600"><b>Guests</b> see the album, add photos and join the group chat. <b>Helpers</b> can also hide photos. <b>Co-hosts</b> run everything on this page, like you.</p>
           <ul className="divide-y divide-stone-100">
             {members.map((m) => (
               <li key={m.user_id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span>{m.display_name}{m.user_id === user.id && <span className="text-stone-500"> (you)</span>} <span className="text-sm text-stone-500">{m.email}</span></span>
                 <span className="flex items-center gap-3 text-sm">
-                  <span className="rounded-full bg-stone-100 px-2 py-0.5">{ROLE[m.role as keyof typeof ROLE]}</span>
+                  {owner && m.user_id !== user.id ? (
+                    <form action={addMember} className="flex items-center gap-1">
+                      <input type="hidden" hidden name="event_id" value={id} />
+                      <input type="hidden" hidden name="user_id" value={m.user_id} />
+                      <select name="role" defaultValue={m.role} aria-label={`${m.display_name}’s role`} className="rounded-full border border-stone-200 bg-stone-100 px-2 py-0.5">
+                        {Object.entries(ROLE).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                      <button className="text-brand hover:underline">Save</button>
+                    </form>
+                  ) : (
+                    <span className="rounded-full bg-stone-100 px-2 py-0.5">{ROLE[m.role as keyof typeof ROLE]}</span>
+                  )}
                   {owner && m.user_id !== user.id && (
                     <form action={removeMember}>
                       <input type="hidden" hidden name="event_id" value={id} />
@@ -175,9 +186,9 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                 </select>
               </div>
               <select name="role" className="input w-auto" defaultValue="invitee" aria-label="Role">
-                <option value="invitee">Invitee</option>
-                <option value="curator">Curator</option>
-                <option value="owner">Owner</option>
+                <option value="invitee">Guest</option>
+                <option value="curator">Helper</option>
+                <option value="owner">Co-host</option>
               </select>
               <button className="btn">Add</button>
             </form>

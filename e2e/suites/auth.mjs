@@ -58,6 +58,8 @@ await again.goto(BASE + '/');
 check(again.url().includes('/login'), 'changing the password signs out other devices');
 await mae.goto(BASE + '/');
 check(mae.url() === BASE + '/', '…but not the device that changed it');
+const kept = (await mae.context().cookies()).find((c) => c.name === 'i2w2i_session');
+check(kept && kept.expires > Date.now() / 1000 + 80 * 86_400, 'using the app keeps you signed in (session renewed for ~90 days)');
 
 // Admin: role change and deactivation
 await admin.goto(BASE + '/admin');

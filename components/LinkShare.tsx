@@ -12,6 +12,13 @@ export function LinkShare({ link, name, note }: { link: string; name?: string; n
   const [svg, setSvg] = useState('');
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [canShare, setCanShare] = useState(false);
+  useEffect(() => setCanShare(typeof navigator !== 'undefined' && typeof navigator.share === 'function'), []);
+  const first = name?.split(' ')[0];
+  const send = () =>
+    navigator
+      .share({ text: `${first ? `Hi ${first}! ` : ''}Here’s your link for our family photo albums. Tap it once and choose a password:`, url: link })
+      .catch(() => {}); // they closed the share sheet
   useEffect(() => {
     QRCode.toString(link, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' }).then(setSvg).catch(() => setSvg(''));
   }, [link]);
@@ -19,6 +26,9 @@ export function LinkShare({ link, name, note }: { link: string; name?: string; n
   return (
     <div className="space-y-2 rounded-lg bg-stone-100 p-3 text-sm" role="status">
       <p>{note ?? `Send ${name ?? 'them'} this link, or let them scan the QR from your screen. It works once, for 7 days.`}</p>
+      {canShare && (
+        <button type="button" className="btn w-full" onClick={send}>Text it to {first ?? 'them'}…</button>
+      )}
       <div className="flex gap-2">
         <input readOnly value={link} className="input bg-white font-mono text-xs" onFocus={(e) => e.currentTarget.select()} aria-label="One-time link" />
         <button type="button" className="btn-secondary shrink-0" onClick={() => navigator.clipboard.writeText(link).then(() => setCopied(true))}>
