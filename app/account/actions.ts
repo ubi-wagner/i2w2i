@@ -23,7 +23,8 @@ export async function setPassword(_prev: FormState, form: FormData): Promise<For
   if (problem) return { error: problem };
 
   const [row] = await sql<{ password_hash: string | null }[]>`SELECT password_hash FROM core.users WHERE id = ${user.id}`;
-  if (row?.password_hash && !(await verifyPassword(current, row.password_hash))) {
+  // Just signed in with a handed-out link (forgot password): no old password needed.
+  if (row?.password_hash && !user.fresh_link && !(await verifyPassword(current, row.password_hash))) {
     return { error: 'Your current password isn’t right.' };
   }
   await sql`UPDATE core.users SET password_hash = ${await hashPassword(next)} WHERE id = ${user.id}`;

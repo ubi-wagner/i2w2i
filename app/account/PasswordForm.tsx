@@ -3,11 +3,11 @@
 import { useActionState } from 'react';
 import { setPassword, type FormState } from './actions';
 
-export function PasswordForm({ hasPassword }: { hasPassword: boolean }) {
+export function PasswordForm({ hasPassword, needCurrent }: { hasPassword: boolean; needCurrent: boolean }) {
   const [state, action, pending] = useActionState<FormState, FormData>(setPassword, {});
   return (
     <form action={action} className="space-y-4">
-      {hasPassword && (
+      {needCurrent && (
         <div>
           <label className="label" htmlFor="current">Current password</label>
           <input className="input" id="current" name="current" type="password" autoComplete="current-password" required />

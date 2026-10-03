@@ -12,6 +12,8 @@ import { formatBytes } from '@/lib/events/rules';
 import { userCtx } from '@/lib/events/session';
 import { addMember, changeAccessCode, moderateUpload, moderateUploads, removeGuest, removeLink, removeMember } from '../actions';
 import { LinkForm } from './LinkForm';
+import { HostInviteForm, SignInLinkButton } from './PeopleForms';
+import { canIssueLink, type PlatformRole } from '@/lib/access';
 import type { LinkRow } from '@/components/events/GiftLinks';
 import { describeDevice } from '@/lib/device';
 import { describeAction, eventActivity, namesByDevice, shortDevice, uploadDetails, type ActivityRow } from '@/lib/events/forensics';
@@ -20,7 +22,7 @@ import { SettingsForm } from './SettingsForm';
 
 export const metadata = { title: 'Manage event' };
 
-interface Member { user_id: string; role: string; display_name: string; email: string }
+interface Member { user_id: string; role: string; display_name: string; email: string; platform_role: PlatformRole; created_by: string | null; is_active: boolean }
 interface Person { id: string; display_name: string; email: string }
 interface GuestRow {
   id: string; display_name: string; via: string; created_at: Date; last_seen_at: Date; revoked_at: Date | null;
@@ -46,7 +48,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
 
   const { members, people, codes, uploads, guests, activity, links } = await withCtx(ctx, async (tx) => ({
     members: await tx<Member[]>`
-      SELECT m.user_id, m.role, u.display_name, u.email
+      SELECT m.user_id, m.role, u.display_name, u.email, u.platform_role, u.created_by, u.is_active
         FROM events.members m JOIN core.users u ON u.id = m.user_id
        WHERE m.event_id = ${id} ORDER BY m.role, u.display_name`,
     people: await tx<Person[]>`
@@ -87,9 +89,12 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           <div>
             <Link href="/events" className="text-sm text-stone-500 hover:underline">← Events</Link>
             <h1 className="text-2xl font-semibold">{event.title}</h1>
-            <p className="text-sm text-stone-600">{albumUrl(event.slug)}</p>
           </div>
-          <Link href={`/album/${event.slug}`} className="btn-secondary">Open album</Link>
+          <div className="flex gap-2">
+            <Link href={`/events/${id}/card`} className="btn-secondary">Album card</Link>
+            <Link href={`/album/${event.slug}`} className="btn-secondary">Open album</Link>
+          </div>
+          <div className="w-full"><CopyText text={albumUrl(event.slug)} label="Copy album link" /></div>
         </div>
 
         <section className="card space-y-4">
@@ -120,14 +125,18 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                     </form>
                   )}
                 </span>
+                {owner && canIssueLink(user, { id: m.user_id, platform_role: m.platform_role, created_by: m.created_by, is_active: m.is_active }) && (
+                  <SignInLinkButton userId={m.user_id} />
+                )}
               </li>
             ))}
           </ul>
+          {owner && <HostInviteForm eventId={id} />}
           {owner && (people.length ? (
             <form action={addMember} className="flex flex-wrap items-end gap-2">
               <input type="hidden" name="event_id" value={id} />
               <div className="grow">
-                <label className="label" htmlFor="user_id">Add someone</label>
+                <label className="label" htmlFor="user_id">Or add someone who already has an account</label>
                 <select className="input" id="user_id" name="user_id" required>
                   {people.map((p) => <option key={p.id} value={p.id}>{p.display_name} ({p.email})</option>)}
                 </select>
@@ -140,7 +149,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
               <button className="btn">Add</button>
             </form>
           ) : (
-            <p className="text-sm text-stone-500">Everyone with an account is already here. Invite new people on the <Link className="text-brand underline" href="/admin">People</Link> page first.</p>
+            <p className="text-sm text-stone-500">Everyone with an account is already on this event.</p>
           ))}
         </section>
 

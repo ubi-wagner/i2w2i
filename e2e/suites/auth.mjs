@@ -6,7 +6,6 @@ await anon.goto(BASE + '/admin');
 check(anon.url().includes('/login?next=%2Fadmin'), 'signed-out visit to /admin goes to sign-in, remembering where to return');
 
 // Wrong password keeps the email and says so; right password returns to ?next
-await anon.getByRole('button', { name: 'Password', exact: true }).click();
 await anon.fill('#email', ADMIN.email);
 await anon.fill('#password', 'not-the-password');
 await anon.getByRole('button', { name: 'Sign in' }).click();
@@ -41,14 +40,11 @@ const again = await page();
 await login(again, email.toUpperCase(), 'mae-password-1');
 check(true, 'members sign in with email (any case) + password');
 
-// Forgot password: emailed link (generic reply for unknown emails)
+// No email set up: the login page doesn't offer emailed links, and says how to get back in
 const forgot = await page();
 await forgot.goto(BASE + '/login');
-await forgot.getByRole('button', { name: 'Email me a link' }).click();
-await forgot.fill('#email', `nobody-${RUN}@example.com`);
-await forgot.getByRole('button', { name: 'Send sign-in link' }).click();
-await forgot.getByText('If that email is registered').waitFor();
-check(true, 'sign-in link requests answer the same whether or not the email exists');
+check(!(await forgot.getByRole('button', { name: 'Email me a link' }).isVisible()), 'without email, the login page doesn’t offer emailed links');
+check(await forgot.getByText('Ask the person who invited you (or Eric) for a new sign-in link').isVisible(), '…and tells people how to get back in');
 
 // Password change signs out other devices
 await mae.goto(BASE + '/account');
@@ -76,7 +72,6 @@ await mae.goto(BASE + '/');
 check(mae.url().includes('/login'), 'deactivation signs them out immediately');
 const blocked = await page();
 await blocked.goto(BASE + '/login');
-await blocked.getByRole('button', { name: 'Password', exact: true }).click();
 await blocked.fill('#email', email);
 await blocked.fill('#password', 'mae-password-2');
 await blocked.getByRole('button', { name: 'Sign in' }).click();

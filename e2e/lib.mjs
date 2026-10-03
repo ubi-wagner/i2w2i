@@ -55,7 +55,9 @@ export async function phonePage(kind = 'iphone') {
 
 export async function login(p, email, password) {
   await p.goto(BASE + '/login');
-  await p.getByRole('button', { name: 'Password', exact: true }).click();
+  // The tab only shows when email sign-in links are configured.
+  const tab = p.getByRole('button', { name: 'Password', exact: true });
+  if (await tab.isVisible()) await tab.click();
   await p.fill('#email', email);
   await p.fill('#password', password);
   await p.getByRole('button', { name: 'Sign in' }).click();
@@ -116,9 +118,10 @@ export async function createCode(p, ev, code, { upload = true, view = true, labe
 
 export async function addToEvent(p, ev, label, role = 'invitee') {
   await p.goto(ev.manage);
-  await p.selectOption('#user_id', { label });
-  await p.locator('select[name=role]').selectOption(role);
-  await p.getByRole('button', { name: 'Add', exact: true }).click();
+  const form = p.locator('form', { has: p.locator('#user_id') });
+  await form.locator('#user_id').selectOption({ label });
+  await form.locator('select[name=role]').selectOption(role);
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
   await p.waitForLoadState('networkidle');
 }
 

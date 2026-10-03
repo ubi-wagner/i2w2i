@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canUsePassword, normalizeEmail, safeNext, visibleApps, type AppRole, type AppRow } from '@/lib/access';
+import { canIssueLink, canUsePassword, normalizeEmail, safeNext, visibleApps, type AppRole, type AppRow } from '@/lib/access';
 
 const app = (key: string, extra: Partial<AppRow> = {}): AppRow => ({
   key, name: key, description: '', path: `/${key}`, sensitive: false, is_enabled: true, sort_order: 10, ...extra,
@@ -50,5 +50,26 @@ describe('safeNext', () => {
     for (const bad of ['https://evil.com', '//evil.com', '/\\evil.com', 'admin', '', null, undefined]) {
       expect(safeNext(bad)).toBe('/');
     }
+  });
+});
+
+describe('canIssueLink', () => {
+  const admin = { id: 'a', platform_role: 'admin' as const };
+  const host = { id: 'h', platform_role: 'creator' as const };
+  const member = (created_by: string | null, extra = {}) => ({ id: 'm', platform_role: 'member' as const, created_by, is_active: true, ...extra });
+  it('lets the admin issue links for anyone else', () => {
+    expect(canIssueLink(admin, member(null))).toBe(true);
+    expect(canIssueLink(admin, { id: 'h', platform_role: 'creator', created_by: null, is_active: true })).toBe(true);
+  });
+  it('lets a host issue links only for members they invited', () => {
+    expect(canIssueLink(host, member('h'))).toBe(true);
+    expect(canIssueLink(host, member('someone-else'))).toBe(false);
+    expect(canIssueLink(host, { id: 'a', platform_role: 'admin', created_by: 'h', is_active: true })).toBe(false);
+    expect(canIssueLink(host, { id: 'c', platform_role: 'creator', created_by: 'h', is_active: true })).toBe(false);
+  });
+  it('never for yourself, never for deactivated accounts, never by members', () => {
+    expect(canIssueLink(admin, { id: 'a', platform_role: 'admin', created_by: null, is_active: true })).toBe(false);
+    expect(canIssueLink(admin, member(null, { is_active: false }))).toBe(false);
+    expect(canIssueLink({ id: 'x', platform_role: 'member' }, member('x'))).toBe(false);
   });
 });

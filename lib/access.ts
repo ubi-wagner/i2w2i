@@ -52,3 +52,18 @@ export function safeNext(next: string | null | undefined): string {
   if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return '/';
   return next;
 }
+
+/**
+ * Who may hand someone a one-time sign-in link (an invite, or a password
+ * reset now that there's no email). A link signs in as that person, so:
+ * the admin may issue one for anyone else; a host only for family-member
+ * accounts they invited themselves. Nobody issues one for themselves.
+ */
+export function canIssueLink(
+  actor: { id: string; platform_role: PlatformRole },
+  target: { id: string; platform_role: PlatformRole; created_by: string | null; is_active: boolean },
+): boolean {
+  if (actor.id === target.id || !target.is_active) return false;
+  if (actor.platform_role === 'admin') return true;
+  return actor.platform_role === 'creator' && target.platform_role === 'member' && target.created_by === actor.id;
+}

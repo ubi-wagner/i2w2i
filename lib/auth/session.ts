@@ -15,15 +15,17 @@ export interface CurrentUser {
   display_name: string;
   platform_role: PlatformRole;
   has_password: boolean;
+  /** Signed in with a one-time link in the last 30 minutes: may reset the password without the old one. */
+  fresh_link: boolean;
 }
 
-export async function createSession(userId: string): Promise<void> {
+export async function createSession(userId: string, via: 'password' | 'link' = 'password'): Promise<void> {
   const token = newToken();
   const h = await headers();
   const expires = new Date(Date.now() + SESSION_DAYS * 86_400_000);
   await sql`
-    INSERT INTO core.sessions (user_id, token_hash, expires_at, user_agent, ip)
-    VALUES (${userId}, ${hashToken(token)}, ${expires}, ${h.get('user-agent')?.slice(0, 300) ?? null},
+    INSERT INTO core.sessions (user_id, token_hash, expires_at, via, user_agent, ip)
+    VALUES (${userId}, ${hashToken(token)}, ${expires}, ${via}, ${h.get('user-agent')?.slice(0, 300) ?? null},
             ${h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null})`;
   await sql`UPDATE core.users SET last_login_at = now() WHERE id = ${userId}`;
   (await cookies()).set(SESSION_COOKIE, token, {
@@ -41,6 +43,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   if (!token) return null;
   const rows = await sql<(CurrentUser & { session_id: string; stale: boolean })[]>`
     SELECT u.id, u.email, u.display_name, u.platform_role, (u.password_hash IS NOT NULL) AS has_password,
+           (s.via = 'link' AND s.created_at > now() - interval '30 minutes') AS fresh_link,
            s.id AS session_id, (s.last_seen_at < now() - interval '1 hour') AS stale
       FROM core.sessions s JOIN core.users u ON u.id = s.user_id
      WHERE s.token_hash = ${hashToken(token)}

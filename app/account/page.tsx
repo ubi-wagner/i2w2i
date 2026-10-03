@@ -8,9 +8,11 @@ export const metadata = { title: 'Your account' };
 
 const ROLE_LABEL = { admin: 'Family admin', creator: 'Creator', member: 'Family member' } as const;
 
-export default async function AccountPage({ searchParams }: { searchParams: Promise<{ welcome?: string }> }) {
+export default async function AccountPage({ searchParams }: { searchParams: Promise<{ welcome?: string; reset?: string }> }) {
   const user = await requireUser();
-  const welcome = (await searchParams).welcome && !user.has_password;
+  const sp = await searchParams;
+  const welcome = sp.welcome && !user.has_password;
+  const reset = sp.reset && user.has_password && user.fresh_link;
 
   return (
     <>
@@ -19,6 +21,11 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         {welcome && (
           <div className="rounded-xl bg-brand-light p-4 text-brand-dark">
             Welcome! Choose a password so you can sign in with your email and password next time. (You can also always ask for an emailed sign-in link.)
+          </div>
+        )}
+        {reset && (
+          <div className="rounded-xl bg-brand-light p-4 text-brand-dark">
+            You’re signed in. Choose a new password below so you can sign in with it next time.
           </div>
         )}
         <section className="card space-y-4">
@@ -33,7 +40,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         {canUsePassword(user.platform_role) && (
           <section className="card space-y-4">
             <h2 className="text-lg font-semibold">Password</h2>
-            <PasswordForm hasPassword={user.has_password} />
+            <PasswordForm hasPassword={user.has_password} needCurrent={user.has_password && !user.fresh_link} />
           </section>
         )}
 

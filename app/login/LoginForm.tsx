@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from 'react';
 import { collectClientInfo } from '@/lib/client-info';
 import { loginWithPassword, requestLoginLink, type FormState } from './actions';
 
-export function LoginForm({ next }: { next: string }) {
+export function LoginForm({ next, emailEnabled }: { next: string; emailEnabled: boolean }) {
   const [mode, setMode] = useState<'link' | 'password'>('password');
   const [pwState, pwAction, pwPending] = useActionState<FormState, FormData>(loginWithPassword, {});
   const [linkState, linkAction, linkPending] = useActionState<FormState, FormData>(requestLoginLink, {});
@@ -16,7 +16,7 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 rounded-lg bg-stone-100 p-1 text-sm">
+      {emailEnabled && <div className="grid grid-cols-2 rounded-lg bg-stone-100 p-1 text-sm">
         {(['password', 'link'] as const).map((m) => (
           <button
             key={m}
@@ -27,7 +27,7 @@ export function LoginForm({ next }: { next: string }) {
             {m === 'link' ? 'Email me a link' : 'Password'}
           </button>
         ))}
-      </div>
+      </div>}
 
       <form action={mode === 'password' ? pwAction : linkAction} className="space-y-4">
         <input type="hidden" name="next" value={next} />
@@ -49,6 +49,11 @@ export function LoginForm({ next }: { next: string }) {
         </button>
       </form>
       {mode === 'link' && <p className="text-center text-xs text-stone-500">Forgot your password? We’ll email you a link that signs you in.</p>}
+      {!emailEnabled && (
+        <p className="text-center text-sm text-stone-600">
+          Forgot your password, or haven’t set one yet? Ask the person who invited you (or Eric) for a new sign-in link.
+        </p>
+      )}
     </div>
   );
 }

@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <div className="w-full max-w-sm">
         <h1 className="mb-1 text-center text-3xl font-bold text-brand">i2w2i</h1>
         <p className="mb-6 text-center text-stone-600">Family apps, in one place.</p>
-        <div className="card"><LoginForm next={next} /></div>
+        <div className="card"><LoginForm next={next} emailEnabled={Boolean(process.env.RESEND_API_KEY)} /></div>
       </div>
     </main>
   );

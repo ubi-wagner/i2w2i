@@ -25,9 +25,22 @@ Everything runs as **one Next.js service in one Railway container**, behind
 | **Event guest** | no | the event's QR link, or its typed code as a fallback | Adds photos and/or sees that one album |
 | **Public viewer** | no | the album link, if the album is public | Looks |
 
-- Accounts get a one-time emailed (or copied) invite link and choose a
-  password on first sign-in. "Email me a link" stays available as
-  forgot-password.
+- **Hosts are the admins of their events.** An event's owners manage
+  everything on it: details and publishing, people (invite new ones or add
+  existing accounts), guest codes and QR cards, guests, content, gift links
+  and the activity record. Eric, as platform admin, is implicitly owner of
+  every event and also manages all accounts (People page).
+- **No email needed.** Accounts get a one-time link, shown to whoever
+  invited them as text to copy and as a QR code to scan in person. The
+  person opens it once and chooses a password.
+- **Forgot password:** a new one-time link from the host who invited them,
+  or from Eric. Signing in with it allows choosing a new password without
+  the old one for 30 minutes, and other devices are signed out. A sign-in
+  link opens someone's whole account, so hosts can only make links for
+  accounts they invited (`canIssueLink` in `lib/access.ts`); everyone else
+  comes to Eric.
+- If email is set up later (`RESEND_API_KEY`), invites are also emailed and
+  the login page offers "Email me a link".
 - Guests are deliberately **not** `core.users`. They're rows in
   `events.guests`, scoped to one event, named by themselves, and only as
   good as the credential they came in with.
