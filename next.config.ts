@@ -3,6 +3,9 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   output: 'standalone',
   poweredByHeader: false,
+  // Loaded from node_modules at runtime rather than bundled (exifr probes for
+  // Node built-ins and logs noise when bundled).
+  serverExternalPackages: ['exifr'],
   async headers() {
     return [
       {
