@@ -5,7 +5,8 @@ import { parseClient } from '@/lib/request-meta';
 import { albumOr404, json, sameOrigin } from '@/lib/events/api';
 import { fileExtension, uploadKind, uploadProblem } from '@/lib/events/rules';
 import { rateLimit } from '@/lib/rate-limit';
-import { uploadUrl } from '@/lib/storage';
+import { MULTIPART_THRESHOLD, PART_SIZE, partCount } from '@/lib/events/limits';
+import { startMultipart, uploadUrl } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,12 +33,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const base = `events/${album.event.id}/${id}`;
   const originalKey = `${base}/original.${fileExtension(filename, type)}`;
   const previewKey = kind === 'photo' && body?.preview ? `${base}/preview.jpg` : null;
+  // Big files (mostly videos) go up in parts so an interruption resumes.
+  const multipartId = size >= MULTIPART_THRESHOLD ? await startMultipart(originalKey, type) : null;
 
   await withCtx(album.ctx, (tx) => tx`
     INSERT INTO events.uploads (id, event_id, uploader_user_id, uploader_guest_id, uploader_name, kind,
-                                content_type, filename, size_bytes, original_key, preview_key)
+                                content_type, filename, size_bytes, original_key, preview_key, multipart_id)
     VALUES (${id}, ${album.event.id}, ${album.isMember ? album.user!.id : null}, ${album.isMember ? null : album.guest!.id},
-            ${album.uploaderName}, ${kind}, ${type}, ${filename}, ${size}, ${originalKey}, ${previewKey})`);
+            ${album.uploaderName}, ${kind}, ${type}, ${filename}, ${size}, ${originalKey}, ${previewKey}, ${multipartId})`);
 
   await logActivity({
     eventId: album.event.id,
@@ -59,7 +62,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
 
   return json({
     id,
-    uploadUrl: await uploadUrl(originalKey, type),
+    mode: multipartId ? 'multipart' : 'single',
+    partSize: PART_SIZE,
+    partCount: multipartId ? partCount(size) : 1,
+    uploadUrl: multipartId ? null : await uploadUrl(originalKey, type),
     previewUrl: previewKey ? await uploadUrl(previewKey, 'image/jpeg') : null,
   });
 }

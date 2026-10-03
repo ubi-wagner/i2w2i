@@ -3,37 +3,81 @@ import { withCtx } from '@/lib/events/db';
 import { readPhotoMeta } from '@/lib/events/exif';
 import { albumOr404, json, sameOrigin } from '@/lib/events/api';
 import { MAX_PREVIEW_BYTES, MAX_UPLOAD_BYTES } from '@/lib/events/limits';
-import { deleteObject, objectSize, uploadUrl } from '@/lib/storage';
+import { completeParts, missingParts } from '@/lib/events/parts';
+import { completeMultipart, deleteObject, listParts, objectSize, partUploadUrls, uploadUrl } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
 
-// action=url: fresh presigned URLs for a retry.
-// action=complete: confirm the bytes landed, then make the upload visible.
+// Everything after step 1 of an upload, for the uploader only:
+//   status   what's already stored (to resume after an interruption)
+//   url      fresh URL for a single-PUT upload (retries)
+//   parts    URLs for the given multipart part numbers
+//   preview  fresh URL for the preview image
+//   complete confirm the bytes landed, then make the upload visible
+interface Body {
+  action?: string;
+  parts?: number[];
+}
+
+interface Row {
+  status: string;
+  kind: string;
+  content_type: string;
+  original_key: string;
+  preview_key: string | null;
+  multipart_id: string | null;
+  size_bytes: string;
+  mine: boolean;
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string; id: string }> }) {
   if (!sameOrigin(req)) return json({ error: 'Bad origin' }, 403);
   const { slug, id } = await params;
   if (!/^[0-9a-f-]{36}$/.test(id)) return json({ error: 'Not found' }, 404);
   const album = await albumOr404(slug);
   if (album instanceof Response) return album;
-  const body = (await req.json().catch(() => null)) as { action?: string } | null;
+  const body = ((await req.json().catch(() => null)) ?? {}) as Body;
 
   // RLS shows uploaders their own uploads (and managers everything).
-  const [u] = await withCtx(album.ctx, (tx) => tx<{ status: string; kind: string; content_type: string; original_key: string; preview_key: string | null; mine: boolean }[]>`
-    SELECT status, kind, content_type, original_key, preview_key,
-           (uploader_user_id IS NOT DISTINCT FROM ${album.ctx.userId}::uuid AND uploader_user_id IS NOT NULL)
-             OR (uploader_guest_id IS NOT DISTINCT FROM ${album.ctx.guest?.id ?? null}::uuid AND uploader_guest_id IS NOT NULL) AS mine
+  const [u] = await withCtx(album.ctx, (tx) => tx<Row[]>`
+    SELECT status, kind, content_type, original_key, preview_key, multipart_id, size_bytes,
+           (uploader_user_id IS NOT NULL AND uploader_user_id IS NOT DISTINCT FROM ${album.ctx.userId}::uuid)
+             OR (uploader_guest_id IS NOT NULL AND uploader_guest_id IS NOT DISTINCT FROM ${album.ctx.guest?.id ?? null}::uuid) AS mine
       FROM events.uploads WHERE id = ${id} AND event_id = ${album.event.id}`);
   if (!u || !u.mine) return json({ error: 'Not found' }, 404);
-  if (u.status !== 'pending') return json({ ok: true });
+  const declared = Number(u.size_bytes);
+  if (u.status !== 'pending') return json({ ok: true, complete: true });
 
-  if (body?.action === 'url') {
-    return json({
-      uploadUrl: await uploadUrl(u.original_key, u.content_type),
-      previewUrl: u.preview_key ? await uploadUrl(u.preview_key, 'image/jpeg') : null,
-    });
+  switch (body.action) {
+    case 'status': {
+      if (u.multipart_id) {
+        const stored = await listParts(u.original_key, u.multipart_id);
+        return json({ mode: 'multipart', stored: completeParts(declared, stored).map((p) => p.n), missing: missingParts(declared, stored) });
+      }
+      return json({ mode: 'single', uploaded: (await objectSize(u.original_key)) === declared });
+    }
+    case 'url':
+      if (u.multipart_id) return json({ error: 'Use parts' }, 400);
+      return json({ uploadUrl: await uploadUrl(u.original_key, u.content_type) });
+    case 'parts': {
+      if (!u.multipart_id) return json({ error: 'Not a multipart upload' }, 400);
+      const wanted = (body.parts ?? []).filter((n) => Number.isInteger(n) && n >= 1 && n <= 10_000).slice(0, 50);
+      return json({ urls: await partUploadUrls(u.original_key, u.multipart_id, wanted) });
+    }
+    case 'preview':
+      return json({ previewUrl: u.preview_key ? await uploadUrl(u.preview_key, 'image/jpeg') : null });
+    case 'complete':
+      break;
+    default:
+      return json({ error: 'Unknown action' }, 400);
   }
 
-  if (body?.action !== 'complete') return json({ error: 'Unknown action' }, 400);
+  if (u.multipart_id) {
+    const stored = await listParts(u.original_key, u.multipart_id);
+    const missing = missingParts(declared, stored);
+    if (missing.length) return json({ error: 'Some parts didn’t arrive. Resuming…', missing }, 409);
+    await completeMultipart(u.original_key, u.multipart_id, completeParts(declared, stored));
+  }
   const size = await objectSize(u.original_key);
   if (size === null) return json({ error: 'The file didn’t arrive. Try again.' }, 409);
   if (size > MAX_UPLOAD_BYTES || size === 0) {
@@ -49,7 +93,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     }
   }
   await withCtx(album.ctx, (tx) => tx`
-    UPDATE events.uploads SET status = 'ready', completed_at = now(), size_bytes = ${size}, preview_key = ${previewKey}
+    UPDATE events.uploads SET status = 'ready', completed_at = now(), size_bytes = ${size},
+                              preview_key = ${previewKey}, multipart_id = NULL
      WHERE id = ${id} AND status = 'pending'`);
   await logActivity({
     eventId: album.event.id,
@@ -58,7 +103,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     guestId: album.isMember ? null : (album.guest?.id ?? null),
     uploadId: id,
     actorName: album.uploaderName,
-    detail: { size, preview: Boolean(previewKey), photo: u.kind === 'photo' ? await readPhotoMeta(u.original_key) : null },
+    detail: {
+      size,
+      resumable: Boolean(u.multipart_id),
+      preview: Boolean(previewKey),
+      photo: u.kind === 'photo' ? await readPhotoMeta(u.original_key) : null,
+    },
   });
-  return json({ ok: true });
+  return json({ ok: true, complete: true });
 }

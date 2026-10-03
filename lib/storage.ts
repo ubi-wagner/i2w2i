@@ -1,15 +1,21 @@
 import 'server-only';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { mkdir, open, rm, stat } from 'node:fs/promises';
+import { appendFile, mkdir, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetBucketCorsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutBucketCorsCommand,
+  ListPartsCommand,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -49,26 +55,39 @@ function s3(): S3Client {
 const LOCAL_DIR = resolve(/*turbopackIgnore: true*/ env.LOCAL_STORAGE_DIR || '/tmp/i2w2i-storage');
 const localSecret = env.APP_SECRET || 'dev-only-local-storage-secret';
 
-function localSig(op: 'put' | 'get', key: string, exp: number): string {
-  return createHmac('sha256', localSecret).update(`${op}\n${key}\n${exp}`).digest('base64url');
+type LocalOp = 'put' | 'get' | 'part';
+
+function localSig(op: LocalOp, key: string, exp: number, extra = ''): string {
+  return createHmac('sha256', localSecret).update(`${op}\n${key}\n${exp}\n${extra}`).digest('base64url');
 }
 
-function localUrl(op: 'put' | 'get', key: string, ttl: number, contentType?: string): string {
+function localUrl(op: LocalOp, key: string, ttl: number, contentType?: string, part?: { uploadId: string; n: number }): string {
   const exp = Math.floor(Date.now() / 1000) + ttl;
-  const q = new URLSearchParams({ op, key, exp: String(exp), sig: localSig(op, key, exp) });
+  const extra = part ? `${part.uploadId}:${part.n}` : '';
+  const q = new URLSearchParams({ op, key, exp: String(exp), sig: localSig(op, key, exp, extra) });
   if (contentType) q.set('ct', contentType);
+  if (part) {
+    q.set('uid', part.uploadId);
+    q.set('n', String(part.n));
+  }
   return `/api/storage/local?${q}`;
 }
 
-/** Validates a local signed URL's query. Returns the key, or null. */
-export function verifyLocal(op: 'put' | 'get', q: URLSearchParams): string | null {
+/** Validates a local signed URL's query. Returns the key (and part), or null. */
+export function verifyLocal(op: LocalOp, q: URLSearchParams): string | null {
   const key = q.get('key') ?? '';
   const exp = Number(q.get('exp'));
+  const extra = op === 'part' ? `${q.get('uid')}:${q.get('n')}` : '';
   const sig = Buffer.from(q.get('sig') ?? '');
-  const want = Buffer.from(localSig(op, key, exp));
+  const want = Buffer.from(localSig(op, key, exp, extra));
   if (q.get('op') !== op || !Number.isFinite(exp) || exp < Date.now() / 1000) return null;
   if (sig.length !== want.length || !timingSafeEqual(sig, want)) return null;
+  if (op === 'part' && (!/^[a-f0-9-]{36}$/.test(q.get('uid') ?? '') || !/^\d{1,5}$/.test(q.get('n') ?? ''))) return null;
   return isSafeKey(key) ? key : null;
+}
+
+export function localPartPath(key: string, uploadId: string, n: number): string {
+  return join(/*turbopackIgnore: true*/ `${localPath(key)}.mp-${uploadId}`, String(n));
 }
 
 export function localPath(key: string): string {
@@ -146,6 +165,90 @@ export async function readHead(key: string, bytes: number): Promise<Buffer | nul
   } catch {
     return null;
   }
+}
+
+// ── Multipart (resumable) uploads ───────────────────────────────────────────
+
+export interface StoredPart {
+  n: number;
+  size: number;
+  etag: string;
+}
+
+export async function startMultipart(key: string, contentType: string): Promise<string> {
+  if (storageDriver === 'local') {
+    const id = randomUUID();
+    await mkdir(/*turbopackIgnore: true*/ `${localPath(key)}.mp-${id}`, { recursive: true });
+    await writeFile(/*turbopackIgnore: true*/ `${localPath(key)}.mp-${id}/type`, contentType);
+    return id;
+  }
+  const res = await s3().send(new CreateMultipartUploadCommand({ Bucket: BUCKET, Key: key, ContentType: contentType }));
+  if (!res.UploadId) throw new Error('bucket did not start a multipart upload');
+  return res.UploadId;
+}
+
+/** Presigned PUT URLs for the given 1-based part numbers. */
+export async function partUploadUrls(key: string, uploadId: string, parts: number[]): Promise<Record<number, string>> {
+  const out: Record<number, string> = {};
+  for (const n of parts) {
+    out[n] =
+      storageDriver === 'local'
+        ? localUrl('part', key, UPLOAD_URL_TTL, undefined, { uploadId, n })
+        : await getSignedUrl(s3(), new UploadPartCommand({ Bucket: BUCKET, Key: key, UploadId: uploadId, PartNumber: n }), {
+            expiresIn: UPLOAD_URL_TTL,
+          });
+  }
+  return out;
+}
+
+/** Parts already stored, so an interrupted upload resumes where it stopped. */
+export async function listParts(key: string, uploadId: string): Promise<StoredPart[]> {
+  if (storageDriver === 'local') {
+    const dir = `${localPath(key)}.mp-${uploadId}`;
+    const names = await readdir(/*turbopackIgnore: true*/ dir).catch(() => [] as string[]);
+    const parts = await Promise.all(
+      names.filter((n) => /^\d+$/.test(n)).map(async (n) => ({ n: Number(n), size: (await stat(/*turbopackIgnore: true*/ join(dir, n))).size, etag: n })),
+    );
+    return parts.sort((a, b) => a.n - b.n);
+  }
+  const parts: StoredPart[] = [];
+  let marker: string | undefined;
+  for (;;) {
+    const res = await s3().send(new ListPartsCommand({ Bucket: BUCKET, Key: key, UploadId: uploadId, PartNumberMarker: marker }));
+    for (const p of res.Parts ?? []) parts.push({ n: p.PartNumber!, size: p.Size ?? 0, etag: p.ETag! });
+    if (!res.IsTruncated) break;
+    marker = res.NextPartNumberMarker;
+  }
+  return parts;
+}
+
+export async function completeMultipart(key: string, uploadId: string, parts: StoredPart[]): Promise<void> {
+  if (storageDriver === 'local') {
+    const dir = `${localPath(key)}.mp-${uploadId}`;
+    const out = await ensureLocalDir(key);
+    await writeFile(/*turbopackIgnore: true*/ out, Buffer.alloc(0));
+    for (const p of parts) await appendFile(/*turbopackIgnore: true*/ out, await readFile(/*turbopackIgnore: true*/ join(dir, String(p.n))));
+    const type = await readFile(/*turbopackIgnore: true*/ join(dir, 'type'), 'utf8').catch(() => 'application/octet-stream');
+    await writeFile(/*turbopackIgnore: true*/ `${out}.type`, type);
+    await rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
+    return;
+  }
+  await s3().send(
+    new CompleteMultipartUploadCommand({
+      Bucket: BUCKET,
+      Key: key,
+      UploadId: uploadId,
+      MultipartUpload: { Parts: parts.map((p) => ({ PartNumber: p.n, ETag: p.etag })) },
+    }),
+  );
+}
+
+export async function abortMultipart(key: string, uploadId: string): Promise<void> {
+  if (storageDriver === 'local') {
+    await rm(/*turbopackIgnore: true*/ `${localPath(key)}.mp-${uploadId}`, { recursive: true, force: true });
+    return;
+  }
+  await s3().send(new AbortMultipartUploadCommand({ Bucket: BUCKET, Key: key, UploadId: uploadId })).catch(() => {});
 }
 
 export async function deleteObject(key: string): Promise<void> {
