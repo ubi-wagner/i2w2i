@@ -15,6 +15,9 @@ const PUBLIC = [
   /^\/manifest\.webmanifest$/,
   /^\/sw\.js$/,
   /^\/icons\//,
+  // Help, for people who can't get in yet, and its pictures.
+  /^\/help(\/|$)/,
+  /^\/help-img\//,
 ];
 
 const DEVICE_COOKIE = 'i2w2i_device';

@@ -70,11 +70,10 @@ export default async function AlbumPage({ params, searchParams }: Params) {
             </p>
             <JoinForm slug={slug} token={token} />
           </div>
-          {!album.user && (
-            <p className="text-center text-sm text-stone-500">
-              Family member? <Link href={`/login?next=/album/${slug}`} className="text-brand underline">Sign in</Link>
-            </p>
-          )}
+          <p className="text-center text-sm text-stone-500">
+            {!album.user && <>Family member? <Link href={`/login?next=/album/${slug}`} className="text-brand underline">Sign in</Link> · </>}
+            <Link href="/help/start#table" className="underline">How this works</Link>
+          </p>
         </main>
       </ThemeFrame>
     );
@@ -180,6 +179,10 @@ export default async function AlbumPage({ params, searchParams }: Params) {
             </details>
           </section>
         )}
+
+        <footer className="text-center text-sm text-stone-500">
+          <Link href={album.canManage ? '/help/hosting' : '/help'} className="hover:underline">Help</Link>
+        </footer>
       </main>
     </ThemeFrame>
   );

@@ -38,6 +38,9 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
   server; keep the Dockerfile and CI copying it. The service worker must not
   cache or intercept requests (uploads, sign-in). Push only ever goes to the
   browsers' push services (`isPushEndpoint` in `lib/push-rules.ts`).
+- **Help pages** (`app/help`, public) describe the real screens. Change a
+  screen they show, update them; pictures in `public/help-img/` come from a
+  made-up event, never real names, codes or QR cards.
 - **There is no email.** Invites and resets are one-time links shown to the
   inviter (copy or QR). Who may issue one is `canIssueLink`: admin for
   anyone, hosts only for accounts they created. Don't widen it.
