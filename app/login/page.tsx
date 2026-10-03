@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth/session';
 import { safeNext } from '@/lib/access';
@@ -14,6 +15,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <h1 className="mb-1 text-center text-3xl font-bold text-brand">i2w2i</h1>
         <p className="mb-6 text-center text-stone-600">Family apps, in one place.</p>
         <div className="card"><LoginForm next={next} emailEnabled={Boolean(process.env.RESEND_API_KEY)} /></div>
+        <p className="mt-4 text-center text-sm text-stone-500">New here, or stuck? <Link href="/help" className="text-brand underline">How i2w2i works</Link></p>
       </div>
     </main>
   );

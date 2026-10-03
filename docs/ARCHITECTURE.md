@@ -115,6 +115,10 @@ The end-to-end suites:
 - **select:** select, zip, bulk moderation
 - **decorate:** frames and filters
 - **social:** comments and gift links
+- **hosts:** inviting people onto an event, one-time links as resets, co-hosts
+- **theme:** event pages, looks, directions, schedule, printed cards
+- **app:** the home-screen app and review notifications (local push stand-in)
+- **help:** the public help pages, their pictures, printing, and the links to them
 
 CI runs all of them on every push.
 
@@ -184,6 +188,12 @@ i2w2i is a web app people can put on their home screen (Share → Add to Home Sc
 - **What's sent:** when someone who isn't a host uploads, the event's hosts and helpers get "N new photos are waiting for your OK", batched per event (one alert per ~90 seconds at most; `PUSH_REVIEW_DELAY_MS`). Tapping it opens the review queue. `events.review_summary()` gives the notifier names and counts without a signed-in context.
 - **Keys:** the server makes its VAPID keys on first use and keeps them in `core.settings`; `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` override. Nothing to configure.
 - **Safety:** the server only sends to the browsers' push services (Apple, Google, Mozilla, Microsoft; `isPushEndpoint`), so a subscription can't make it call other addresses. Dead subscriptions (404/410) are removed. Tests use a local HTTPS stand-in (`PUSH_ALLOW_ANY_ENDPOINT=1`, never in production).
+
+## Help pages
+
+`/help` (with `/help/start`, `/help/hosting`, `/help/faq`) is open to everyone, signed in or not, since the people who need it most can't get in yet. It's linked from the header, the sign-in page, the Manage checklist and the album. Each page has a Print / Save as PDF button; printing opens every folded answer.
+
+The pictures in `public/help-img/` are real screens of a made-up event ("Sam & Riley", code PARTY), never a real event's names, codes or QR cards, because the pages are public. When a screen they show changes, update the words and re-shoot the picture.
 
 ## Who did what, from where
 

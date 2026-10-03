@@ -140,6 +140,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                 </li>
               ))}
             </ol>
+            <p className="pt-1 text-sm text-stone-600">New to this? The <Link href="/help/hosting" className="text-brand-dark underline">step-by-step guide</Link> walks through each part.</p>
           </section>
         )}
 
