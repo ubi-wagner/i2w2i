@@ -1,0 +1,44 @@
+import 'server-only';
+import { sql } from '../db';
+import { hashToken, newToken } from './tokens';
+
+export type LinkPurpose = 'login' | 'invite';
+
+const TTL_MINUTES: Record<LinkPurpose, number> = { login: 20, invite: 7 * 24 * 60 };
+
+export function appUrl(): string {
+  return (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+}
+
+/** Creates a single-use sign-in link. Older unused links of the same kind stop working. */
+export async function issueLink(userId: string, purpose: LinkPurpose): Promise<string> {
+  const token = newToken();
+  const expires = new Date(Date.now() + TTL_MINUTES[purpose] * 60_000);
+  await sql.begin(async (tx) => {
+    await tx`UPDATE core.login_tokens SET used_at = now()
+              WHERE user_id = ${userId} AND purpose = ${purpose} AND used_at IS NULL`;
+    await tx`INSERT INTO core.login_tokens (user_id, token_hash, purpose, expires_at)
+             VALUES (${userId}, ${hashToken(token)}, ${purpose}, ${expires})`;
+  });
+  return `${appUrl()}/auth/link?token=${encodeURIComponent(token)}`;
+}
+
+/** Who a link is for, without using it (for the confirm page). */
+export async function peekLink(token: string): Promise<{ display_name: string; purpose: LinkPurpose } | null> {
+  const rows = await sql<{ display_name: string; purpose: LinkPurpose }[]>`
+    SELECT u.display_name, t.purpose
+      FROM core.login_tokens t JOIN core.users u ON u.id = t.user_id
+     WHERE t.token_hash = ${hashToken(token)} AND t.used_at IS NULL AND t.expires_at > now() AND u.is_active`;
+  return rows[0] ?? null;
+}
+
+/** Marks the link used and returns its user, atomically. */
+export async function consumeLink(token: string): Promise<string | null> {
+  const rows = await sql<{ user_id: string }[]>`
+    UPDATE core.login_tokens t SET used_at = now()
+      FROM core.users u
+     WHERE u.id = t.user_id AND u.is_active
+       AND t.token_hash = ${hashToken(token)} AND t.used_at IS NULL AND t.expires_at > now()
+    RETURNING t.user_id`;
+  return rows[0]?.user_id ?? null;
+}
