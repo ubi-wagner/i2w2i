@@ -105,7 +105,7 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug }:
   return (
     <div className="space-y-3">
       {canSelect && (
-        <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-xl bg-white/95 p-1 text-sm backdrop-blur">
+        <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-xl bg-stone-50/95 p-1 text-sm backdrop-blur">
           {!selecting ? (
             <button type="button" className="btn-secondary py-1" onClick={() => setSelecting(true)}>Select</button>
           ) : (

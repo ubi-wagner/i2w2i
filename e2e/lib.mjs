@@ -86,6 +86,14 @@ export async function invite(admin, name, email, role = 'member') {
 export async function acceptInvite(link, password, opts = {}) {
   const p = await page(opts);
   await p.goto(link);
+  // Links made on an event's page open its welcome page: one step to the album.
+  if (link.includes('/welcome?')) {
+    await p.fill('#password', password);
+    await p.fill('#confirm', password);
+    await p.getByRole('button', { name: 'See the photos' }).click();
+    await p.waitForURL(/\/album\/[a-z0-9-]+$/);
+    return p;
+  }
   await p.getByRole('button', { name: 'Continue' }).click();
   await p.waitForURL(/\/account\?welcome=1/);
   await p.fill('#password', password);

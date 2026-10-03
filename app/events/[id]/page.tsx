@@ -137,6 +137,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
               id: event.id, title: event.title, location: event.location, description: event.description,
               starts_on: event.starts_on ? event.starts_on.toISOString().slice(0, 10) : '',
               status: event.status, audience: event.audience, chat_enabled: event.chat_enabled,
+              theme: event.theme, gift_note: event.gift_note,
             }}
           />
         </section>
@@ -170,7 +171,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                   )}
                 </span>
                 {owner && canIssueLink(user, { id: m.user_id, platform_role: m.platform_role, created_by: m.created_by, is_active: m.is_active }) && (
-                  <SignInLinkButton userId={m.user_id} />
+                  <SignInLinkButton userId={m.user_id} eventId={id} />
                 )}
               </li>
             ))}

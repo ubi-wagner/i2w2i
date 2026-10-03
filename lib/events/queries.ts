@@ -1,4 +1,5 @@
 import 'server-only';
+import type { ThemeId } from './themes';
 import { createHash } from 'node:crypto';
 import { viewUrl } from '../storage';
 import { withCtx, type EventCtx } from './db';
@@ -15,6 +16,8 @@ export interface EventRow {
   status: 'draft' | 'published';
   audience: 'public' | 'family' | 'invitees';
   chat_enabled: boolean;
+  theme: ThemeId;
+  gift_note: string;
   created_by: string;
   created_at: Date;
 }

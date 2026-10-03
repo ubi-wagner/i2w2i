@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { THEMES } from '@/lib/events/themes';
 import { updateEvent, type FormState } from '../actions';
 
 interface Props {
@@ -13,6 +14,8 @@ interface Props {
     status: string;
     audience: string;
     chat_enabled: boolean;
+    theme: string;
+    gift_note: string;
   };
 }
 
@@ -50,11 +53,29 @@ export function SettingsForm({ event }: Props) {
         <div>
           <label className="label" htmlFor="audience">When published, who can see it?</label>
           <select className="input" id="audience" name="audience" defaultValue={event.audience}>
-            <option value="invitees">Invitees &amp; code holders</option>
+            <option value="invitees">Guests on this event &amp; code holders</option>
             <option value="family">Whole family (signed in)</option>
             <option value="public">Anyone with the link</option>
           </select>
         </div>
+      </div>
+      <fieldset>
+        <legend className="label">Look of the album, join page and printed cards</legend>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {THEMES.map((t) => (
+            <label key={t.id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-stone-200 p-3 has-[:checked]:border-brand has-[:checked]:ring-2 has-[:checked]:ring-brand/30">
+              <input type="radio" name="theme" value={t.id} defaultChecked={event.theme === t.id} className="sr-only" />
+              <span className="flex shrink-0 overflow-hidden rounded-full border border-stone-300" aria-hidden="true">
+                {t.swatch.map((c) => <span key={c} className="h-6 w-3" style={{ backgroundColor: c }} />)}
+              </span>
+              <span className="text-sm"><b className="block">{t.name}</b><span className="text-stone-500">{t.blurb}</span></span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div>
+        <label className="label" htmlFor="gift_note">Note above your gift links (optional)</label>
+        <textarea className="input" id="gift_note" name="gift_note" rows={2} maxLength={500} defaultValue={event.gift_note} placeholder="Your presence is the greatest gift. If you’d like to help us start our life together…" />
       </div>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" name="chat_enabled" defaultChecked={event.chat_enabled} />

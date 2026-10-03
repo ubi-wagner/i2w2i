@@ -17,7 +17,7 @@ await form.getByLabel('Name').fill(`Nina New ${RUN}`);
 await form.getByLabel('Email').fill(`nina-${RUN}@example.com`);
 await form.getByRole('button', { name: 'Invite' }).click();
 const ninaLink = await form.getByLabel('One-time link').inputValue();
-check(ninaLink.includes('/auth/link?token='), 'host gets a one-time link for the new person');
+check(ninaLink.includes(`/album/${ev.slug}/welcome?token=`), 'host gets a one-time link that opens the event’s own welcome page');
 await form.getByRole('button', { name: 'QR' }).click();
 check(await form.getByLabel('QR code for the link').locator('svg').isVisible(), '…and can show it as a QR to scan in person');
 const [nina] = await db`SELECT platform_role, created_by FROM core.users WHERE email = ${`nina-${RUN}@example.com`}`;
@@ -57,13 +57,17 @@ await holly.locator('li', { hasText: `nina-${RUN}@example.com` }).getByRole('but
 const reset = await holly.locator('li', { hasText: `nina-${RUN}@example.com` }).getByLabel('One-time link').inputValue();
 const ninaPhone = await page();
 await ninaPhone.goto(reset);
-await ninaPhone.getByRole('button', { name: 'Continue' }).click();
-await ninaPhone.waitForURL(/\/account\?reset=1/);
-check(!(await ninaPhone.locator('#current').isVisible()), 'after a reset link, no old password is asked for');
+check(await ninaPhone.getByLabel('Choose a new password').isVisible(), 'a reset link opens the event page asking only for a new password');
+await ninaPhone.fill('#password', 'short');
+await ninaPhone.fill('#confirm', 'short');
+await ninaPhone.getByRole('button', { name: 'See the photos' }).click();
+await ninaPhone.getByRole('alert').waitFor();
+check(await ninaPhone.getByRole('button', { name: 'See the photos' }).isVisible(), 'a too-short password is explained and doesn’t use up the link');
 await ninaPhone.fill('#password', 'nina-password-2');
 await ninaPhone.fill('#confirm', 'nina-password-2');
-await ninaPhone.getByRole('button', { name: 'Change password' }).click();
-await ninaPhone.getByText('Password saved.').waitFor();
+await ninaPhone.getByRole('button', { name: 'See the photos' }).click();
+await ninaPhone.waitForURL(`${BASE}/album/${ev.slug}`);
+check(true, 'choosing the password goes straight into the album');
 await login(await page(), `nina-${RUN}@example.com`, 'nina-password-2');
 check(true, 'she signs in with the new password');
 await ninaPage.goto(BASE + '/');
@@ -79,7 +83,13 @@ check(await ninaPhone.locator('#current').isVisible(), 'normal password change a
 // Admin can make a link for anyone (e.g. Fred), from People
 await admin.goto(BASE + '/admin');
 await admin.locator('li.card', { hasText: `fred-${RUN}@example.com` }).getByRole('button', { name: 'New sign-in link' }).click();
-check((await admin.locator('li.card', { hasText: `fred-${RUN}@example.com` }).getByLabel('One-time link').inputValue()).includes('/auth/link?token='), 'admin can make a sign-in link for anyone');
+const fredReset = await admin.locator('li.card', { hasText: `fred-${RUN}@example.com` }).getByLabel('One-time link').inputValue();
+check(fredReset.includes('/auth/link?token='), 'admin can make a sign-in link for anyone');
+const fredPhone = await page();
+await fredPhone.goto(fredReset);
+await fredPhone.getByRole('button', { name: 'Continue' }).click();
+await fredPhone.waitForURL(/\/account\?reset=1/);
+check(!(await fredPhone.locator('#current').isVisible()), 'after the admin’s reset link, no old password is asked for');
 
 // Album card for sharing a public album
 await holly.goto(ev.manage);
@@ -99,10 +109,7 @@ await form.getByLabel('Email').fill(`sasha-${RUN}@example.com`);
 await form.getByLabel('Their role').selectOption('owner');
 await form.getByRole('button', { name: 'Invite' }).click();
 const sasha = await acceptInvite(await form.getByLabel('One-time link').inputValue(), 'sasha-password-1');
-check(await sasha.getByRole('link', { name: 'Continue →' }).isVisible(), 'the co-host gets a Continue button after choosing a password');
-await sasha.getByRole('link', { name: 'Continue →' }).click();
-await sasha.waitForURL(`${BASE}/album/${ev.slug}`);
-check(true, '…which takes them straight to the album (their only event)');
+check(sasha.url() === `${BASE}/album/${ev.slug}`, 'the co-host chooses a password on the event’s page and lands in the album');
 await sasha.getByRole('link', { name: 'Manage' }).click();
 await sasha.waitForURL(ev.manage);
 check(await sasha.getByText('Invite someone by name and email').isVisible(), 'a co-host can open the manage page and invite people');

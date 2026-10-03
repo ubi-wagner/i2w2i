@@ -16,6 +16,7 @@ export interface Album {
   canView: boolean;
   chat: boolean;
   description: string;
+  giftNote: string;
   uploaderName: string | null;
 }
 
@@ -26,11 +27,12 @@ export async function loadAlbum(slug: string): Promise<Album | null> {
   if (!event) return null;
   const { user, guest, ctx } = await albumVisitor(event);
   const facts = await withCtx(ctx, async (tx) => {
-    const [r] = await tx<{ role: MemberRole | null; can_view: boolean; chat_enabled: boolean | null; description: string | null }[]>`
+    const [r] = await tx<{ role: MemberRole | null; can_view: boolean; chat_enabled: boolean | null; description: string | null; gift_note: string | null }[]>`
       SELECT events.member_role(${event.id}) AS role,
              events.can_view_album(${event.id}) AS can_view,
              (SELECT chat_enabled FROM events.events WHERE id = ${event.id}) AS chat_enabled,
-             (SELECT description FROM events.events WHERE id = ${event.id}) AS description`;
+             (SELECT description FROM events.events WHERE id = ${event.id}) AS description,
+             (SELECT gift_note FROM events.events WHERE id = ${event.id}) AS gift_note`;
     return r!;
   });
   const isMember = ctx.admin || facts.role !== null;
@@ -46,6 +48,7 @@ export async function loadAlbum(slug: string): Promise<Album | null> {
     canView: facts.can_view,
     chat: isMember && Boolean(facts.chat_enabled),
     description: facts.description ?? '',
+    giftNote: facts.gift_note ?? '',
     uploaderName: isMember ? user!.display_name : (guest?.display_name ?? null),
   };
 }

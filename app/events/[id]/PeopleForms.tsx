@@ -29,12 +29,13 @@ export function HostInviteForm({ eventId }: { eventId: string }) {
   );
 }
 
-export function SignInLinkButton({ userId }: { userId: string }) {
+export function SignInLinkButton({ userId, eventId }: { userId: string; eventId?: string }) {
   const [state, action, pending] = useActionState<LinkState, FormData>(issueSignInLink, {});
   return (
     <div className="w-full space-y-2">
       <form action={action}>
         <input type="hidden" hidden name="user_id" value={userId} />
+        {eventId && <input type="hidden" hidden name="event_id" value={eventId} />}
         <button className="text-sm text-brand hover:underline" disabled={pending}>New sign-in link</button>
       </form>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}

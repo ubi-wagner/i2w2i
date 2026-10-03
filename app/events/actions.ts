@@ -14,6 +14,8 @@ import { withCtx } from '@/lib/events/db';
 import { userCtx } from '@/lib/events/session';
 import { codeHmac, encryptCode, normalizeCode, qrHash, qrToken } from '@/lib/events/codes';
 import { isValidSlug, slugify } from '@/lib/events/rules';
+import { isTheme } from '@/lib/events/themes';
+import { eventInviteUrl } from '@/lib/events/qr';
 import { defaultLabel, LINK_KINDS, linkUrl, type LinkKind } from '@/lib/events/links';
 import { deleteObject } from '@/lib/storage';
 
@@ -75,17 +77,20 @@ export async function updateEvent(_prev: FormState, form: FormData): Promise<For
   const startsOn = /^\d{4}-\d{2}-\d{2}$/.test(str(form, 'starts_on')) ? str(form, 'starts_on') : null;
   const status = form.get('status') === 'published' ? 'published' : 'draft';
   const audience = ['public', 'family', 'invitees'].includes(str(form, 'audience')) ? str(form, 'audience') : 'invitees';
+  const theme = isTheme(str(form, 'theme')) ? str(form, 'theme') : 'classic';
   const rows = await withCtx(c, (tx) => tx`
     UPDATE events.events
        SET title = ${title}, starts_on = ${startsOn}, location = ${str(form, 'location', 200)},
            description = ${str(form, 'description')}, status = ${status}, audience = ${audience},
            chat_enabled = ${form.get('chat_enabled') === 'on'},
+           theme = ${theme}, gift_note = ${str(form, 'gift_note', 500)},
            published_at = CASE WHEN ${status} = 'published' THEN coalesce(published_at, now()) ELSE published_at END
      WHERE id = ${id}
     RETURNING id`);
   if (!rows.length) return { error: 'Only the event’s owners and curators can change it.' };
-  await audit(user.id, 'events.update', id, { status, audience });
+  await audit(user.id, 'events.update', id, { status, audience, theme });
   revalidatePath(`/events/${id}`);
+  revalidatePath('/album/[slug]', 'page');
   return { message: status === 'published' ? 'Saved. The album is published.' : 'Saved.' };
 }
 
@@ -322,16 +327,25 @@ export async function inviteToEvent(_prev: LinkState, form: FormData): Promise<L
   if (existing && !canIssueLink(user, target)) {
     return { message: `${target.display_name} already has an account and is now on this event. They’ll see it under Events when they sign in.` };
   }
-  return { link: await issueLink(target.id, 'invite'), name: target.display_name };
+  const [ev] = await withCtx(c, (tx) => tx<{ slug: string }[]>`SELECT slug FROM events.events WHERE id = ${id}`);
+  const link = await issueLink(target.id, 'invite');
+  return { link: ev ? eventInviteUrl(link, ev.slug) : link, name: target.display_name };
 }
 
 /** A fresh one-time sign-in link (also the way to reset a forgotten password). */
 export async function issueSignInLink(_prev: LinkState, form: FormData): Promise<LinkState> {
-  const { user } = await ctx();
+  const { user, ctx: c } = await ctx();
   const userId = str(form, 'user_id');
   const [target] = await sql<{ id: string; display_name: string; platform_role: PlatformRole; created_by: string | null; is_active: boolean }[]>`
     SELECT id, display_name, platform_role, created_by, is_active FROM core.users WHERE id = ${userId}`;
   if (!target || !canIssueLink(user, target)) return { error: 'Only Eric can make a sign-in link for this person.' };
   await audit(user.id, 'people.link.issued', target.id);
-  return { link: await issueLink(target.id, 'invite'), name: target.display_name };
+  const link = await issueLink(target.id, 'invite');
+  // From an event's page: the link opens that event's welcome page.
+  const eventId = str(form, 'event_id');
+  if (/^[0-9a-f-]{36}$/.test(eventId)) {
+    const [ev] = await withCtx(c, (tx) => tx<{ slug: string }[]>`SELECT slug FROM events.events WHERE id = ${eventId}`);
+    if (ev) return { link: eventInviteUrl(link, ev.slug), name: target.display_name };
+  }
+  return { link, name: target.display_name };
 }

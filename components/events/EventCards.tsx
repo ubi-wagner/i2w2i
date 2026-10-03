@@ -12,7 +12,7 @@ interface Row {
   uploads: number;
 }
 
-const AUDIENCE = { invitees: 'Invitees', family: 'Family', public: 'Public' } as const;
+const AUDIENCE = { invitees: 'Guests', family: 'Family', public: 'Public' } as const;
 
 /** The events someone is on, newest first; the whole card opens the album. */
 export async function EventCards({ ctx, empty, limit }: { ctx: EventCtx; empty: React.ReactNode; limit?: number }) {
