@@ -18,7 +18,7 @@ check(true, 'right password returns to the page that was asked for');
 
 const admin = await adminPage();
 await admin.goto(BASE + '/');
-check(await admin.getByRole('heading', { name: 'Events' }).isVisible(), 'admin dashboard lists Events');
+check(await admin.getByRole('heading', { name: 'Your events' }).isVisible(), 'admin home lists their events');
 check(!(await admin.getByRole('heading', { name: 'Couples' }).isVisible()), 'the Couples app is invisible without an explicit grant, even to admin');
 check((await (await admin.goto(BASE + '/couples'))?.status()) === 404, 'Couples is a 404 for admin');
 
@@ -31,9 +31,10 @@ await scanner.goto(link);
 check((await scanner.context().cookies()).filter((c) => c.name === 'i2w2i_session').length === 0, 'opening the link (e.g. an email scanner) does not sign anyone in');
 const mae = await acceptInvite(link, 'mae-password-1');
 check(true, 'invited member chooses a password on first sign-in');
+check(await mae.getByRole('link', { name: 'Continue →' }).isVisible(), '…and then gets a Continue link instead of the form again');
 const reuse = await page();
 await reuse.goto(link);
-check(await reuse.getByText('This link has expired').isVisible(), 'invite links work once');
+check(await reuse.getByText('This link has already been used').isVisible(), 'invite links work once');
 await mae.goto(BASE + '/admin');
 check(mae.url() === BASE + '/', 'members cannot open the People page');
 const again = await page();

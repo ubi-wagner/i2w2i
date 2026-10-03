@@ -12,9 +12,9 @@ export function JoinForm({ slug, token }: { slug: string; token?: string }) {
   }, []);
   return (
     <form action={action} className="space-y-4">
-      <input type="hidden" name="slug" value={slug} />
-      {token && <input type="hidden" name="token" value={token} />}
-      <input type="hidden" name="client" value={client} />
+      <input type="hidden" hidden name="slug" value={slug} />
+      {token && <input type="hidden" hidden name="token" value={token} />}
+      <input type="hidden" hidden name="client" value={client} />
       <div>
         <label className="label" htmlFor="name">Your name</label>
         <input className="input" id="name" name="name" autoComplete="name" required maxLength={60} defaultValue={state.name} placeholder="So everyone knows who shared what" />

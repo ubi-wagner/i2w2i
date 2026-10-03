@@ -7,6 +7,8 @@ export function slugify(title: string): string {
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
+    .replace(/['‘’`]/g, '') // Cassie's → cassies, not cassie-s
+    .replace(/&/g, ' and ')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60)

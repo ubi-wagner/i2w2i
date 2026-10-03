@@ -9,7 +9,7 @@ export function HostInviteForm({ eventId }: { eventId: string }) {
   const f = state.fields ?? {};
   return (
     <form action={action} className="space-y-3 rounded-xl bg-stone-50 p-4">
-      <input type="hidden" name="event_id" value={eventId} />
+      <input type="hidden" hidden name="event_id" value={eventId} />
       <p className="font-medium">Invite someone</p>
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
         <input className="input" name="display_name" placeholder="Name" aria-label="Name" required maxLength={80} defaultValue={f.display_name} />
@@ -33,7 +33,7 @@ export function SignInLinkButton({ userId }: { userId: string }) {
   return (
     <div className="w-full space-y-2">
       <form action={action}>
-        <input type="hidden" name="user_id" value={userId} />
+        <input type="hidden" hidden name="user_id" value={userId} />
         <button className="text-sm text-brand hover:underline" disabled={pending}>New sign-in link</button>
       </form>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}

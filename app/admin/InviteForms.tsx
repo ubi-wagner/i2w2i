@@ -55,7 +55,7 @@ export function ResendButton({ userId }: { userId: string }) {
   return (
     <div className="space-y-2">
       <form action={action}>
-        <input type="hidden" name="user_id" value={userId} />
+        <input type="hidden" hidden name="user_id" value={userId} />
         <button className="text-sm text-brand hover:underline" disabled={pending}>New sign-in link</button>
       </form>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}

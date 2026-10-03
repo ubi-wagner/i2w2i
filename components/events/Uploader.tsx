@@ -397,6 +397,18 @@ export function Uploader({ slug, name }: { slug: string; name: string }) {
         </div>
       )}
 
+      {items.some((i) => i.status === 'done') && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="text-sm text-stone-500 underline"
+            // Keep any whose frame is still being saved.
+            onClick={() => setItems((xs) => xs.filter((x) => x.status !== 'done' || (x.overlay ?? null) !== (x.savedOverlay ?? null)))}
+          >
+            Clear finished
+          </button>
+        </div>
+      )}
       {items.length > 0 && (
         <ul className="space-y-2" aria-label="Uploads">
           {items.map((it) => (

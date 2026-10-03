@@ -4,7 +4,9 @@ import { codeHmac, decryptCode, encryptCode, normalizeCode, qrHash, qrToken } fr
 
 describe('slugify', () => {
   it('makes readable URL slugs', () => {
-    expect(slugify("Cassie's Bridal Shower!")).toBe('cassie-s-bridal-shower');
+    expect(slugify("Cassie's Bridal Shower!")).toBe('cassies-bridal-shower');
+    expect(slugify('Cassie’s Bridal Shower')).toBe('cassies-bridal-shower');
+    expect(slugify('Cassie & Jordan')).toBe('cassie-and-jordan');
     expect(slugify('  Café   Reunión 2026 ')).toBe('cafe-reunion-2026');
     expect(isValidSlug(slugify("Cassie's Bridal Shower!"))).toBe(true);
   });

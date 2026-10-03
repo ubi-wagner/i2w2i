@@ -80,6 +80,17 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
   const qrLinks = codes.map((c) => (c.qr_revoked_at ? null : qrLink(event.slug, c.id, c.qr_version)));
   const qrs = await Promise.all(qrLinks.map((l) => (l ? qrSvg(l) : null)));
   const totalBytes = uploads.reduce((n, u) => n + Number(u.size_bytes), 0);
+  const steps = [
+    { href: '#people', label: 'Add the people helping with this event', done: members.length > 1 },
+    { href: '#codes', label: 'Make a guest code and print its QR card', done: codes.length > 0 },
+    { href: '#photos', label: 'Add the first photos from the album page', done: uploads.length > 0 },
+    { href: '#details', label: 'Publish the album when you’re ready', done: event.status === 'published' },
+  ];
+  const sections: [string, string][] = [
+    ['#details', 'Details'], ['#people', 'People'],
+    ...(owner ? ([['#codes', 'Codes & QR'], ['#gifts', 'Gifts']] as [string, string][]) : []),
+    ['#guests', `Guests (${guests.length})`], ['#photos', `Photos (${uploads.length})`], ['#activity', 'Activity'],
+  ];
 
   return (
     <>
@@ -97,7 +108,29 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           <div className="w-full"><CopyText text={albumUrl(event.slug)} label="Copy album link" /></div>
         </div>
 
-        <section className="card space-y-4">
+        {owner && steps.some((st) => !st.done) && (
+          <section className="card space-y-2 border-brand/40 bg-brand-light/40">
+            <h2 className="font-semibold">Getting this album ready</h2>
+            <ol className="space-y-1 text-sm">
+              {steps.map((st) => (
+                <li key={st.href} className={st.done ? 'text-stone-400 line-through' : ''}>
+                  <span className="mr-2">{st.done ? '✓' : '○'}</span>
+                  {st.done ? st.label : <a href={st.href} className="text-brand-dark underline">{st.label}</a>}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        <nav aria-label="Sections" className="sticky top-0 z-20 -mx-4 overflow-x-auto border-b border-stone-200 bg-stone-50/95 px-4 py-2 backdrop-blur">
+          <ul className="flex gap-4 whitespace-nowrap text-sm">
+            {sections.map(([href, label]) => (
+              <li key={href}><a href={href} className="text-stone-600 hover:text-brand">{label}</a></li>
+            ))}
+          </ul>
+        </nav>
+
+        <section id="details" className="scroll-mt-14 card space-y-4">
           <h2 className="text-lg font-semibold">Details &amp; publishing</h2>
           <SettingsForm
             event={{
@@ -108,19 +141,19 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           />
         </section>
 
-        <section className="card space-y-4">
+        <section id="people" className="scroll-mt-14 card space-y-4">
           <h2 className="text-lg font-semibold">People on this event</h2>
           <p className="text-sm text-stone-600">Invitees see the album, add photos and join the group chat. Curators also moderate. Owners also manage people and codes.</p>
           <ul className="divide-y divide-stone-100">
             {members.map((m) => (
               <li key={m.user_id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span>{m.display_name} <span className="text-sm text-stone-500">{m.email}</span></span>
+                <span>{m.display_name}{m.user_id === user.id && <span className="text-stone-500"> (you)</span>} <span className="text-sm text-stone-500">{m.email}</span></span>
                 <span className="flex items-center gap-3 text-sm">
                   <span className="rounded-full bg-stone-100 px-2 py-0.5">{ROLE[m.role as keyof typeof ROLE]}</span>
                   {owner && m.user_id !== user.id && (
                     <form action={removeMember}>
-                      <input type="hidden" name="event_id" value={id} />
-                      <input type="hidden" name="user_id" value={m.user_id} />
+                      <input type="hidden" hidden name="event_id" value={id} />
+                      <input type="hidden" hidden name="user_id" value={m.user_id} />
                       <button className="text-stone-500 hover:underline">Remove</button>
                     </form>
                   )}
@@ -134,7 +167,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           {owner && <HostInviteForm eventId={id} />}
           {owner && (people.length ? (
             <form action={addMember} className="flex flex-wrap items-end gap-2">
-              <input type="hidden" name="event_id" value={id} />
+              <input type="hidden" hidden name="event_id" value={id} />
               <div className="grow">
                 <label className="label" htmlFor="user_id">Or add someone who already has an account</label>
                 <select className="input" id="user_id" name="user_id" required>
@@ -154,7 +187,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
         </section>
 
         {owner && (
-          <section className="card space-y-4">
+          <section id="codes" className="scroll-mt-14 card space-y-4">
             <h2 className="text-lg font-semibold">Guest codes &amp; QR cards</h2>
             <p className="text-sm text-stone-600">
               Guests without an account go to <b>{albumUrl(event.slug)}</b> and type a code, or scan its QR. They give their name and can then add photos (and see the album, if the code allows).
@@ -188,9 +221,9 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                           ['reissue_qr', c.qr_revoked_at ? 'Make a new QR' : 'Replace QR (old cards stop working)'],
                         ].filter((x): x is [string, string] => Boolean(x)).map(([action, label]) => (
                           <form key={action} action={changeAccessCode}>
-                            <input type="hidden" name="event_id" value={id} />
-                            <input type="hidden" name="code_id" value={c.id} />
-                            <input type="hidden" name="action" value={action} />
+                            <input type="hidden" hidden name="event_id" value={id} />
+                            <input type="hidden" hidden name="code_id" value={c.id} />
+                            <input type="hidden" hidden name="action" value={action} />
                             <button className="text-stone-600 hover:underline">{label}</button>
                           </form>
                         ))}
@@ -205,7 +238,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
         )}
 
         {owner && (
-          <section className="card space-y-4">
+          <section id="gifts" className="scroll-mt-14 card space-y-4">
             <h2 className="text-lg font-semibold">Gifts &amp; payments</h2>
             <p className="text-sm text-stone-600">Shown on the album with a QR code each, for Venmo, a registry and the like. Money never passes through i2w2i.</p>
             {links.length > 0 && (
@@ -214,8 +247,8 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                   <li key={l.id} className="flex items-center justify-between gap-3 py-2">
                     <span><b>{l.label}</b> <a className="text-brand underline" href={l.url} target="_blank" rel="noopener noreferrer">{l.url}</a></span>
                     <form action={removeLink}>
-                      <input type="hidden" name="event_id" value={id} />
-                      <input type="hidden" name="link_id" value={l.id} />
+                      <input type="hidden" hidden name="event_id" value={id} />
+                      <input type="hidden" hidden name="link_id" value={l.id} />
                       <button className="text-stone-500 hover:underline">Remove</button>
                     </form>
                   </li>
@@ -226,7 +259,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           </section>
         )}
 
-        <section className="card space-y-4">
+        <section id="guests" className="scroll-mt-14 card space-y-4">
           <h2 className="text-lg font-semibold">Guests ({guests.length})</h2>
           {guests.length === 0 ? (
             <p className="text-sm text-stone-600">No guests have joined with a code or QR yet.</p>
@@ -251,8 +284,8 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
                     </div>
                     {!g.revoked_at && (
                       <form action={removeGuest} className="flex items-center gap-2">
-                        <input type="hidden" name="event_id" value={id} />
-                        <input type="hidden" name="guest_id" value={g.id} />
+                        <input type="hidden" hidden name="event_id" value={id} />
+                        <input type="hidden" hidden name="guest_id" value={g.id} />
                         <label className="flex items-center gap-1 text-stone-600"><input type="checkbox" name="hide_uploads" /> hide their uploads</label>
                         <button className="text-red-700 hover:underline">Remove</button>
                       </form>
@@ -264,7 +297,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           )}
         </section>
 
-        <section className="card space-y-4">
+        <section id="photos" className="scroll-mt-14 card space-y-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-lg font-semibold">Photos &amp; videos</h2>
             <p className="text-sm text-stone-600">{uploads.length} items · {formatBytes(totalBytes)}</p>
@@ -282,11 +315,11 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           </details>
         </section>
 
-        <section className="card space-y-3">
+        <section id="activity" className="scroll-mt-14 card space-y-3">
           <h2 className="text-lg font-semibold">Activity</h2>
           <p className="text-sm text-stone-600">Everything people did on this event, newest first, with the device and network it came from.</p>
           <div className="max-h-96 overflow-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[40rem] text-left text-xs">
               <thead className="sticky top-0 bg-white text-stone-500">
                 <tr><th className="py-1 pr-3">When</th><th className="pr-3">Who</th><th className="pr-3">What</th><th className="pr-3">Device</th><th>IP</th></tr>
               </thead>

@@ -8,7 +8,7 @@ export function CodeForm({ eventId }: { eventId: string }) {
   const f = state.fields ?? {};
   return (
     <form action={action} className="space-y-3 rounded-xl bg-stone-50 p-4">
-      <input type="hidden" name="event_id" value={eventId} />
+      <input type="hidden" hidden name="event_id" value={eventId} />
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="label" htmlFor="code">Code people type</label>

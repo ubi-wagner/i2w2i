@@ -95,12 +95,21 @@ export default async function AlbumPage({ params, searchParams }: Params) {
       <nav className="flex items-center justify-between text-sm">
         <Link href={album.user ? '/' : `/album/${slug}`} className="font-bold text-brand">i2w2i</Link>
         <div className="flex items-center gap-3 text-stone-600">
-          {album.canManage && <Link href={`/events/${event.id}`} className="hover:underline">Manage</Link>}
-          {album.guest && !album.isMember && (
-            <form action={leaveAlbum}>
-              <input type="hidden" name="slug" value={slug} />
-              <button className="hover:underline">Not {album.guest.display_name}?</button>
+          {album.canManage && <Link href={`/events/${event.id}`} className="font-medium text-brand hover:underline">Manage</Link>}
+          {album.user ? (
+            <>
+              <Link href="/events" className="hover:underline">Events</Link>
+              <Link href="/account" className="hover:underline">{album.user.display_name.split(' ')[0]}</Link>
+              <form action="/auth/logout" method="post"><button className="hover:underline">Sign out</button></form>
+            </>
+          ) : album.guest ? (
+            <form action={leaveAlbum} className="flex items-center gap-2">
+              <input type="hidden" hidden name="slug" value={slug} />
+              <span>{album.guest.display_name}</span>
+              <button className="underline">Not you?</button>
             </form>
+          ) : (
+            <Link href={`/login?next=/album/${slug}`} className="hover:underline">Sign in</Link>
           )}
         </div>
       </nav>

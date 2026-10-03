@@ -30,8 +30,8 @@ export function LoginForm({ next, emailEnabled }: { next: string; emailEnabled: 
       </div>}
 
       <form action={mode === 'password' ? pwAction : linkAction} className="space-y-4">
-        <input type="hidden" name="next" value={next} />
-        <input type="hidden" name="client" value={client} />
+        <input type="hidden" hidden name="next" value={next} />
+        <input type="hidden" hidden name="client" value={client} />
         <div>
           <label className="label" htmlFor="email">Email</label>
           <input className="input" id="email" name="email" type="email" autoComplete="email" required defaultValue={state.email} />

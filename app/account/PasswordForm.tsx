@@ -1,10 +1,19 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState } from 'react';
 import { setPassword, type FormState } from './actions';
 
 export function PasswordForm({ hasPassword, needCurrent }: { hasPassword: boolean; needCurrent: boolean }) {
   const [state, action, pending] = useActionState<FormState, FormData>(setPassword, {});
+  if (state.continueTo) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-green-700" role="status">{state.message} Next time, sign in with your email and this password.</p>
+        <Link href={state.continueTo} className="btn">Continue →</Link>
+      </div>
+    );
+  }
   return (
     <form action={action} className="space-y-4">
       {needCurrent && (

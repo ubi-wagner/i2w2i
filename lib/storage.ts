@@ -71,10 +71,11 @@ function localSig(op: LocalOp, key: string, exp: number, extra = ''): string {
   return createHmac('sha256', localSecret).update(`${op}\n${key}\n${exp}\n${extra}`).digest('base64url');
 }
 
-function localUrl(op: LocalOp, key: string, ttl: number, contentType?: string, part?: { uploadId: string; n: number }, from?: Date): string {
+function localUrl(op: LocalOp, key: string, ttl: number, contentType?: string, part?: { uploadId: string; n: number }, from?: Date, version?: string): string {
   const exp = Math.floor((from?.getTime() ?? Date.now()) / 1000) + ttl;
-  const extra = part ? `${part.uploadId}:${part.n}` : '';
+  const extra = part ? `${part.uploadId}:${part.n}` : version ? `v:${version}` : '';
   const q = new URLSearchParams({ op, key, exp: String(exp), sig: localSig(op, key, exp, extra) });
+  if (version) q.set('v', version);
   if (contentType) q.set('ct', contentType);
   if (part) {
     q.set('uid', part.uploadId);
@@ -87,7 +88,7 @@ function localUrl(op: LocalOp, key: string, ttl: number, contentType?: string, p
 export function verifyLocal(op: LocalOp, q: URLSearchParams): string | null {
   const key = q.get('key') ?? '';
   const exp = Number(q.get('exp'));
-  const extra = op === 'part' ? `${q.get('uid')}:${q.get('n')}` : '';
+  const extra = op === 'part' ? `${q.get('uid')}:${q.get('n')}` : q.get('v') ? `v:${q.get('v')}` : '';
   const sig = Buffer.from(q.get('sig') ?? '');
   const want = Buffer.from(localSig(op, key, exp, extra));
   if (q.get('op') !== op || !Number.isFinite(exp) || exp < Date.now() / 1000) return null;
@@ -125,16 +126,22 @@ export async function uploadUrl(key: string, contentType: string): Promise<strin
   });
 }
 
-/** A short-lived URL to view or download an object. */
-export async function viewUrl(key: string, downloadName?: string): Promise<string> {
+/**
+ * A short-lived URL to view or download an object. `version` changes the URL
+ * when an object is rewritten in place (a re-decorated preview), so phones
+ * don't keep showing the cached old one.
+ */
+export async function viewUrl(key: string, downloadName?: string, version?: string): Promise<string> {
   const from = viewWindowStart();
-  if (storageDriver === 'local') return localUrl('get', key, VIEW_URL_TTL, undefined, undefined, from);
+  if (storageDriver === 'local') return localUrl('get', key, VIEW_URL_TTL, undefined, undefined, from, version);
   return getSignedUrl(
     s3(),
     new GetObjectCommand({
       Bucket: BUCKET,
       Key: key,
-      ResponseContentDisposition: downloadName ? `attachment; filename="${downloadName.replace(/["\\\r\n]/g, '_')}"` : undefined,
+      ResponseContentDisposition: downloadName
+        ? `attachment; filename="${downloadName.replace(/["\\\r\n]/g, '_')}"`
+        : version ? `inline; filename="v${version}.jpg"` : undefined,
     }),
     { expiresIn: VIEW_URL_TTL, signingDate: from },
   );

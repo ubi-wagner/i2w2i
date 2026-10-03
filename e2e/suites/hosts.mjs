@@ -70,7 +70,7 @@ await ninaPage.goto(BASE + '/');
 check(ninaPage.url().includes('/login'), 'resetting signed out her other devices');
 const reuse = await page();
 await reuse.goto(reset);
-check(await reuse.getByText('This link has expired').isVisible(), 'reset links work once');
+check(await reuse.getByText('This link has already been used').isVisible(), 'reset links work once');
 
 // Without a fresh link, changing the password still needs the old one
 await ninaPhone.goto(BASE + '/account');
