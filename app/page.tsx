@@ -29,7 +29,7 @@ export default async function Dashboard() {
             <EventCards
               ctx={userCtx(user)}
               limit={6}
-              empty={<div className="card text-stone-600">{canCreate ? 'No events yet. Create the first one.' : 'You haven’t been added to any events yet.'}</div>}
+              empty={<div className="card text-stone-600">{canCreate ? 'No events yet. Create the first one.' : 'You’re not on any events yet.'}</div>}
             />
           </section>
         )}

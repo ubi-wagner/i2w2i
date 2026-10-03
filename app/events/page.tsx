@@ -19,7 +19,7 @@ export default async function EventsHome() {
         </div>
         <EventCards
           ctx={userCtx(user)}
-          empty={<div className="card text-stone-600">{canCreate ? 'No events yet. Create the first one.' : 'You haven’t been added to any events yet.'}</div>}
+          empty={<div className="card text-stone-600">{canCreate ? 'No events yet. Create the first one.' : 'You’re not on any events yet.'}</div>}
         />
         <EventCards ctx={userCtx(user)} shared empty={null} heading={<h2 className="pt-6 text-lg font-semibold">Family albums</h2>} />
       </main>
