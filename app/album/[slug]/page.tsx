@@ -88,6 +88,7 @@ export default async function AlbumPage({ params, searchParams }: Params) {
   // Hidden items only reach managers; keep them out of the public grid here too.
   const visible = rows.filter((r) => !r.hidden);
   const items = await toGallery(visible, album.ctx, { originals: album.canManage });
+  const waiting = items.filter((i) => i.pending && i.mine).length;
 
   const { page } = album;
   const actions = ([
@@ -135,12 +136,17 @@ export default async function AlbumPage({ params, searchParams }: Params) {
 
         {album.canUpload && album.uploaderName && (
           <section className="mx-auto max-w-xl">
-            <Uploader slug={slug} name={album.uploaderName} />
+            <Uploader slug={slug} name={album.uploaderName} reviewed={!album.canManage} />
           </section>
         )}
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">{album.canView ? 'Album' : 'Your uploads'}</h2>
+          {waiting > 0 && !album.canManage && (
+            <p className="rounded-xl bg-brand-light px-4 py-3 text-sm text-brand-dark">
+              {waiting === 1 ? 'Your photo is' : `${waiting} of your photos are`} waiting for the hosts. Only you and they can see {waiting === 1 ? 'it' : 'them'} until they add {waiting === 1 ? 'it' : 'them'} to the album.
+            </p>
+          )}
           <Gallery
             items={items}
             downloadUrl={`/album/${slug}/api/download`}

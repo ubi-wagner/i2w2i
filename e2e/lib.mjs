@@ -171,3 +171,17 @@ export async function storedSha(filename, uploader) {
 }
 
 export const sha = (buf) => createHash('sha256').update(buf).digest('hex');
+
+/**
+ * A host approves everything waiting, from the manage page. Uploads can only
+ * be approved once their upload links have expired (10 minutes); tests
+ * fast-forward that in the database rather than wait.
+ */
+export async function approveAll(host, ev) {
+  await db`UPDATE events.uploads SET writable_until = now() - interval '1 second' WHERE event_id = ${ev.id} AND writable_until > now()`;
+  await host.goto(ev.manage);
+  const review = host.locator('#review');
+  if (!(await review.count())) return;
+  await review.getByRole('button', { name: /^Approve (all|\d+)/ }).click();
+  await review.waitFor({ state: 'detached' });
+}

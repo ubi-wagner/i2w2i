@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { RUN, adminPage, check, createCode, createEvent, finish, fixture, joinWithCode, phonePage, tiles, uploadFiles } from '../lib.mjs';
+import { RUN, adminPage, approveAll, check, createCode, createEvent, finish, fixture, joinWithCode, phonePage, tiles, uploadFiles } from '../lib.mjs';
 
 const tmp = mkdtempSync(join(tmpdir(), 'i2w2i-e2e-'));
 const slug = `select-${RUN}`;
@@ -17,6 +17,7 @@ await uploadFiles(gina, [fixture('landscape-gps.jpg'), fixture('portrait.jpg')])
 const hal = await phonePage('pixel');
 await joinWithCode(hal, slug, 'Hal', 'SEL1');
 await uploadFiles(hal, [fixture('portrait.jpg'), fixture('clip.mp4')]);
+await approveAll(host, ev);
 await gina.reload();
 
 const unzip = async (dl, name) => {

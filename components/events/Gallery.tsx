@@ -22,14 +22,20 @@ interface Props {
   };
   /** Album slug: shows comments in the lightbox. */
   commentsSlug?: string;
+  /** Items leave this list once approved (the review queue): stay put after approving. */
+  reviewQueue?: boolean;
 }
 
 function dayLabel(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug }: Props) {
+export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, reviewQueue = false }: Props) {
   const [open, setOpen] = useState<number | null>(null);
+  // The list can shrink under an open photo (approved out of the review queue, deleted).
+  useEffect(() => {
+    if (open !== null && open >= items.length) setOpen(items.length ? items.length - 1 : null);
+  }, [open, items.length]);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -131,6 +137,7 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug }:
               )}
               {moderation?.bulkAction && (
                 <>
+                  <button type="button" className="btn-secondary border-green-700 py-1 text-green-800" disabled={busy || !selected.size} onClick={() => bulk('approve')}>Approve</button>
                   <button type="button" className="btn-secondary py-1" disabled={busy || !selected.size} onClick={() => bulk('hide')}>Hide</button>
                   <button type="button" className="btn-secondary py-1" disabled={busy || !selected.size} onClick={() => bulk('show')}>Show</button>
                   <button type="button" className="btn-secondary py-1" disabled={busy || !selected.size} onClick={() => bulk('feature')}>Star</button>
@@ -201,6 +208,11 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug }:
                   )}
                   {it.featured && <span className="absolute left-1 top-1 rounded bg-brand px-1 text-xs text-white">★</span>}
                   {it.hidden && !selecting && <span className="absolute right-1 top-1 rounded bg-stone-800 px-1 text-xs text-white">Hidden</span>}
+                  {it.pending && (
+                    <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-amber-400 px-1 text-xs font-medium text-amber-950">
+                      {moderation ? (it.reviewInMinutes ? `OK in ${it.reviewInMinutes} min` : 'Needs OK') : 'Waiting'}
+                    </span>
+                  )}
                   {it.comments > 0 && !selecting && (
                     <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-xs text-white">💬 {it.comments}</span>
                   )}
@@ -243,13 +255,20 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug }:
                 </dl>
               </details>
             )}
+            {item.pending && !moderation && (
+              <p className="px-4 text-center text-sm text-amber-200">Only you and the hosts can see this until they add it to the album.</p>
+            )}
             {commentsSlug && <Comments slug={commentsSlug} uploadId={item.id} />}
             <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 px-3 pb-3 text-sm">
               <button type="button" disabled={open === 0} onClick={() => setOpen((i) => (i ?? 1) - 1)} className="px-2 py-1 disabled:opacity-30">← Prev</button>
               {item.originalUrl && <a href={item.originalUrl} className="underline">Download original</a>}
               {moderation && (
                 <>
+                  {item.pending && item.reviewInMinutes > 0 && (
+                    <span className="text-amber-300">Can be approved in {item.reviewInMinutes} min</span>
+                  )}
                   {[
+                    ...(item.pending && !item.reviewInMinutes ? [['approve', 'Approve ✓']] : []),
                     [item.hidden ? 'show' : 'hide', item.hidden ? 'Show' : 'Hide'],
                     [item.featured ? 'unfeature' : 'feature', item.featured ? 'Unstar' : 'Star'],
                     ['delete', 'Delete'],
@@ -259,13 +278,18 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug }:
                       action={async (f) => {
                         if (action === 'delete' && !confirm('Delete this for good?')) return;
                         await moderation.action(f);
-                        setOpen(null);
+                        // Approving moves on to the next one, for quick review. In the
+                        // review queue the approved one leaves the list, so the next
+                        // one slides into this place.
+                        if (action === 'approve' && reviewQueue) return;
+                        if (action === 'approve' && open !== null && open < items.length - 1) setOpen(open + 1);
+                        else setOpen(null);
                       }}
                     >
                       <input type="hidden" hidden name="event_id" value={moderation.eventId} />
                       <input type="hidden" hidden name="upload_id" value={item.id} />
                       <input type="hidden" hidden name="action" value={action} />
-                      <button className={action === 'delete' ? 'text-red-300 underline' : 'underline'}>{label}</button>
+                      <button className={action === 'delete' ? 'text-red-300 underline' : action === 'approve' ? 'rounded-full bg-green-600 px-3 py-1 font-medium text-white' : 'underline'}>{label}</button>
                     </form>
                   ))}
                 </>

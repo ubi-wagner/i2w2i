@@ -7,6 +7,7 @@ import { fileExtension, uploadKind, uploadProblem } from '@/lib/events/rules';
 import { rateLimit } from '@/lib/rate-limit';
 import { MULTIPART_THRESHOLD, PART_SIZE, partCount } from '@/lib/events/limits';
 import { startMultipart, uploadUrl } from '@/lib/storage';
+import { writableUntil } from '@/lib/events/review';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,9 +40,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
 
   await withCtx(album.ctx, (tx) => tx`
     INSERT INTO events.uploads (id, event_id, uploader_user_id, uploader_guest_id, uploader_name, kind,
-                                content_type, filename, size_bytes, original_key, preview_key, multipart_id)
+                                content_type, filename, size_bytes, original_key, preview_key, multipart_id, writable_until)
     VALUES (${id}, ${album.event.id}, ${album.isMember ? album.user!.id : null}, ${album.isMember ? null : album.guest!.id},
-            ${album.uploaderName}, ${kind}, ${type}, ${filename}, ${size}, ${originalKey}, ${previewKey}, ${multipartId})`);
+            ${album.uploaderName}, ${kind}, ${type}, ${filename}, ${size}, ${originalKey}, ${previewKey}, ${multipartId},
+            ${writableUntil()})`);
 
   await logActivity({
     eventId: album.event.id,

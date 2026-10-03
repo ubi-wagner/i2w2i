@@ -77,7 +77,7 @@ async function api<T>(url: string, body: unknown): Promise<T> {
 const sameFile = (a: { name: string; size: number; type: string }, f: File) =>
   a.size === f.size && (a.name === f.name || a.type === fileType(f));
 
-export function Uploader({ slug, name }: { slug: string; name: string }) {
+export function Uploader({ slug, name, reviewed = false }: { slug: string; name: string; reviewed?: boolean }) {
   const router = useRouter();
   const [items, setItems] = useState<Item[]>([]);
   const itemsRef = useRef<Item[]>([]);
@@ -376,6 +376,7 @@ export function Uploader({ slug, name }: { slug: string; name: string }) {
       <label className="flex cursor-pointer flex-col items-center gap-1 rounded-2xl border-2 border-dashed border-brand/40 bg-brand-light/50 px-4 py-8 text-center hover:border-brand">
         <span className="text-lg font-semibold text-brand-dark">Add photos &amp; videos</span>
         <span className="text-sm text-stone-600">Adding as {name}. Pick as many as you like.</span>
+        {reviewed && <span className="text-xs text-stone-500">The hosts see them first, then add them to the album.</span>}
         <input type="file" accept="image/*,video/*" multiple className="sr-only" onChange={(e) => { pick(e.target.files); e.target.value = ''; }} />
       </label>
 

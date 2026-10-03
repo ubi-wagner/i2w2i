@@ -1,6 +1,6 @@
 // Who sees what, for every kind of visitor, in every album state.
 import {
-  BASE, RUN, acceptInvite, addToEvent, adminPage, check, createCode, createEvent, db, finish, fixture, invite,
+  BASE, RUN, acceptInvite, addToEvent, adminPage, approveAll, check, createCode, createEvent, db, finish, fixture, invite,
   joinWithCode, login, page, phonePage, setAudience, tiles, uploadFiles,
 } from '../lib.mjs';
 
@@ -40,6 +40,23 @@ const bo = await phonePage();
 await joinWithCode(bo, slug, 'Bo Both', `BOTH${RUN}`);
 await uploadFiles(bo, [fixture('clip.mp4')]);
 const anon = await phonePage();
+
+// ── Review: nobody but the uploader and the hosts sees anything until a host approves ──
+const count = async (p) => { await p.goto(`${BASE}/album/${slug}`); await p.waitForLoadState('networkidle'); return tiles(p).count(); };
+check((await count(ivy)) === 2, 'before approval an invitee sees only her own 2 uploads');
+check((await count(bo)) === 1, '…a guest sees only their own');
+check((await count(vic)) === 0, '…a view-only guest sees nothing yet');
+check((await count(cara)) === 4, '…while the host sees all 4');
+check(await bo.getByText('waiting for the hosts').isVisible(), 'guests are told their photos wait for the hosts');
+await cara.goto(ev.manage);
+check(await cara.getByText('4 new photos are waiting for your OK').isVisible(), 'the manage page says what’s waiting');
+check(await cara.locator('#review').getByText(/OK in \d+ min/).first().isVisible() && !(await cara.locator('#review').getByRole('button', { name: /^Approve (all|\d+)/ }).isVisible()),
+  'fresh uploads can’t be approved until their upload links run out');
+await approveAll(cara, ev);
+check((await count(vic)) === 4 && (await count(ivy)) === 4, 'once approved, everyone who can see the album sees them');
+const [{ n: waitingNow }] = await db`SELECT count(*)::int AS n FROM events.uploads WHERE event_id = ${ev.id} AND approved_at IS NULL`;
+check(waitingNow === 0, '…and nothing is left waiting');
+
 const [{ id: someUpload }] = await db`SELECT id FROM events.uploads WHERE event_id = ${ev.id} AND uploader_name LIKE 'Ivy%' LIMIT 1`;
 
 // ── Probe ───────────────────────────────────────────────────────────────────

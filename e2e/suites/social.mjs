@@ -1,5 +1,5 @@
 // Comments on photos and gift links.
-import { BASE, RUN, adminPage, check, createCode, createEvent, finish, fixture, joinWithCode, phonePage, setAudience, tiles, uploadFiles } from '../lib.mjs';
+import { BASE, RUN, adminPage, approveAll, check, createCode, createEvent, finish, fixture, joinWithCode, phonePage, setAudience, tiles, uploadFiles } from '../lib.mjs';
 
 const slug = `social-${RUN}`;
 const host = await adminPage();
@@ -41,6 +41,7 @@ await dialog.getByRole('button', { name: 'Close' }).click();
 await gina.reload();
 check(await gina.getByText('💬 1').isVisible(), 'grid shows the comment count');
 
+await approveAll(host, ev);
 const hal = await phonePage('pixel');
 await joinWithCode(hal, slug, 'Hal', 'SOC1');
 await tiles(hal).first().click();

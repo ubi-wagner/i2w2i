@@ -62,5 +62,11 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
   (`tooManyFailures`/`recordFailure`): a venue shares one Wi-Fi address.
 - **Uploads must survive interruption**: keep the multipart/resume path and
   the IndexedDB queue working; `e2e/suites/uploads.mjs` is the contract.
+- **Uploads are reviewed (migration 008):** nobody but the uploader and the
+  hosts (owners/helpers) sees an upload until a host approves it; hosts' own
+  uploads are approved automatically. An approval covers the exact bytes the
+  host saw: it's only possible once every upload link for it has expired
+  (`writable_until`), and the uploader can't change an approved upload. Never
+  serve an upload to others without going through the uploads RLS policy.
 - **Guests are told** on the join form that name, device and network details
   are recorded. Keep that notice if you change the form.

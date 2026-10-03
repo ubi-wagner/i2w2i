@@ -147,6 +147,15 @@ Phones suspend pages when people switch apps, and venue networks drop.
 - Anyone who can see items can download a selection as a zip, streamed by the server one file at a time. Viewers get gallery copies; managers and the uploader get originals.
 - Managers hide, show, star, unstar or delete in bulk.
 
+### Review before anyone else sees it
+
+Nothing a guest, invitee or family member uploads is shown to anyone but them and the event's hosts (owners and helpers) until a host approves it. This is the uploads RLS policy (migration 008), so it covers the album, the public page, zips, originals and comments alike.
+
+- Hosts' and helpers' own uploads are approved automatically.
+- An approval is for the exact bytes the host looked at. Upload links last 10 minutes (`UPLOAD_URL_TTL`), each one extends `writable_until`, and the database refuses an approval while any link could still change the files. Phones fetch fresh links when one runs out.
+- Once approved, the uploader can't change it (no new frame, caption or gallery copy). Before approval they can; each change restarts the 10 minutes.
+- Hosts see a "waiting for your OK" banner and queue on the manage page (approve one at a time from the photo view, by selection, or all at once), and a count on their event cards. Uploaders see "Waiting" on their own photos.
+
 ### Comments, gifts, frames
 
 - **Comments:** anyone who can see the album can comment (accounts as themselves, guests under their name). Authors and managers remove comments.

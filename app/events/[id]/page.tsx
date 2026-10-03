@@ -10,7 +10,7 @@ import { canManage, canOwn, eventForCtx, GALLERY_SQL_COLUMNS, toGallery, type Up
 import { albumUrl, qrLink, qrSvg } from '@/lib/events/qr';
 import { formatBytes } from '@/lib/events/rules';
 import { userCtx } from '@/lib/events/session';
-import { addMember, changeAccessCode, moderateUpload, moderateUploads, removeGuest, removeLink, removeMember } from '../actions';
+import { addMember, approveAllReady, changeAccessCode, moderateUpload, moderateUploads, removeGuest, removeLink, removeMember } from '../actions';
 import { LinkForm } from './LinkForm';
 import { HostInviteForm, SignInLinkButton } from './PeopleForms';
 import { canIssueLink, type PlatformRole } from '@/lib/access';
@@ -82,6 +82,9 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
   const qrLinks = codes.map((c) => (c.qr_revoked_at ? null : qrLink(event.slug, c.id, c.qr_version)));
   const qrs = await Promise.all(qrLinks.map((l) => (l ? qrSvg(l) : null)));
   const totalBytes = uploads.reduce((n, u) => n + Number(u.size_bytes), 0);
+  // Not yet approved: nobody but the uploader and the hosts sees these.
+  const queue = gallery.filter((g) => g.pending && !g.hidden);
+  const readyNow = queue.filter((g) => !g.reviewInMinutes).length;
   const pg = cleanPage(event.page);
   const steps = [
     { href: '#page', label: 'Make the page yours: look, wording, directions, schedule', done: event.theme !== 'classic' || Boolean(pg.kicker || pg.address || pg.schedule.length) },
@@ -93,6 +96,7 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
   const sections: [string, string][] = [
     ['#page', 'Page'], ['#publishing', 'Publishing'], ['#people', 'People'],
     ...(owner ? ([['#codes', 'Codes & QR'], ['#gifts', 'Gifts']] as [string, string][]) : []),
+    ...(queue.length ? ([['#review', `To review (${queue.length})`]] as [string, string][]) : []),
     ['#guests', `Guests (${guests.length})`], ['#photos', `Photos (${uploads.length})`], ['#activity', 'Activity'],
   ];
 
@@ -111,6 +115,13 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           </div>
           <div className="w-full"><CopyText text={albumUrl(event.slug)} label="Copy album link" /></div>
         </div>
+
+        {queue.length > 0 && (
+          <a href="#review" className="flex items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-amber-950 hover:border-amber-500">
+            <span><b>{queue.length} new {queue.length === 1 ? 'photo is' : 'photos are'} waiting for your OK.</b> Nobody else sees {queue.length === 1 ? 'it' : 'them'} until you approve.</span>
+            <span className="shrink-0 font-medium underline">Review</span>
+          </a>
+        )}
 
         {owner && steps.some((st) => !st.done) && (
           <section className="card space-y-2 border-brand/40 bg-brand-light/40">
@@ -326,6 +337,33 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
             </ul>
           )}
         </section>
+
+        {queue.length > 0 && (
+          <section id="review" className="scroll-mt-14 card space-y-4 border-amber-300">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Waiting for your OK ({queue.length})</h2>
+                <p className="text-sm text-stone-600">Only the person who added each one, and you hosts, can see these. Approve to add them to the album; hide or delete anything that shouldn’t be there.</p>
+              </div>
+              {readyNow > 0 && (
+                <form action={approveAllReady}>
+                  <input type="hidden" hidden name="event_id" value={id} />
+                  <button className="btn bg-green-700 hover:bg-green-800">Approve {readyNow === queue.length ? 'all' : readyNow} {readyNow === 1 ? 'photo' : 'photos'}</button>
+                </form>
+              )}
+            </div>
+            {readyNow < queue.length && (
+              <p className="text-sm text-amber-800">Some are still finishing on the guest’s phone and can be approved in a few minutes.</p>
+            )}
+            <Gallery
+              items={queue}
+              reviewQueue
+              downloadUrl={`/album/${event.slug}/api/download`}
+              moderation={{ eventId: id, action: moderateUpload, bulkAction: moderateUploads }}
+              empty="Nothing waiting."
+            />
+          </section>
+        )}
 
         <section id="photos" className="scroll-mt-14 card space-y-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">

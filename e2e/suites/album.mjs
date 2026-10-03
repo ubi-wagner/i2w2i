@@ -1,7 +1,7 @@
 // The bridal-shower flow: host sets up, guests join by code and QR on phones,
 // a signed-in bridesmaid uploads and chats, the host curates and publishes,
 // and every action is on record with device details.
-import { BASE, RUN, acceptInvite, addToEvent, adminPage, check, createCode, createEvent, db, finish, fixture, invite, joinWithCode, phonePage, setAudience, tiles, uploadFiles } from '../lib.mjs';
+import { BASE, RUN, acceptInvite, addToEvent, adminPage, approveAll, check, createCode, createEvent, db, finish, fixture, invite, joinWithCode, phonePage, setAudience, tiles, uploadFiles } from '../lib.mjs';
 
 const slug = `shower-${RUN}`;
 const host = await adminPage();
@@ -82,8 +82,12 @@ check(details.includes('Apple iPhone 15 Pro') && details.includes('39.96000, -83
 check(/iPhone/.test(details) && /IP address/.test(details) && details.includes('Mystery Guest'), 'photo details show device, IP and other names on that phone');
 await dialog.getByRole('button', { name: 'Close' }).click();
 
-// Publish publicly: anonymous visitors see it, no uploader, no originals
+// Publish publicly: anonymous visitors see it (once the hosts approve), no uploader, no originals
 await setAudience(host, ev, 'published', 'public');
+const early = await phonePage();
+await early.goto(`${BASE}/album/${slug}`);
+check((await tiles(early).count()) === 0, 'public album: nothing shows before the hosts approve it');
+await approveAll(host, ev);
 const anon = await phonePage();
 await anon.goto(`${BASE}/album/${slug}`);
 check((await tiles(anon).count()) === 4 && !(await anon.getByText('Add photos & videos').isVisible()), 'public album: anonymous visitors see it but can’t add');

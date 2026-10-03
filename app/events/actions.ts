@@ -10,7 +10,7 @@ import { issueLink } from '@/lib/auth/links';
 import { sql } from '@/lib/db';
 import { rateLimit } from '@/lib/rate-limit';
 import { logActivity } from '@/lib/events/activity';
-import { withCtx } from '@/lib/events/db';
+import { withCtx, type Tx } from '@/lib/events/db';
 import { userCtx } from '@/lib/events/session';
 import { codeHmac, encryptCode, normalizeCode, qrHash, qrToken } from '@/lib/events/codes';
 import { isValidSlug, slugify } from '@/lib/events/rules';
@@ -210,6 +210,7 @@ export async function moderateUpload(form: FormData): Promise<void> {
     if (action === 'show') await tx`UPDATE events.uploads SET hidden = false WHERE id = ${uploadId}`;
     if (action === 'feature') await tx`UPDATE events.uploads SET featured = true WHERE id = ${uploadId}`;
     if (action === 'unfeature') await tx`UPDATE events.uploads SET featured = false WHERE id = ${uploadId}`;
+    if (action === 'approve') await tx`UPDATE events.uploads SET approved_at = now(), approved_by = ${user.id} WHERE id = ${uploadId} AND ${approvable(tx)}`;
     if (action === 'delete') {
       return tx<{ original_key: string; preview_key: string | null }[]>`
         DELETE FROM events.uploads WHERE id = ${uploadId} RETURNING original_key, preview_key`;
@@ -220,6 +221,7 @@ export async function moderateUpload(form: FormData): Promise<void> {
     await deleteObject(r.original_key).catch(() => {});
     if (r.preview_key) await deleteObject(r.preview_key).catch(() => {});
   }
+  revalidatePath('/album/[slug]', 'page');
   await audit(user.id, `events.upload.${action}`, id, { upload: uploadId });
   await logActivity({ eventId: id, action: `upload.${action}`, userId: user.id, uploadId, actorName: user.display_name });
   revalidatePath(`/events/${id}`);
@@ -240,19 +242,42 @@ export async function removeGuest(form: FormData): Promise<void> {
   revalidatePath(`/events/${id}`);
 }
 
-/** Bulk moderation of selected uploads: hide, show, feature, unfeature or delete. */
+/**
+ * Finished, not yet approved, and no upload link left that could change it
+ * (the database refuses anything else; see migration 008).
+ */
+function approvable(tx: Tx) {
+  return tx`status = 'ready' AND approved_at IS NULL AND (writable_until IS NULL OR writable_until < now())`;
+}
+
+/** Approves everything in the review queue that can be approved now (hosts looked at the grid first). */
+export async function approveAllReady(form: FormData): Promise<void> {
+  const { user, ctx: c } = await ctx();
+  const id = str(form, 'event_id');
+  const rows = await withCtx(c, (tx) => tx<{ id: string }[]>`
+    UPDATE events.uploads SET approved_at = now(), approved_by = ${user.id}
+     WHERE event_id = ${id} AND NOT hidden AND ${approvable(tx)}
+    RETURNING id`);
+  await audit(user.id, 'events.upload.approve_all', id, { count: rows.length });
+  await logActivity({ eventId: id, action: 'upload.bulk_approve', userId: user.id, actorName: user.display_name, detail: { count: rows.length, ids: rows.map((r) => r.id) } });
+  revalidatePath(`/events/${id}`);
+  revalidatePath('/album/[slug]', 'page');
+}
+
+/** Bulk moderation of selected uploads: approve, hide, show, feature, unfeature or delete. */
 export async function moderateUploads(form: FormData): Promise<void> {
   const { user, ctx: c } = await ctx();
   const id = str(form, 'event_id');
   const action = str(form, 'action');
   const ids = form.getAll('upload_id').map(String).filter((v) => /^[0-9a-f-]{36}$/.test(v)).slice(0, 1000);
-  if (!ids.length || !['hide', 'show', 'feature', 'unfeature', 'delete'].includes(action)) return;
+  if (!ids.length || !['approve', 'hide', 'show', 'feature', 'unfeature', 'delete'].includes(action)) return;
   const removed = await withCtx(c, async (tx) => {
     const where = tx`event_id = ${id} AND id = ANY(${ids}::uuid[])`;
     if (action === 'hide') await tx`UPDATE events.uploads SET hidden = true WHERE ${where}`;
     if (action === 'show') await tx`UPDATE events.uploads SET hidden = false WHERE ${where}`;
     if (action === 'feature') await tx`UPDATE events.uploads SET featured = true WHERE ${where}`;
     if (action === 'unfeature') await tx`UPDATE events.uploads SET featured = false WHERE ${where}`;
+    if (action === 'approve') await tx`UPDATE events.uploads SET approved_at = now(), approved_by = ${user.id} WHERE ${where} AND ${approvable(tx)}`;
     if (action === 'delete') {
       return tx<{ id: string; original_key: string; preview_key: string | null }[]>`
         DELETE FROM events.uploads WHERE ${where} RETURNING id, original_key, preview_key`;
@@ -263,6 +288,7 @@ export async function moderateUploads(form: FormData): Promise<void> {
     await deleteObject(r.original_key).catch(() => {});
     if (r.preview_key) await deleteObject(r.preview_key).catch(() => {});
   }
+  revalidatePath('/album/[slug]', 'page');
   await audit(user.id, `events.upload.bulk_${action}`, id, { count: ids.length });
   await logActivity({ eventId: id, action: `upload.bulk_${action}`, userId: user.id, actorName: user.display_name, detail: { count: ids.length, ids } });
   revalidatePath(`/events/${id}`);

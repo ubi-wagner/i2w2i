@@ -10,6 +10,7 @@ interface Row {
   audience: string;
   role: string | null;
   uploads: number;
+  to_review: number;
 }
 
 const AUDIENCE = { invitees: 'Guests', family: 'Family', public: 'Public' } as const;
@@ -18,7 +19,8 @@ const AUDIENCE = { invitees: 'Guests', family: 'Family', public: 'Public' } as c
 export async function EventCards({ ctx, empty, limit }: { ctx: EventCtx; empty: React.ReactNode; limit?: number }) {
   const events = await withCtx(ctx, (tx) => tx<Row[]>`
     SELECT e.id, e.slug, e.title, e.starts_on, e.status, e.audience, events.member_role(e.id) AS role,
-           (SELECT count(*)::int FROM events.uploads u WHERE u.event_id = e.id AND u.status = 'ready' AND NOT u.hidden) AS uploads
+           (SELECT count(*)::int FROM events.uploads u WHERE u.event_id = e.id AND u.status = 'ready' AND NOT u.hidden) AS uploads,
+           (SELECT count(*)::int FROM events.uploads u WHERE u.event_id = e.id AND u.status = 'ready' AND NOT u.hidden AND u.approved_at IS NULL) AS to_review
       FROM events.events e
      WHERE events.is_member(e.id)
      ORDER BY coalesce(e.starts_on, e.created_at::date) DESC
@@ -44,7 +46,14 @@ export async function EventCards({ ctx, empty, limit }: { ctx: EventCtx; empty: 
               {e.starts_on ? e.starts_on.toLocaleDateString(undefined, { timeZone: 'UTC', dateStyle: 'medium' }) : 'No date'} · {e.uploads} photos &amp; videos
             </p>
             {manages && (
-              <Link href={`/events/${e.id}`} className="relative z-10 inline-block text-sm font-medium text-brand hover:underline">Manage</Link>
+              <div className="flex flex-wrap items-center gap-3">
+                <Link href={`/events/${e.id}`} className="relative z-10 inline-block text-sm font-medium text-brand hover:underline">Manage</Link>
+                {e.to_review > 0 && (
+                  <Link href={`/events/${e.id}#review`} className="relative z-10 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-200">
+                    {e.to_review} waiting for your OK
+                  </Link>
+                )}
+              </div>
             )}
           </li>
         );
