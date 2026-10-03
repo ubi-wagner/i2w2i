@@ -25,7 +25,7 @@ export function NewEventForm() {
         <div className="flex items-center gap-1 text-sm text-stone-600">
           <span className="shrink-0">i2w2i.com/album/</span>
           <input
-            className="input" id="slug" name="slug" required pattern="[a-z0-9][a-z0-9-]{1,60}" value={slug}
+            className="input" id="slug" name="slug" required pattern="[a-z0-9][a-z0-9\-]{1,60}" value={slug}
             onChange={(e) => { setTouched(true); setSlug(e.target.value.toLowerCase()); }}
           />
         </div>
@@ -41,12 +41,12 @@ export function NewEventForm() {
         </div>
       </div>
       <div>
-        <label className="label" htmlFor="description">Description</label>
+        <label className="label" htmlFor="description">Welcome message (optional)</label>
         <textarea className="input" id="description" name="description" rows={3} defaultValue={f.description} />
       </div>
       {state.error && <p className="text-sm text-red-600" role="alert">{state.error}</p>}
       <button className="btn" disabled={pending}>Create event</button>
-      <p className="text-xs text-stone-500">It starts as a draft only you can see. You’ll add people, codes and publish it next.</p>
+      <p className="text-xs text-stone-500">It starts as a draft only you can see. Next you’ll pick its look, invite people and make QR cards.</p>
     </form>
   );
 }

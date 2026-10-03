@@ -1,7 +1,7 @@
 // Without email: hosts invite people onto their event and hand out one-time
 // links (as text or QR), which also serve as password resets. Only the admin
 // may issue links for accounts a host didn't create.
-import { BASE, RUN, acceptInvite, adminPage, check, createEvent, db, finish, invite, login, page } from '../lib.mjs';
+import { BASE, RUN, acceptInvite, adminPage, approveAll, check, createCode, createEvent, db, finish, fixture, invite, joinWithCode, login, page, phonePage, setAudience, tiles, uploadFiles } from '../lib.mjs';
 
 const admin = await adminPage();
 const hostLink = await invite(admin, `Holly Host ${RUN}`, `holly-${RUN}@example.com`, 'creator');
@@ -108,7 +108,10 @@ await form.getByLabel('Name').fill(`Sasha Cohost ${RUN}`);
 await form.getByLabel('Email').fill(`sasha-${RUN}@example.com`);
 await form.getByLabel('Their role').selectOption('owner');
 await form.getByRole('button', { name: 'Invite' }).click();
-const sasha = await acceptInvite(await form.getByLabel('One-time link').inputValue(), 'sasha-password-1');
+await form.getByText(`Send Sasha Cohost ${RUN} this link`).waitFor();
+const sashaLink = await form.getByLabel('One-time link').inputValue();
+check(sashaLink !== ninaLink, 'a second invite shows the new person’s link, never the previous one');
+const sasha = await acceptInvite(sashaLink, 'sasha-password-1');
 check(sasha.url() === `${BASE}/album/${ev.slug}`, 'the co-host chooses a password on the event’s page and lands in the album');
 await sasha.getByRole('link', { name: 'Manage' }).click();
 await sasha.waitForURL(ev.manage);
@@ -120,4 +123,30 @@ await fredOnSasha.getByRole('button', { name: 'Save' }).click();
 await sasha.waitForLoadState('networkidle');
 const [fredRole] = await db`SELECT m.role FROM events.members m JOIN core.users u ON u.id = m.user_id WHERE m.event_id = ${ev.id} AND u.email = ${`fred-${RUN}@example.com`}`;
 check(fredRole?.role === 'curator', 'a co-host can change someone’s role on the event');
+// …and, though only a family-member account, re-link people she invited (a lost password)
+const sform = sasha.locator('form', { has: sasha.getByText('Invite someone by name and email', { exact: true }) });
+await sform.getByLabel('Name').fill(`Pia ${RUN}`);
+await sform.getByLabel('Email').fill(`pia-${RUN}@example.com`);
+await sform.getByRole('button', { name: 'Invite' }).click();
+await sform.getByText(`Send Pia ${RUN} this link`).waitFor();
+await sasha.reload();
+const piaRow = sasha.locator('li', { hasText: `pia-${RUN}@example.com` });
+await piaRow.getByRole('button', { name: 'New sign-in link' }).click();
+check((await piaRow.getByLabel('One-time link').inputValue()).includes('/welcome?token='), 'a co-host who is a family member can make a new sign-in link for someone she invited');
+check(!(await sasha.locator('li', { hasText: `fred-${RUN}@example.com` }).getByRole('button', { name: 'New sign-in link' }).isVisible()), '…but not for anyone else');
+
+// The co-host runs the day: makes a table code, approves a guest's photo and publishes the album
+await createCode(sasha, ev, `TBL${RUN}`.slice(0, 12).toUpperCase());
+check(true, 'a co-host makes a table code and QR card');
+const tableGuest = await phonePage();
+await joinWithCode(tableGuest, ev.slug, 'Table Guest', `TBL${RUN}`.slice(0, 12));
+await uploadFiles(tableGuest, [fixture('portrait.jpg')]);
+await setAudience(sasha, ev, 'published', 'public');
+check(true, 'a co-host publishes the album');
+const outsider = await page();
+await outsider.goto(`${BASE}/album/${ev.slug}`);
+check((await tiles(outsider).count()) === 0, 'the guest’s photo stays private until a host approves it');
+await approveAll(sasha, ev);
+await outsider.reload();
+check((await tiles(outsider).count()) === 1, 'the co-host approves it and the public album shows it');
 await finish();

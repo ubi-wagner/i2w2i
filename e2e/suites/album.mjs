@@ -84,6 +84,7 @@ await dialog.getByRole('button', { name: 'Close' }).click();
 
 // Publish publicly: anonymous visitors see it (once the hosts approve), no uploader, no originals
 await setAudience(host, ev, 'published', 'public');
+check((await host.inputValue('#status')) === 'published' && (await host.inputValue('#audience')) === 'public', 'after saving, the publishing form shows what was saved');
 const early = await phonePage();
 await early.goto(`${BASE}/album/${slug}`);
 check((await tiles(early).count()) === 0, 'public album: nothing shows before the hosts approve it');

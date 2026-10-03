@@ -67,9 +67,15 @@ describe('canIssueLink', () => {
     expect(canIssueLink(host, { id: 'a', platform_role: 'admin', created_by: 'h', is_active: true })).toBe(false);
     expect(canIssueLink(host, { id: 'c', platform_role: 'creator', created_by: 'h', is_active: true })).toBe(false);
   });
-  it('never for yourself, never for deactivated accounts, never by members', () => {
+  it('lets a co-host who is a family member issue links for people they invited, and nobody else', () => {
+    const cohost = { id: 'x', platform_role: 'member' as const };
+    expect(canIssueLink(cohost, member('x'))).toBe(true);
+    expect(canIssueLink(cohost, member('someone-else'))).toBe(false);
+    expect(canIssueLink(cohost, member(null))).toBe(false);
+  });
+  it('never for yourself, never for deactivated accounts', () => {
     expect(canIssueLink(admin, { id: 'a', platform_role: 'admin', created_by: null, is_active: true })).toBe(false);
     expect(canIssueLink(admin, member(null, { is_active: false }))).toBe(false);
-    expect(canIssueLink({ id: 'x', platform_role: 'member' }, member('x'))).toBe(false);
+    expect(canIssueLink(host, member('h', { is_active: false }))).toBe(false);
   });
 });

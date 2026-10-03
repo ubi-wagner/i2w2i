@@ -33,6 +33,15 @@ export default async function Dashboard() {
             />
           </section>
         )}
+        {hasEvents && (
+          <EventCards
+            ctx={userCtx(user)}
+            shared
+            limit={6}
+            empty={null}
+            heading={<h2 className="text-lg font-semibold">Family albums</h2>}
+          />
+        )}
         {others.length > 0 && (
           <section className="space-y-3">
             <h2 className="text-lg font-semibold">Apps</h2>

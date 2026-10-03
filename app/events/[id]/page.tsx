@@ -52,7 +52,8 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
     members: await tx<Member[]>`
       SELECT m.user_id, m.role, u.display_name, u.email, u.platform_role, u.created_by, u.is_active
         FROM events.members m JOIN core.users u ON u.id = m.user_id
-       WHERE m.event_id = ${id} ORDER BY m.role, u.display_name`,
+       WHERE m.event_id = ${id}
+       ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'curator' THEN 1 ELSE 2 END, u.display_name`,
     people: await tx<Person[]>`
       SELECT u.id, u.display_name, u.email FROM core.users u
        WHERE u.is_active AND NOT EXISTS (SELECT 1 FROM events.members m WHERE m.event_id = ${id} AND m.user_id = u.id)

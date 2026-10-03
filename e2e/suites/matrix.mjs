@@ -119,6 +119,9 @@ for (const [state, status, audience] of [['draft', 'draft', 'invitees'], ['invit
   check((await comment(uma)) === (state === 'public' ? 200 : 403), `[${state}] upload-only guest comments only when the album is public`);
   check((await comment(vic)) === 200, `[${state}] view-only guest can comment`);
   check((await chat(ivy)) === 200 && (await chat(bo)) === 403 && (await chat(fay)) === 403, `[${state}] chat is for event members only`);
+  await fay.goto(`${BASE}/`);
+  const listed = await fay.locator('section', { has: fay.getByRole('heading', { name: 'Family albums' }) }).getByRole('link', { name: `Matrix ${RUN}` }).isVisible();
+  check(listed === (state === 'family' || state === 'public'), `[${state}] family member ${listed ? 'finds' : 'doesn’t see'} the album on their home page`);
 }
 
 // ── Management rights ──────────────────────────────────────────────────────

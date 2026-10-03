@@ -14,7 +14,7 @@ export async function GiftLinks({ links, note, bare = false }: { links: LinkRow[
   if (!links.length) return null;
   const qrs = await Promise.all(links.map((l) => qrSvg(l.url)));
   const list = (
-    <ul className={`grid gap-3 ${bare ? '' : 'sm:grid-cols-2'}`}>
+    <ul className={`grid gap-3 ${bare ? '' : links.length === 1 ? 'mx-auto max-w-md' : 'sm:grid-cols-2'}`}>
       {links.map((l, i) => (
         <li key={l.id} className="card flex items-center gap-4 p-4">
           <div className="h-24 w-24 shrink-0 rounded-lg p-1.5 [&_svg]:h-full [&_svg]:w-full" style={{ backgroundColor: '#fff' }} dangerouslySetInnerHTML={{ __html: qrs[i]! }} />

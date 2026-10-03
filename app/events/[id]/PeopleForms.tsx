@@ -22,7 +22,8 @@ export function HostInviteForm({ eventId }: { eventId: string }) {
       </div>
       {state.error && <p className="text-sm text-red-600" role="alert">{state.error}</p>}
       {state.message && <p className="text-sm text-green-700" role="status">{state.message}</p>}
-      {state.link && <LinkShare link={state.link} name={state.name} />}
+      {/* Gone while the next invite saves, so nobody copies the previous person's link. */}
+      {state.link && !pending && <LinkShare link={state.link} name={state.name} />}
       <button className="btn" disabled={pending}>Invite</button>
       <p className="text-xs text-stone-500">You’ll get a link to text them. They tap it once and choose a password. Their email is just their username; nothing is emailed.</p>
     </form>
@@ -39,7 +40,7 @@ export function SignInLinkButton({ userId, eventId }: { userId: string; eventId?
         <button className="text-sm text-brand hover:underline" disabled={pending}>New sign-in link</button>
       </form>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-      {state.link && <LinkShare link={state.link} name={state.name} note={`For ${state.name}: signs them in once (within 7 days) so they can choose a new password.`} />}
+      {state.link && !pending && <LinkShare link={state.link} name={state.name} note={`For ${state.name}: signs them in once (within 7 days) so they can choose a new password.`} />}
     </div>
   );
 }

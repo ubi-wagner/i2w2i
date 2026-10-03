@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { EventHero, ThemeFrame } from '@/components/events/ThemeFrame';
 import { peekLink } from '@/lib/auth/links';
+import { cleanPage } from '@/lib/events/page';
 import { publicEvent } from '@/lib/events/session';
 import { UsedLink, WelcomeForm } from './WelcomeForm';
 
@@ -20,7 +21,7 @@ export default async function EventWelcome({ params, searchParams }: { params: P
   return (
     <ThemeFrame theme={event.theme}>
       <main className="mx-auto max-w-md space-y-6 px-4 py-10">
-        <EventHero theme={event.theme} title={event.title} startsOn={event.starts_on} location={event.location} />
+        <EventHero theme={event.theme} title={event.title} startsOn={event.starts_on} location={event.location} lines={cleanPage(event.page_public)} />
         <div className="card space-y-4 text-center">
           {link && token ? (
             <>
