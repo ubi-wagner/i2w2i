@@ -21,6 +21,8 @@ export interface PublicEvent {
   status: 'draft' | 'published';
   audience: 'public' | 'family' | 'invitees';
   theme: ThemeId;
+  /** Invitation wording only (see PUBLIC_PAGE_KEYS); clean with cleanPage. */
+  page_public: unknown;
 }
 
 export interface Guest {

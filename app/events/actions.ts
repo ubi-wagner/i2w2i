@@ -15,6 +15,7 @@ import { userCtx } from '@/lib/events/session';
 import { codeHmac, encryptCode, normalizeCode, qrHash, qrToken } from '@/lib/events/codes';
 import { isValidSlug, slugify } from '@/lib/events/rules';
 import { isTheme } from '@/lib/events/themes';
+import { cleanPage } from '@/lib/events/page';
 import { eventInviteUrl } from '@/lib/events/qr';
 import { defaultLabel, LINK_KINDS, linkUrl, type LinkKind } from '@/lib/events/links';
 import { deleteObject } from '@/lib/storage';
@@ -69,29 +70,59 @@ export async function createEvent(_prev: FormState, form: FormData): Promise<For
   redirect(`/events/${id}`);
 }
 
+/** Publishing: who sees the album, and whether there's a group chat. */
 export async function updateEvent(_prev: FormState, form: FormData): Promise<FormState> {
   const { user, ctx: c } = await ctx();
   const id = str(form, 'event_id');
-  const title = str(form, 'title', 120);
-  if (!title) return { error: 'The event needs a name.' };
-  const startsOn = /^\d{4}-\d{2}-\d{2}$/.test(str(form, 'starts_on')) ? str(form, 'starts_on') : null;
   const status = form.get('status') === 'published' ? 'published' : 'draft';
   const audience = ['public', 'family', 'invitees'].includes(str(form, 'audience')) ? str(form, 'audience') : 'invitees';
-  const theme = isTheme(str(form, 'theme')) ? str(form, 'theme') : 'classic';
   const rows = await withCtx(c, (tx) => tx`
     UPDATE events.events
-       SET title = ${title}, starts_on = ${startsOn}, location = ${str(form, 'location', 200)},
-           description = ${str(form, 'description')}, status = ${status}, audience = ${audience},
-           chat_enabled = ${form.get('chat_enabled') === 'on'},
-           theme = ${theme}, gift_note = ${str(form, 'gift_note', 500)},
+       SET status = ${status}, audience = ${audience}, chat_enabled = ${form.get('chat_enabled') === 'on'},
            published_at = CASE WHEN ${status} = 'published' THEN coalesce(published_at, now()) ELSE published_at END
      WHERE id = ${id}
     RETURNING id`);
-  if (!rows.length) return { error: 'Only the event’s owners and curators can change it.' };
-  await audit(user.id, 'events.update', id, { status, audience, theme });
+  if (!rows.length) return { error: 'Only the event’s hosts and helpers can change it.' };
+  await audit(user.id, 'events.update', id, { status, audience });
   revalidatePath(`/events/${id}`);
   revalidatePath('/album/[slug]', 'page');
   return { message: status === 'published' ? 'Saved. The album is published.' : 'Saved.' };
+}
+
+export interface PageInput {
+  eventId: string;
+  title: string;
+  startsOn: string;
+  location: string;
+  description: string;
+  theme: string;
+  giftNote: string;
+  page: unknown;
+}
+
+/** Everything guests see on the event's pages, saved together from the page editor. */
+export async function updatePage(input: PageInput): Promise<FormState> {
+  const { user, ctx: c } = await ctx();
+  const clip = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const id = clip(input?.eventId, 40);
+  const title = clip(input?.title, 120);
+  if (!/^[0-9a-f-]{36}$/.test(id)) return { error: 'Something went wrong. Reload and try again.' };
+  if (!title) return { error: 'The event needs a name.' };
+  const startsOn = /^\d{4}-\d{2}-\d{2}$/.test(clip(input.startsOn, 10)) ? clip(input.startsOn, 10) : null;
+  const theme = isTheme(input.theme) ? input.theme : 'classic';
+  const page = cleanPage(input.page);
+  const rows = await withCtx(c, (tx) => tx`
+    UPDATE events.events
+       SET title = ${title}, starts_on = ${startsOn}, location = ${clip(input.location, 200)},
+           description = ${clip(input.description, 2000)}, theme = ${theme}, gift_note = ${clip(input.giftNote, 500)},
+           page = ${tx.json(page as unknown as Parameters<typeof tx.json>[0])}
+     WHERE id = ${id}
+    RETURNING id`);
+  if (!rows.length) return { error: 'Only the event’s hosts and helpers can change its page.' };
+  await audit(user.id, 'events.page', id, { theme });
+  revalidatePath(`/events/${id}`);
+  revalidatePath('/album/[slug]', 'page');
+  return { message: 'Saved. Guests see it now.' };
 }
 
 export async function addMember(form: FormData): Promise<void> {

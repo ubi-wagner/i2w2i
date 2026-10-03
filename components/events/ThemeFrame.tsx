@@ -2,6 +2,7 @@ import '@fontsource/cormorant-garamond/latin-500.css';
 import '@fontsource/cormorant-garamond/latin-600.css';
 import '@fontsource/cormorant-garamond/latin-500-italic.css';
 import '@fontsource/pinyon-script/latin-400.css';
+import type { EventPage } from '@/lib/events/page';
 import { dottedDate, splitNames, type ThemeId } from '@/lib/events/themes';
 
 // An event's pages dressed in its theme: colours come from [data-theme] in
@@ -92,10 +93,10 @@ const FIREFLIES = [
   [35, 6, 2.8], [60, 40, 5.2], [5, 75, 3.9], [95, 80, 2.4], [50, 64, 4.6], [28, 88, 1.1], [75, 92, 3.0],
 ] as const;
 
-export function ThemeFrame({ theme, children }: { theme: ThemeId; children: React.ReactNode }) {
-  if (theme === 'classic') return <>{children}</>;
+export function ThemeFrame({ theme, children, compact = false }: { theme: ThemeId; children: React.ReactNode; compact?: boolean }) {
+  if (theme === 'classic') return compact ? <div className="bg-stone-50">{children}</div> : <>{children}</>;
   return (
-    <div data-theme={theme} className="theme-bg relative min-h-dvh overflow-hidden text-stone-900">
+    <div data-theme={theme} className={`theme-bg relative overflow-hidden text-stone-900 ${compact ? '' : 'min-h-dvh'}`}>
       {theme === 'woodland' && (
         <div className="pointer-events-none absolute inset-0" aria-hidden="true">
           {FIREFLIES.map(([left, top, delay], i) => (
@@ -104,7 +105,7 @@ export function ThemeFrame({ theme, children }: { theme: ThemeId; children: Reac
         </div>
       )}
       <div className="relative">{children}</div>
-      {theme === 'woodland' && (
+      {theme === 'woodland' && !compact && (
         <div className="pointer-events-none relative mx-auto -mt-4 flex h-40 max-w-5xl justify-between" aria-hidden="true">
           <div className="h-full w-36 sm:w-44"><Sprig /></div>
           <div className="h-full w-36 -scale-x-100 sm:w-44"><Sprig /></div>
@@ -118,15 +119,34 @@ function longDate(d: Date) {
   return d.toLocaleDateString(undefined, { timeZone: 'UTC', dateStyle: 'long' });
 }
 
-/** The event's name, date and place, set like its invitation. */
-export function EventHero({ theme, title, startsOn, location }: { theme: ThemeId; title: string; startsOn: Date | null; location: string }) {
+/** A line of small capitals set on a gentle arc, the way the invitation opens. */
+function ArcLine({ text }: { text: string }) {
+  return (
+    <svg viewBox="0 0 320 56" className="mx-auto -mb-2 w-72 max-w-full" role="img" aria-label={text}>
+      <path id="hero-arc" d="M 18 52 Q 160 0 302 52" fill="none" />
+      <text className="font-display" fill="currentColor" fontSize="15" letterSpacing="4.5">
+        <textPath href="#hero-arc" startOffset="50%" textAnchor="middle">{text.toUpperCase()}</textPath>
+      </text>
+    </svg>
+  );
+}
+
+type HeroLines = Partial<Pick<EventPage, 'kicker' | 'inviteLine' | 'timeLine' | 'footerLine'>>;
+
+/** The event's name, date and place, set like its invitation, with the hosts' own wording. */
+export function EventHero({ theme, title, startsOn, location, lines = {} }: { theme: ThemeId; title: string; startsOn: Date | null; location: string; lines?: HeroLines }) {
   const names = splitNames(title);
+  const { kicker, inviteLine, timeLine, footerLine } = lines;
   if (theme === 'classic') {
     return (
       <header className="space-y-1 text-center">
-        <p className="text-sm uppercase tracking-widest text-brand">{startsOn ? longDate(startsOn) : 'Album'}</p>
+        <p className="text-sm uppercase tracking-widest text-brand">{kicker || (startsOn ? longDate(startsOn) : 'Album')}</p>
         <h1 className="font-serif text-3xl sm:text-4xl">{title}</h1>
+        {inviteLine && <p className="text-stone-600">{inviteLine}</p>}
+        {kicker && startsOn && <p className="font-medium text-stone-700">{longDate(startsOn)}</p>}
+        {timeLine && <p className="italic text-stone-600">{timeLine}</p>}
         {location && <p className="text-stone-600">{location}</p>}
+        {footerLine && <p className="pt-1 text-sm uppercase tracking-widest text-stone-500">{footerLine}</p>}
       </header>
     );
   }
@@ -134,12 +154,16 @@ export function EventHero({ theme, title, startsOn, location }: { theme: ThemeId
   if (theme === 'garden') {
     return (
       <header className="relative space-y-3 pt-4 text-center">
-        <div className="mx-auto h-28 w-24"><Sprig mushrooms={false} /></div>
+        <div className="mx-auto h-28 w-28"><Sprig mushrooms={false} /></div>
+        {kicker && <p className="font-display text-sm uppercase tracking-[0.35em] text-stone-600">{kicker}</p>}
         <h1 className="font-script text-5xl leading-tight text-stone-800 sm:text-6xl">
           {names ? <>{names.before} <span className="text-brand">{names.joiner}</span> {names.after}</> : title}
         </h1>
-        {startsOn && <p className="font-display text-lg uppercase tracking-[0.3em] text-stone-600">{longDate(startsOn)}</p>}
-        {location && <p className="font-display text-sm uppercase tracking-[0.25em] text-stone-500">{location}</p>}
+        {inviteLine && <p className="font-display text-lg italic text-stone-700">{inviteLine}</p>}
+        {startsOn && <p className="font-display text-lg uppercase tracking-[0.3em] text-stone-700">{longDate(startsOn)}</p>}
+        {timeLine && <p className="font-display text-lg italic text-stone-600">{timeLine}</p>}
+        {location && <p className="font-display text-sm uppercase tracking-[0.25em] text-stone-600">{location}</p>}
+        {footerLine && <p className="font-display text-sm uppercase tracking-[0.3em] text-brand">{footerLine}</p>}
       </header>
     );
   }
@@ -151,6 +175,7 @@ export function EventHero({ theme, title, startsOn, location }: { theme: ThemeId
       <div className="pointer-events-none absolute -right-12 -top-6 h-44 w-36 rotate-180 opacity-70 sm:-right-4" aria-hidden="true"><Sprig mushrooms={false} /></div>
       <div className="relative space-y-3">
         <Moon />
+        {kicker && <div className="text-stone-700"><ArcLine text={kicker} /></div>}
         <h1 className="font-display text-4xl font-medium uppercase leading-tight tracking-[0.12em] text-stone-900 sm:text-5xl">
           {names ? (
             <>
@@ -162,8 +187,11 @@ export function EventHero({ theme, title, startsOn, location }: { theme: ThemeId
             title
           )}
         </h1>
+        {inviteLine && <p className="font-display text-sm font-semibold uppercase tracking-[0.28em] text-stone-700">{inviteLine}</p>}
         {startsOn && <p className="font-display text-3xl tracking-[0.2em] text-brand">{dottedDate(startsOn)}</p>}
+        {timeLine && <p className="font-display text-xl italic text-stone-800">{timeLine}</p>}
         {location && <p className="font-display text-sm font-semibold uppercase tracking-[0.3em] text-stone-700">{location}</p>}
+        {footerLine && <p className="font-display text-xs font-semibold uppercase tracking-[0.35em] text-stone-600">{footerLine}</p>}
       </div>
     </header>
   );

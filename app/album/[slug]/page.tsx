@@ -4,7 +4,10 @@ import { notFound, redirect } from 'next/navigation';
 import { Chat } from '@/components/events/Chat';
 import { Gallery } from '@/components/events/Gallery';
 import { GiftLinks, type LinkRow } from '@/components/events/GiftLinks';
+import { ActionBar, type EventAction } from '@/components/events/ActionBar';
+import { DirectionsPanel, InfoPanel, SchedulePanel } from '@/components/events/EventPanels';
 import { EventHero, ThemeFrame } from '@/components/events/ThemeFrame';
+import { cleanPage } from '@/lib/events/page';
 import { Uploader } from '@/components/events/Uploader';
 import { logActivity } from '@/lib/events/activity';
 import { loadAlbum } from '@/lib/events/album';
@@ -50,7 +53,9 @@ export default async function AlbumPage({ params, searchParams }: Params) {
   const token = t && /^[A-Za-z0-9_-]{20,100}$/.test(t) ? t : undefined;
 
   const theme = event.theme;
-  const header = <EventHero theme={theme} title={event.title} startsOn={event.starts_on} location={event.location} />;
+  // Before joining, only the invitation wording; after, everything the hosts wrote.
+  const lines = album.canView || album.canUpload ? album.page : cleanPage(event.page_public);
+  const header = <EventHero theme={theme} title={event.title} startsOn={event.starts_on} location={event.location} lines={lines} />;
 
   // Arrived by QR, or has nothing yet: join with a name (and a code).
   if (token || (!album.canUpload && !album.canView)) {
@@ -83,6 +88,14 @@ export default async function AlbumPage({ params, searchParams }: Params) {
   // Hidden items only reach managers; keep them out of the public grid here too.
   const visible = rows.filter((r) => !r.hidden);
   const items = await toGallery(visible, album.ctx, { originals: album.canManage });
+
+  const { page } = album;
+  const actions = ([
+    Boolean(page.address) && { key: 'directions', label: 'Directions', title: 'Directions', icon: 'pin' as const, panel: <DirectionsPanel place={event.location} address={page.address} /> },
+    page.schedule.length > 0 && { key: 'schedule', label: 'Schedule', title: 'Schedule', icon: 'clock' as const, panel: <SchedulePanel items={page.schedule} date={event.starts_on} /> },
+    page.info.length > 0 && { key: 'info', label: 'Good to know', title: 'Good to know', icon: 'info' as const, panel: <InfoPanel items={page.info} /> },
+    links.length > 0 && { key: 'gifts', label: 'Send a gift', title: 'Send a gift', icon: 'gift' as const, panel: <GiftLinks links={links} note={album.giftNote} bare /> },
+  ] as (EventAction | false)[]).filter((a): a is EventAction => Boolean(a));
 
   return (
     <ThemeFrame theme={theme}>
@@ -118,9 +131,7 @@ export default async function AlbumPage({ params, searchParams }: Params) {
         {album.description && (
           <p className={`mx-auto max-w-2xl whitespace-pre-wrap text-center text-stone-700 ${theme === 'classic' ? '' : 'font-display text-xl italic'}`}>{album.description}</p>
         )}
-        {links.length > 0 && (
-          <p className="text-center"><a href="#gifts" className="text-sm text-brand underline underline-offset-4">Send a gift</a></p>
-        )}
+        <ActionBar actions={actions} />
 
         {album.canUpload && album.uploaderName && (
           <section className="mx-auto max-w-xl">

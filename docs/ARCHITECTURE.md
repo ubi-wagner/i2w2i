@@ -151,6 +151,15 @@ Phones suspend pages when people switch apps, and venue networks drop.
 
 - **Comments:** anyone who can see the album can comment (accounts as themselves, guests under their name). Authors and managers remove comments.
 - **Gift links:** Venmo, PayPal or Cash App handles and registry links (https only), shown on the album with a QR each. Money never passes through i2w2i.
+
+### Event pages
+
+Hosts write their event's page in one editor with a live preview (manage page, "Your event page"):
+
+- **Look** (`events.theme`): Enchanted forest, Garden or Classic. Colours are CSS variables under `[data-theme]` in `app/globals.css` (Tailwind's `stone` and `brand` read them), so every component follows the theme; drawings are inline SVG in `components/events/ThemeFrame.tsx`. Used on the join page, album, welcome page and printed cards.
+- **Wording, directions, schedule, notes** (`events.page`, jsonb): shape and limits in `lib/events/page.ts` (`cleanPage` is the only way in). They become the invitation-style hero and action buttons (Directions with Google/Apple Maps/Waze, Schedule, Good to know, Send a gift) that open themed sheets.
+- **What's public:** before someone joins, `public_event()` returns only the invitation wording. The address, schedule and notes come from `events.events` under RLS, so only people who can see the album get them.
+- **Invite links made on an event's page** open `/album/<slug>/welcome`: the event's look, choose a password, straight into the album. The link is used up only once the password is accepted.
 - **Frames, filters and captions** are a small manifest on the upload; the original is never touched:
   - photos get their gallery copy re-rendered on the phone;
   - videos are framed and filtered at playback;
@@ -191,9 +200,9 @@ applied migration stops the boot.
 
 ## Sessions
 
-- **Accounts:** a random 256-bit token in the httpOnly cookie `i2w2i_session` (only its SHA-256 is stored). It's checked on every request, so deactivation and "sign out everywhere" are immediate. Sessions last 30 days.
+- **Accounts:** a random 256-bit token in the httpOnly cookie `i2w2i_session` (only its SHA-256 is stored). It's checked on every request, so deactivation and "sign out everywhere" are immediate. Sessions slide: each visit renews them for 90 days (the cookie is renewed on page loads only, never on a POST, so signing out can't be undone).
 - **Guests:** a separate token in the cookie `i2w2i_guest`, scoped to `/album/<slug>`, lasting 60 days.
-- **Emailed links:** single-use. A link only shows a Continue button, so email scanners can't use it up.
+- **Sign-in links:** single-use, handed over as text or QR (there's no email). Opening one signs no one in (message previews fetch links); pressing Continue, or choosing a password on an event's welcome page, does.
 
 ## Plans for the Couples app
 

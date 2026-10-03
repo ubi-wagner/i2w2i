@@ -19,6 +19,8 @@ import { describeDevice } from '@/lib/device';
 import { describeAction, eventActivity, namesByDevice, shortDevice, uploadDetails, type ActivityRow } from '@/lib/events/forensics';
 import { CodeForm } from './CodeForm';
 import { SettingsForm } from './SettingsForm';
+import { PageEditor } from './PageEditor';
+import { cleanPage } from '@/lib/events/page';
 
 export const metadata = { title: 'Manage event' };
 
@@ -80,14 +82,16 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
   const qrLinks = codes.map((c) => (c.qr_revoked_at ? null : qrLink(event.slug, c.id, c.qr_version)));
   const qrs = await Promise.all(qrLinks.map((l) => (l ? qrSvg(l) : null)));
   const totalBytes = uploads.reduce((n, u) => n + Number(u.size_bytes), 0);
+  const pg = cleanPage(event.page);
   const steps = [
+    { href: '#page', label: 'Make the page yours: look, wording, directions, schedule', done: event.theme !== 'classic' || Boolean(pg.kicker || pg.address || pg.schedule.length) },
     { href: '#people', label: 'Add the people helping with this event', done: members.length > 1 },
     { href: '#codes', label: 'Make a guest code and print its QR card', done: codes.length > 0 },
     { href: '#photos', label: 'Add the first photos from the album page', done: uploads.length > 0 },
-    { href: '#details', label: 'Publish the album when you’re ready', done: event.status === 'published' },
+    { href: '#publishing', label: 'Publish the album when you’re ready', done: event.status === 'published' },
   ];
   const sections: [string, string][] = [
-    ['#details', 'Details'], ['#people', 'People'],
+    ['#page', 'Page'], ['#publishing', 'Publishing'], ['#people', 'People'],
     ...(owner ? ([['#codes', 'Codes & QR'], ['#gifts', 'Gifts']] as [string, string][]) : []),
     ['#guests', `Guests (${guests.length})`], ['#photos', `Photos (${uploads.length})`], ['#activity', 'Activity'],
   ];
@@ -130,16 +134,30 @@ export default async function ManageEvent({ params }: { params: Promise<{ id: st
           </ul>
         </nav>
 
-        <section id="details" className="scroll-mt-14 card space-y-4">
-          <h2 className="text-lg font-semibold">Details &amp; publishing</h2>
-          <SettingsForm
-            event={{
-              id: event.id, title: event.title, location: event.location, description: event.description,
-              starts_on: event.starts_on ? event.starts_on.toISOString().slice(0, 10) : '',
-              status: event.status, audience: event.audience, chat_enabled: event.chat_enabled,
-              theme: event.theme, gift_note: event.gift_note,
+        <section id="page" className="scroll-mt-14 card space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Your event page</h2>
+            <p className="text-sm text-stone-600">What guests see when they scan a card or open the album. Changes show in the preview as you type.</p>
+          </div>
+          <PageEditor
+            eventId={event.id}
+            slug={event.slug}
+            hasGiftLinks={links.length > 0}
+            initial={{
+              title: event.title,
+              startsOn: event.starts_on ? event.starts_on.toISOString().slice(0, 10) : '',
+              location: event.location,
+              description: event.description,
+              theme: event.theme,
+              giftNote: event.gift_note,
+              page: cleanPage(event.page),
             }}
           />
+        </section>
+
+        <section id="publishing" className="scroll-mt-14 card space-y-4">
+          <h2 className="text-lg font-semibold">Publishing</h2>
+          <SettingsForm event={{ id: event.id, status: event.status, audience: event.audience, chat_enabled: event.chat_enabled }} />
         </section>
 
         <section id="people" className="scroll-mt-14 card space-y-4">

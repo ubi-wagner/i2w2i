@@ -18,6 +18,7 @@ export interface EventRow {
   chat_enabled: boolean;
   theme: ThemeId;
   gift_note: string;
+  page: unknown;
   created_by: string;
   created_at: Date;
 }
