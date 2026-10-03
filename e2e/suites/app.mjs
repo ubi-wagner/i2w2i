@@ -114,11 +114,22 @@ await new Promise((r) => setTimeout(r, 4000));
 check(received.length === afterOff, 'after turning notifications off, nothing more arrives');
 
 // ── Screens ─────────────────────────────────────────────────────────────────
+// As if the host tapped "Allow" (headless browsers start with notifications blocked).
+await host.context().grantPermissions(['notifications'], { origin: BASE });
 await host.goto(ev.manage);
-await host.getByRole('button', { name: 'Turn on notifications' }).waitFor({ timeout: 5000 }).catch(() => {});
+await host.getByRole('button', { name: 'Turn on notifications' }).waitFor({ timeout: 8000 }).catch(() => {});
 check(await host.getByRole('button', { name: 'Turn on notifications' }).isVisible(), 'hosts see “Turn on notifications” on the manage page');
 await host.goto(`${BASE}/account`);
 check(await host.getByRole('heading', { name: 'Notifications' }).isVisible(), 'the account page has a Notifications section');
+
+// Blocked in the browser: say so and how to fix it, instead of a button that can't work.
+const blocked = await page();
+await blocked.context().grantPermissions([], { origin: BASE });
+await blocked.addInitScript(() => { Object.defineProperty(Notification, 'permission', { get: () => 'denied' }); });
+await (await import('../lib.mjs')).login(blocked, (await import('../lib.mjs')).ADMIN.email, (await import('../lib.mjs')).ADMIN.password);
+await blocked.goto(`${BASE}/account`);
+await blocked.getByText('Notifications are blocked for i2w2i').waitFor({ timeout: 8000 }).catch(() => {});
+check(await blocked.getByText('Notifications are blocked for i2w2i').isVisible(), 'if notifications are blocked, the page explains how to allow them');
 
 // iPhone Safari (no push until it's on the home screen): explain how, and offer the home-screen card.
 const iphone = await page(PHONES.iphone);

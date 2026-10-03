@@ -22,10 +22,18 @@ function keyBytes(base64url: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
+/** Some browsers never answer these lookups; don't leave the page waiting. */
+function within<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
+}
+
 export async function currentSubscription(): Promise<PushSubscription | null> {
   if (!pushSupported()) return null;
-  const reg = await navigator.serviceWorker.getRegistration('/');
-  return (await reg?.pushManager.getSubscription()) ?? null;
+  return within(
+    navigator.serviceWorker.getRegistration('/').then((reg) => reg?.pushManager.getSubscription() ?? null).then((s) => s ?? null),
+    3000,
+    null,
+  );
 }
 
 async function save(sub: PushSubscription): Promise<void> {
