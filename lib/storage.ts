@@ -34,7 +34,15 @@ const BUCKET = env.AWS_S3_BUCKET_NAME || env.AWS_S3_BUCKET || env.BUCKET;
 export const storageDriver: 'bucket' | 'local' = env.STORAGE_DRIVER === 'local' || !BUCKET ? 'local' : 'bucket';
 
 const UPLOAD_URL_TTL = 60 * 60; // seconds
-const VIEW_URL_TTL = 60 * 60;
+// View URLs are signed as of the start of the current hour and last two, so
+// the same photo gets the same URL for an hour and phones can cache it
+// instead of re-downloading every thumbnail on each visit.
+const VIEW_WINDOW = 60 * 60;
+const VIEW_URL_TTL = 2 * VIEW_WINDOW;
+function viewWindowStart(): Date {
+  const now = Math.floor(Date.now() / 1000);
+  return new Date((now - (now % VIEW_WINDOW)) * 1000);
+}
 
 let client: S3Client | undefined;
 function s3(): S3Client {
@@ -63,8 +71,8 @@ function localSig(op: LocalOp, key: string, exp: number, extra = ''): string {
   return createHmac('sha256', localSecret).update(`${op}\n${key}\n${exp}\n${extra}`).digest('base64url');
 }
 
-function localUrl(op: LocalOp, key: string, ttl: number, contentType?: string, part?: { uploadId: string; n: number }): string {
-  const exp = Math.floor(Date.now() / 1000) + ttl;
+function localUrl(op: LocalOp, key: string, ttl: number, contentType?: string, part?: { uploadId: string; n: number }, from?: Date): string {
+  const exp = Math.floor((from?.getTime() ?? Date.now()) / 1000) + ttl;
   const extra = part ? `${part.uploadId}:${part.n}` : '';
   const q = new URLSearchParams({ op, key, exp: String(exp), sig: localSig(op, key, exp, extra) });
   if (contentType) q.set('ct', contentType);
@@ -119,7 +127,8 @@ export async function uploadUrl(key: string, contentType: string): Promise<strin
 
 /** A short-lived URL to view or download an object. */
 export async function viewUrl(key: string, downloadName?: string): Promise<string> {
-  if (storageDriver === 'local') return localUrl('get', key, VIEW_URL_TTL);
+  const from = viewWindowStart();
+  if (storageDriver === 'local') return localUrl('get', key, VIEW_URL_TTL, undefined, undefined, from);
   return getSignedUrl(
     s3(),
     new GetObjectCommand({
@@ -127,7 +136,7 @@ export async function viewUrl(key: string, downloadName?: string): Promise<strin
       Key: key,
       ResponseContentDisposition: downloadName ? `attachment; filename="${downloadName.replace(/["\\\r\n]/g, '_')}"` : undefined,
     }),
-    { expiresIn: VIEW_URL_TTL },
+    { expiresIn: VIEW_URL_TTL, signingDate: from },
   );
 }
 

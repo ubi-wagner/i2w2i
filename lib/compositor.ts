@@ -53,3 +53,38 @@ export async function renderPreview(file: File, overlay: Overlay | null): Promis
     URL.revokeObjectURL(url);
   }
 }
+
+/** A still from early in a video, for gallery tiles (iOS shows black tiles otherwise). Best effort. */
+export async function videoPoster(file: File): Promise<Blob | null> {
+  const url = URL.createObjectURL(file);
+  const v = document.createElement('video');
+  try {
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.src = url;
+    v.load();
+    const wait = (ev: string, ms: number) =>
+      new Promise<void>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('timeout')), ms);
+        v.addEventListener(ev, () => { clearTimeout(t); resolve(); }, { once: true });
+        v.addEventListener('error', () => { clearTimeout(t); reject(new Error('error')); }, { once: true });
+      });
+    await wait('loadeddata', 10000);
+    v.currentTime = Math.min(0.5, (v.duration || 1) / 2);
+    await wait('seeked', 5000);
+    if (!v.videoWidth) return null;
+    const scale = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(v.videoWidth * scale);
+    canvas.height = Math.round(v.videoHeight * scale);
+    canvas.getContext('2d')!.drawImage(v, 0, 0, canvas.width, canvas.height);
+    return await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.8));
+  } catch {
+    return null;
+  } finally {
+    v.removeAttribute('src');
+    v.load();
+    URL.revokeObjectURL(url);
+  }
+}

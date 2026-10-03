@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BASE, RUN, adminPage, check, createCode, createEvent, db, finish, fixture, joinWithCode, phonePage } from '../lib.mjs';
+import { BASE, RUN, adminPage, check, createCode, createEvent, db, finish, fixture, joinWithCode, phonePage, uploadFiles } from '../lib.mjs';
 
 const tmp = mkdtempSync(join(tmpdir(), 'i2w2i-e2e-'));
 const slug = `decorate-${RUN}`;
@@ -62,6 +62,16 @@ await dlg.getByRole('button', { name: 'Save' }).click();
 await vrow.getByText('Frame saved ✓').waitFor({ timeout: 15000 });
 const [v] = await db`SELECT overlay FROM events.uploads WHERE event_id = ${ev.id} AND kind = 'video'`;
 check(v?.overlay?.frame === 'gold', 'videos get a frame (drawn at playback)');
+
+// Video stills: the phone grabs a frame so tiles aren't black on iPhones.
+const poster = await phonePage();
+await joinWithCode(poster, slug, 'Vee', 'DECO1');
+await uploadFiles(poster, [fixture('clip.webm')]);
+const [webm] = await db`SELECT preview_key FROM events.uploads WHERE event_id = ${ev.id} AND filename = 'clip.webm'`;
+check(Boolean(webm?.preview_key), 'a still is made for each video during upload');
+await poster.reload();
+const tile = poster.getByRole('button', { name: 'Open video from Vee' });
+check((await tile.locator('img').count()) === 1, 'the video tile shows the still instead of a black frame');
 
 const other = await phonePage();
 await joinWithCode(other, slug, 'Mal', 'DECO1');

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { collectClientInfo } from '@/lib/client-info';
-import { renderPreview } from '@/lib/compositor';
+import { renderPreview, videoPoster } from '@/lib/compositor';
 import { isPlain, type Overlay } from '@/lib/events/overlay';
 import { Decorator } from './Decorator';
 import { PART_SIZE } from '@/lib/events/limits';
@@ -113,13 +113,14 @@ export function Uploader({ slug, name }: { slug: string; name: string }) {
       const key = start.key;
       const file = start.file!;
       const isPhoto = start.type.startsWith('image/');
+      const isVideo = start.type.startsWith('video/');
       let { serverId, mode, partCount } = start;
       let previewUrl: string | null | undefined;
       update(key, { status: 'uploading', note: undefined });
 
       if (!serverId) {
         const created = await api<{ id: string; mode: 'single' | 'multipart'; partCount: number; uploadUrl: string | null; previewUrl: string | null }>(base, {
-          name: start.name, type: start.type, size: start.size, preview: isPhoto,
+          name: start.name, type: start.type, size: start.size, preview: isPhoto || isVideo,
           lastModified: start.lastModified, client: await collectClientInfo().catch(() => null),
         });
         ({ id: serverId, mode, partCount } = created);
@@ -130,7 +131,7 @@ export function Uploader({ slug, name }: { slug: string; name: string }) {
       const itemUrl = `${base}/${serverId}`;
       // Plain preview made while the original uploads; a decorated one is
       // rendered at the end from whatever frame the person picked meanwhile.
-      const plainPreview = isPhoto ? renderPreview(file, null) : Promise.resolve(null);
+      const plainPreview = isPhoto ? renderPreview(file, null) : isVideo ? videoPoster(file) : Promise.resolve(null);
 
       // Up to two passes: if completion reports missing parts, send them.
       for (let pass = 0; pass < 3; pass++) {

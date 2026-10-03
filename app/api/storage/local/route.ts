@@ -58,6 +58,6 @@ export async function GET(req: Request) {
   if (size === null) return new Response('Not found', { status: 404 });
   const type = await readFile(`${localPath(key)}.type`, 'utf8').catch(() => 'application/octet-stream');
   return new Response(Readable.toWeb(createReadStream(localPath(key))) as ReadableStream, {
-    headers: { 'Content-Type': type, 'Content-Length': String(size), 'Cache-Control': 'private, max-age=3600' },
+    headers: { 'Content-Type': type, 'Content-Length': String(size), 'Cache-Control': 'private, max-age=3600, immutable' },
   });
 }

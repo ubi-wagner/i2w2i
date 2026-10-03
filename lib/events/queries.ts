@@ -47,8 +47,10 @@ export interface GalleryItem {
   createdAt: string;
   hidden: boolean;
   featured: boolean;
-  /** Shown in the grid: the on-phone preview, else the original. */
+  /** Photos: the on-phone preview, else the original. Videos: the original (to play). */
   src: string;
+  /** Videos: a still for the tile, if the phone made one. */
+  poster: string | null;
   /** Original, only for people who may download it. */
   originalUrl: string | null;
   filename: string;
@@ -93,7 +95,8 @@ export async function toGallery(rows: UploadRow[], ctx: EventCtx, opts: { origin
         createdAt: u.created_at.toISOString(),
         hidden: u.hidden,
         featured: u.featured,
-        src: await viewUrl(u.preview_key ?? u.original_key),
+        src: await viewUrl(u.kind === 'video' ? u.original_key : (u.preview_key ?? u.original_key)),
+        poster: u.kind === 'video' && u.preview_key ? await viewUrl(u.preview_key) : null,
         originalUrl: showOriginal ? await viewUrl(u.original_key, u.filename || undefined) : null,
         filename: u.filename,
         sizeBytes: Number(u.size_bytes),

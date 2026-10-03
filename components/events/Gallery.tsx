@@ -175,7 +175,12 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug }:
                       <img src={it.src} alt={it.caption || ''} loading="lazy" className="h-full w-full object-cover" />
                     ) : (
                       <span className="relative block h-full w-full">
-                        <video src={`${it.src}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                        {it.poster ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={it.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+                        ) : (
+                          <video src={`${it.src}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                        )}
                         <span className="absolute inset-0 flex items-center justify-center text-3xl text-white drop-shadow">▶</span>
                       </span>
                     )}
@@ -208,7 +213,7 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug }:
               // eslint-disable-next-line @next/next/no-img-element
               <img src={item.src} alt={item.caption || ''} className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
             ) : (
-              <FramedVideo src={item.src} overlay={item.overlay as Overlay | null} className="max-h-[70vh] max-w-full" />
+              <FramedVideo src={item.src} poster={item.poster} overlay={item.overlay as Overlay | null} className="max-h-[70vh] max-w-full" />
             )}
           </div>
           {item.caption && <p className="px-4 pt-2 text-center">{item.caption}</p>}

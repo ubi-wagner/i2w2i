@@ -27,6 +27,11 @@ const unzip = async (dl, name) => {
   return readdirSync(dir).map((n) => `${statSync(join(dir, n)).size} ${n}`);
 };
 
+const srcs = async () => gina.locator('main img').evaluateAll((els) => els.map((e) => e.getAttribute('src')).sort().join());
+const first = await srcs();
+await gina.reload();
+check(first === (await srcs()), 'thumbnail URLs stay the same between visits, so phones can cache them');
+
 await gina.getByRole('button', { name: 'Select', exact: true }).click();
 await gina.getByRole('button', { name: 'All', exact: true }).click();
 check(await gina.getByText('4 selected').isVisible(), 'guest selects all');

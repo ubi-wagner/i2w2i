@@ -32,7 +32,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const filename = String(body?.name ?? '').slice(0, 200);
   const base = `events/${album.event.id}/${id}`;
   const originalKey = `${base}/original.${fileExtension(filename, type)}`;
-  const previewKey = kind === 'photo' && body?.preview ? `${base}/preview.jpg` : null;
+  // Photos: a downscaled copy. Videos: a still for the gallery tile.
+  const previewKey = body?.preview ? `${base}/preview.jpg` : null;
   // Big files (mostly videos) go up in parts so an interruption resumes.
   const multipartId = size >= MULTIPART_THRESHOLD ? await startMultipart(originalKey, type) : null;
 
