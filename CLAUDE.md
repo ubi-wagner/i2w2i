@@ -34,6 +34,9 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
 - **Forms with `useActionState`**: React resets the form after the action, so
   return typed values in the state and use them as `defaultValue`.
 - **Never log sign-in links in production** (`lib/email.ts` handles this).
+- **There is no email.** Invites and resets are one-time links shown to the
+  inviter (copy or QR). Who may issue one is `canIssueLink`: admin for
+  anyone, hosts only for accounts they created. Don't widen it.
 
 ## Events app rules
 - **Every `events.*` query runs in `withCtx(ctx, …)`** (`lib/events/db.ts`).

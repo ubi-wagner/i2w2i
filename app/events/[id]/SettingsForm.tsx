@@ -20,7 +20,7 @@ export function SettingsForm({ event }: Props) {
   const [state, action, pending] = useActionState<FormState, FormData>(updateEvent, {});
   return (
     <form action={action} className="space-y-4">
-      <input type="hidden" name="event_id" value={event.id} />
+      <input type="hidden" hidden name="event_id" value={event.id} />
       <div>
         <label className="label" htmlFor="title">Event name</label>
         <input className="input" id="title" name="title" defaultValue={event.title} required maxLength={120} />
@@ -43,15 +43,15 @@ export function SettingsForm({ event }: Props) {
         <div>
           <label className="label" htmlFor="status">Album</label>
           <select className="input" id="status" name="status" defaultValue={event.status}>
-            <option value="draft">Draft: only people on this event</option>
+            <option value="draft">Draft (only people on this event)</option>
             <option value="published">Published</option>
           </select>
         </div>
         <div>
           <label className="label" htmlFor="audience">When published, who can see it?</label>
           <select className="input" id="audience" name="audience" defaultValue={event.audience}>
-            <option value="invitees">People on this event, and code holders who can view</option>
-            <option value="family">The whole family (signed in)</option>
+            <option value="invitees">Invitees &amp; code holders</option>
+            <option value="family">Whole family (signed in)</option>
             <option value="public">Anyone with the link</option>
           </select>
         </div>

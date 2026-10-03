@@ -56,7 +56,7 @@ export default async function AdminPage() {
                     {!self && (
                       <div className="flex flex-wrap items-center gap-3">
                         <form action={setPlatformRole} className="flex items-center gap-2">
-                          <input type="hidden" name="user_id" value={p.id} />
+                          <input type="hidden" hidden name="user_id" value={p.id} />
                           <select name="platform_role" defaultValue={p.platform_role} className="input w-auto py-1 text-sm">
                             <option value="member">Family member</option>
                             <option value="creator">Creator</option>
@@ -65,18 +65,18 @@ export default async function AdminPage() {
                           <button className="btn-secondary py-1 text-sm">Save</button>
                         </form>
                         <form action={setActive}>
-                          <input type="hidden" name="user_id" value={p.id} />
-                          <input type="hidden" name="active" value={String(!p.is_active)} />
+                          <input type="hidden" hidden name="user_id" value={p.id} />
+                          <input type="hidden" hidden name="active" value={String(!p.is_active)} />
                           <button className="text-sm text-stone-600 hover:underline">{p.is_active ? 'Deactivate' : 'Reactivate'}</button>
                         </form>
                       </div>
                     )}
                   </div>
                   <div className="flex flex-wrap gap-3">
-                    {apps.map((a) => (
+                    {apps.filter((a) => a.is_enabled || p.grants?.[a.key]).map((a) => (
                       <form key={a.key} action={setAppRole} className="flex items-center gap-2 rounded-lg bg-stone-50 px-2 py-1 text-sm">
-                        <input type="hidden" name="user_id" value={p.id} />
-                        <input type="hidden" name="app_key" value={a.key} />
+                        <input type="hidden" hidden name="user_id" value={p.id} />
+                        <input type="hidden" hidden name="app_key" value={a.key} />
                         <span>{a.name}{!a.is_enabled && ' (not live)'}</span>
                         <select name="role" defaultValue={p.grants?.[a.key] ?? 'none'} className="rounded border border-stone-300 bg-white px-1 py-0.5">
                           <option value="none">No access</option>

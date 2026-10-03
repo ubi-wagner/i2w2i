@@ -1,4 +1,5 @@
 import 'server-only';
+import { createHash } from 'node:crypto';
 import { viewUrl } from '../storage';
 import { withCtx, type EventCtx } from './db';
 
@@ -95,7 +96,12 @@ export async function toGallery(rows: UploadRow[], ctx: EventCtx, opts: { origin
         createdAt: u.created_at.toISOString(),
         hidden: u.hidden,
         featured: u.featured,
-        src: await viewUrl(u.kind === 'video' ? u.original_key : (u.preview_key ?? u.original_key)),
+        // A decorated preview is rewritten in place; its URL changes with the decoration.
+        src: await viewUrl(
+          u.kind === 'video' ? u.original_key : (u.preview_key ?? u.original_key),
+          undefined,
+          u.kind === 'photo' && u.overlay ? createHash('sha256').update(JSON.stringify(u.overlay)).digest('hex').slice(0, 10) : undefined,
+        ),
         poster: u.kind === 'video' && u.preview_key ? await viewUrl(u.preview_key) : null,
         originalUrl: showOriginal ? await viewUrl(u.original_key, u.filename || undefined) : null,
         filename: u.filename,

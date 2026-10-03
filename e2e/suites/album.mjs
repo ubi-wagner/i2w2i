@@ -36,7 +36,7 @@ const bodies = await Promise.all(thumbs.map((s) => gina.request.get(BASE + s).th
 check(bodies.every((b) => b.length < 1_000_000 && !b.includes(Buffer.from('Exif')) && !b.includes(Buffer.from('iPhone 15 Pro'))), 'gallery copies are small and carry no metadata (no camera, no GPS)');
 
 // Same phone, different name
-await gina.getByRole('button', { name: 'Not Gina?' }).click();
+await gina.getByRole('button', { name: 'Not you?' }).click();
 await gina.locator('#name').waitFor();
 await joinWithCode(gina, slug, 'Mystery Guest', 'CB1106');
 check(await gina.getByText('Adding as Mystery Guest').isVisible(), 'same phone rejoins under another name');

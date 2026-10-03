@@ -7,10 +7,14 @@ import { canUsePassword } from '@/lib/access';
 import { hashPassword, passwordProblem, verifyPassword } from '@/lib/auth/password';
 import { createSession, endSession, requireUser, revokeAllSessions } from '@/lib/auth/session';
 import { audit } from '@/lib/audit';
+import { withCtx } from '@/lib/events/db';
+import { userCtx } from '@/lib/events/session';
 
 export interface FormState {
   error?: string;
   message?: string;
+  /** After a first password or a reset: where to go next. */
+  continueTo?: string;
 }
 
 export async function setPassword(_prev: FormState, form: FormData): Promise<FormState> {
@@ -23,7 +27,8 @@ export async function setPassword(_prev: FormState, form: FormData): Promise<For
   if (problem) return { error: problem };
 
   const [row] = await sql<{ password_hash: string | null }[]>`SELECT password_hash FROM core.users WHERE id = ${user.id}`;
-  if (row?.password_hash && !(await verifyPassword(current, row.password_hash))) {
+  // Just signed in with a handed-out link (forgot password): no old password needed.
+  if (row?.password_hash && !user.fresh_link && !(await verifyPassword(current, row.password_hash))) {
     return { error: 'Your current password isn’t right.' };
   }
   await sql`UPDATE core.users SET password_hash = ${await hashPassword(next)} WHERE id = ${user.id}`;
@@ -32,6 +37,11 @@ export async function setPassword(_prev: FormState, form: FormData): Promise<For
   await createSession(user.id);
   await audit(user.id, 'account.password.set');
   revalidatePath('/account');
+  // First password or a reset: send them on, straight to the album if there's only one.
+  if (!row?.password_hash || user.fresh_link) {
+    const slugs = await withCtx(userCtx(user), (tx) => tx<{ slug: string }[]>`SELECT slug FROM events.events e WHERE events.is_member(e.id) LIMIT 2`);
+    return { message: 'Password saved.', continueTo: slugs.length === 1 ? `/album/${slugs[0].slug}` : '/' };
+  }
   return { message: 'Password saved.' };
 }
 

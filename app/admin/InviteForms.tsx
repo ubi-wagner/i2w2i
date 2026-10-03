@@ -1,25 +1,17 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState } from 'react';
+import { LinkShare } from '@/components/LinkShare';
 import { invitePerson, resendInvite, type InviteState } from './actions';
 
 function LinkResult({ state }: { state: InviteState }) {
-  const [copied, setCopied] = useState(false);
   if (!state.link) return null;
   return (
-    <div className="space-y-2 rounded-lg bg-stone-100 p-3 text-sm">
-      <p>{state.emailed ? `Emailed ${state.name} a link.` : `Email isn’t set up yet. Send ${state.name} this link yourself:`} It works once, for 7 days.</p>
-      <div className="flex gap-2">
-        <input readOnly value={state.link} className="input bg-white font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
-        <button
-          type="button"
-          className="btn-secondary shrink-0"
-          onClick={() => navigator.clipboard.writeText(state.link!).then(() => setCopied(true))}
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
-    </div>
+    <LinkShare
+      link={state.link}
+      name={state.name}
+      note={state.emailed ? `Emailed ${state.name} a link. You can also share it directly; it works once, for 7 days.` : undefined}
+    />
   );
 }
 
@@ -63,8 +55,8 @@ export function ResendButton({ userId }: { userId: string }) {
   return (
     <div className="space-y-2">
       <form action={action}>
-        <input type="hidden" name="user_id" value={userId} />
-        <button className="text-sm text-brand hover:underline" disabled={pending}>Send link</button>
+        <input type="hidden" hidden name="user_id" value={userId} />
+        <button className="text-sm text-brand hover:underline" disabled={pending}>New sign-in link</button>
       </form>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       <LinkResult state={state} />

@@ -5,6 +5,10 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireApp } from '@/lib/apps';
 import { audit } from '@/lib/audit';
+import { canIssueLink, normalizeEmail, type PlatformRole } from '@/lib/access';
+import { issueLink } from '@/lib/auth/links';
+import { sql } from '@/lib/db';
+import { rateLimit } from '@/lib/rate-limit';
 import { logActivity } from '@/lib/events/activity';
 import { withCtx } from '@/lib/events/db';
 import { userCtx } from '@/lib/events/session';
@@ -255,4 +259,77 @@ export async function removeLink(form: FormData): Promise<void> {
   await withCtx(c, (tx) => tx`DELETE FROM events.links WHERE id = ${linkId} AND event_id = ${id}`);
   await audit(user.id, 'events.link.remove', id, { link: linkId });
   revalidatePath(`/events/${id}`);
+}
+
+export interface LinkState {
+  error?: string;
+  message?: string;
+  link?: string;
+  name?: string;
+  fields?: Record<string, string>;
+}
+
+/**
+ * Hosts invite people straight onto their event. New people get a family
+ * member account (never more) created by this host, added to the event, and
+ * a one-time link to share. People who already have an account are just
+ * added; a host can only hand out sign-in links for accounts they invited.
+ */
+export async function inviteToEvent(_prev: LinkState, form: FormData): Promise<LinkState> {
+  const { user, ctx: c } = await ctx();
+  const id = str(form, 'event_id');
+  const name = str(form, 'display_name', 80);
+  const typed = str(form, 'email', 254);
+  const role = str(form, 'role') === 'curator' ? 'curator' : 'invitee';
+  const fields = { display_name: name, email: typed, role };
+  const email = normalizeEmail(typed);
+  if (!email) return { error: 'Enter a valid email address (it’s their username).', fields };
+  if (!name) return { error: 'Enter their name.', fields };
+  if (!rateLimit(`host-invite:${user.id}`, 60, 60 * 60_000)) return { error: 'That’s a lot of invites at once. Try again later.', fields };
+
+  const [own] = await withCtx(c, (tx) => tx<{ ok: boolean }[]>`SELECT events.can_own(${id}) AS ok`);
+  if (!own?.ok) return { error: 'Only the event’s owners can invite people.', fields };
+
+  const [existing] = await sql<{ id: string; display_name: string; platform_role: PlatformRole; created_by: string | null; is_active: boolean }[]>`
+    SELECT id, display_name, platform_role, created_by, is_active FROM core.users WHERE email = ${email}`;
+  let target = existing;
+  if (!target) {
+    target = await sql.begin(async (tx) => {
+      const [u] = await tx<{ id: string; display_name: string; platform_role: PlatformRole; created_by: string | null; is_active: boolean }[]>`
+        INSERT INTO core.users (email, display_name, platform_role, created_by)
+        VALUES (${email}, ${name}, 'member', ${user.id})
+        RETURNING id, display_name, platform_role, created_by, is_active`;
+      await tx`INSERT INTO core.family_members (family_id, user_id) SELECT id, ${u!.id} FROM core.families`;
+      await tx`INSERT INTO core.user_app_roles (user_id, app_key, role, granted_by) VALUES (${u!.id}, 'events', 'viewer', ${user.id})`;
+      return u!;
+    });
+    await audit(user.id, 'people.invite.by_host', target.id, { email, event: id });
+  } else if (!target.is_active) {
+    return { error: 'That account is deactivated. Ask Eric to turn it back on.', fields };
+  }
+
+  await withCtx(c, (tx) => tx`
+    INSERT INTO events.members (event_id, user_id, role, added_by) VALUES (${id}, ${target.id}, ${role}, ${user.id})
+    ON CONFLICT (event_id, user_id) DO UPDATE SET role = EXCLUDED.role`);
+  // Make sure they can open the Events app at all.
+  await sql`INSERT INTO core.user_app_roles (user_id, app_key, role, granted_by) VALUES (${target.id}, 'events', 'viewer', ${user.id})
+            ON CONFLICT (user_id, app_key) DO NOTHING`;
+  await logActivity({ eventId: id, action: 'member.invite', userId: user.id, actorName: user.display_name, detail: { invited: target.id, role, new_account: !existing } });
+  revalidatePath(`/events/${id}`);
+
+  if (existing && !canIssueLink(user, target)) {
+    return { message: `${target.display_name} already has an account and is now on this event. They’ll see it under Events when they sign in.` };
+  }
+  return { link: await issueLink(target.id, 'invite'), name: target.display_name };
+}
+
+/** A fresh one-time sign-in link (also the way to reset a forgotten password). */
+export async function issueSignInLink(_prev: LinkState, form: FormData): Promise<LinkState> {
+  const { user } = await ctx();
+  const userId = str(form, 'user_id');
+  const [target] = await sql<{ id: string; display_name: string; platform_role: PlatformRole; created_by: string | null; is_active: boolean }[]>`
+    SELECT id, display_name, platform_role, created_by, is_active FROM core.users WHERE id = ${userId}`;
+  if (!target || !canIssueLink(user, target)) return { error: 'Only Eric can make a sign-in link for this person.' };
+  await audit(user.id, 'people.link.issued', target.id);
+  return { link: await issueLink(target.id, 'invite'), name: target.display_name };
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { FullScreen } from '@/components/FullScreen';
 import { FILTERS, FRAMES, captionStyle, filterCss, frameSvg, type FilterId, type FrameId, type Overlay } from '@/lib/events/overlay';
 
 // Frames, filters and a caption. Kept short on purpose (a few frames, a few
@@ -27,8 +28,8 @@ export function Decorator({
   const cap = dims ? captionStyle(frame, dims.w, dims.h) : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/95 text-white" role="dialog" aria-modal="true" aria-label="Decorate">
-      <div className="flex items-center justify-between p-3">
+    <FullScreen label="Decorate">
+      <div className="flex items-center justify-between p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <button type="button" className="px-2 py-1" onClick={onClose}>Cancel</button>
         <span className="font-medium">Decorate</span>
         <button type="button" className="rounded-lg bg-white px-3 py-1 font-semibold text-stone-900" onClick={() => onSave({ v: 1, frame, filter, ...(caption.trim() ? { caption: caption.trim().slice(0, 80) } : {}) })}>
@@ -78,8 +79,8 @@ export function Decorator({
         </div>
         <input className="w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 placeholder:text-stone-400" value={caption}
           onChange={(e) => setCaption(e.target.value)} maxLength={80} placeholder="Add a caption (optional)" aria-label="Caption" />
-        <p className="text-center text-xs text-stone-400">Your original is kept as taken; this only changes how it shows in the album.</p>
+        <p className="pb-[env(safe-area-inset-bottom)] text-center text-xs text-stone-400">Your original is kept as taken; this only changes how it shows in the album.</p>
       </div>
-    </div>
+    </FullScreen>
   );
 }

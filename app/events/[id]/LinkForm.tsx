@@ -10,7 +10,7 @@ export function LinkForm({ eventId }: { eventId: string }) {
   const [kind, setKind] = useState<LinkKind>((f.kind as LinkKind) || 'venmo');
   return (
     <form action={action} className="space-y-3 rounded-xl bg-stone-50 p-4">
-      <input type="hidden" name="event_id" value={eventId} />
+      <input type="hidden" hidden name="event_id" value={eventId} />
       <div className="grid gap-3 sm:grid-cols-[auto_1fr_1fr]">
         <select name="kind" className="input" value={kind} onChange={(e) => setKind(e.target.value as LinkKind)} aria-label="Kind of link">
           {LINK_KINDS.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
