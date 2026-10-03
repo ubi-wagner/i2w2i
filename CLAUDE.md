@@ -4,7 +4,11 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
 
 ## Branches and deploy
 - Work on `claude/main`. Eric merges `claude/main` → `main`; `main` deploys to Railway.
-- Before pushing: `npm run typecheck && npm test && npm run build`.
+- Before pushing: `npm run typecheck && npm test && npm run build`, and for
+  anything user-facing `npm run e2e` against a running build (see e2e/run.mjs
+  for the env it needs). New features get an e2e suite or checks in one.
+- Migrations that only exist on `claude/main` (not yet merged to `main`) may
+  still be edited; once merged, never.
 
 ## Stack
 - Next.js 16 (App Router, `proxy.ts` not middleware), React 19, TypeScript, Tailwind 3.
@@ -51,5 +55,9 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
   anything a guest or member does on an event, and `audit()` for account
   actions. Both capture IP, device id, user agent and headers; pass the
   browser's `collectClientInfo()` where there is a form or fetch.
+- **Rate limits on guessing** (passwords, codes) count failures only
+  (`tooManyFailures`/`recordFailure`): a venue shares one Wi-Fi address.
+- **Uploads must survive interruption**: keep the multipart/resume path and
+  the IndexedDB queue working; `e2e/suites/uploads.mjs` is the contract.
 - **Guests are told** on the join form that name, device and network details
   are recorded. Keep that notice if you change the form.

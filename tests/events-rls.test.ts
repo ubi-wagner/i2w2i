@@ -304,6 +304,18 @@ describe.skipIf(!enabled)('events row-level security', () => {
     expect(await setO({ userId: ids.mia })).toBe(false); // hidden by a manager: locked
   });
 
+  it('cleans up only unfinished uploads past the grace period', async () => {
+    const [stale] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }))} RETURNING id`);
+    const [fresh] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }))} RETURNING id`);
+    const [doneOld] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }, { status: 'ready' }))} RETURNING id`);
+    await owner`UPDATE events.uploads SET created_at = now() - interval '3 days' WHERE id IN (${stale!.id}, ${doneOld!.id})`;
+    const claimed = await app`SELECT * FROM events.claim_stale_uploads('48 hours'::interval, 1000)`;
+    const ids2 = claimed.map((r) => r.id);
+    expect(ids2).toContain(stale!.id);
+    expect(ids2).not.toContain(fresh!.id);
+    expect(ids2).not.toContain(doneOld!.id);
+  });
+
   it('never lets the app role read access codes or guests anonymously', async () => {
     expect((await as({}, (tx) => tx`SELECT id FROM events.access_codes`)).length).toBe(0);
     expect((await as({}, (tx) => tx`SELECT id FROM events.guests`)).length).toBe(0);

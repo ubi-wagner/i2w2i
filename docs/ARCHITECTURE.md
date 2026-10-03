@@ -86,6 +86,25 @@ fuller QR resolver can be added later without touching albums.
 
 The tests in `tests/events-rls.test.ts` run against real Postgres as `i2w2i_app`.
 
+## Tests
+
+| What | Where | How |
+|---|---|---|
+| Unit tests and row-level security | `tests/` | `npm test` (security tests run when `DATABASE_URL` and `APP_DB_PASSWORD` are set) |
+| End-to-end, in a real browser against the production build | `e2e/` | `npm run e2e` |
+
+The end-to-end suites:
+
+- **auth:** sign-in, invites, passwords, deactivation, sign out everywhere
+- **album:** the shower flow on phones, activity records, venue Wi-Fi
+- **matrix:** 9 kinds of visitor × 4 album states, pages and APIs
+- **uploads:** reload, offline, stall, re-pick, limits
+- **select:** select, zip, bulk moderation
+- **decorate:** frames and filters
+- **social:** comments and gift links
+
+CI runs all of them on every push.
+
 ## Photos and videos
 
 1. The phone asks `/album/<slug>/api/uploads` for presigned URLs.
@@ -98,6 +117,32 @@ Phones upload with XHR (for progress), two at a time, with three tries per file 
 - Galleries show previews. **Originals (with their location data) are only for owners and curators and their uploader.**
 - Videos are shown as uploaded; their files can carry metadata, so they follow the same rule.
 - Bucket keys are `events/<event id>/<upload id>/original.<ext>` and `…/preview.jpg`. The bucket's CORS rules are set by the server at start-up (`instrumentation.ts`).
+
+### Interrupted uploads
+
+Phones suspend pages when people switch apps, and venue networks drop.
+
+- **Big files resume.** Files of 16 MB+ go up as S3 multipart (8 MB parts). The server reports which parts are safely stored, counting only parts of exactly the right size, so an interrupted upload continues from there.
+- **The queue survives reloads.** The queue, and the files themselves when the browser allows, is kept in IndexedDB. After a reload or a discarded tab, uploads pick up by themselves. If the browser couldn't keep a file, the page names it and choosing it again resumes it (matched by size and name/type; phones report unreliable modified dates).
+- **Stalls are restarted.** A transfer with no progress for 30 s restarts; coming back to the page restarts one that hasn't moved in 5 s.
+- **Retries are careful.** They back off, wait while offline instead of using up attempts, and check before resending a part whose reply was lost. After that the upload shows Paused with a Resume button. Paused uploads resume on reconnect and when the page is shown again.
+- **Abandoned uploads are cleaned up.** Uploads never finished are removed after 48 hours by an hourly job (`lib/housekeeping.ts`).
+
+### Selecting, downloading, moderating
+
+- The gallery has a Select mode: select all, by person or by day.
+- Anyone who can see items can download a selection as a zip, streamed by the server one file at a time. Viewers get gallery copies; managers and the uploader get originals.
+- Managers hide, show, star, unstar or delete in bulk.
+
+### Comments, gifts, frames
+
+- **Comments:** anyone who can see the album can comment (accounts as themselves, guests under their name). Authors and managers remove comments.
+- **Gift links:** Venmo, PayPal or Cash App handles and registry links (https only), shown on the album with a QR each. Money never passes through i2w2i.
+- **Frames, filters and captions** are a small manifest on the upload; the original is never touched:
+  - photos get their gallery copy re-rendered on the phone;
+  - videos are framed and filtered at playback;
+  - filters are defined once as colour operations and rendered as both CSS and pixel math, since older Safari has no canvas filters;
+  - the uploader can decorate for a day, until a manager hides the item.
 
 ## Who did what, from where
 

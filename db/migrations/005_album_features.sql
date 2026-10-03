@@ -87,3 +87,22 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION events.set_overlay(uuid, jsonb, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION events.set_overlay(uuid, jsonb, text) TO i2w2i_app;
+
+-- ── Housekeeping ────────────────────────────────────────────────────────────
+-- Uploads that were started but never finished (phone gave up, person left)
+-- are removed after a while. The server calls this hourly; deleting and
+-- returning in one statement means two containers can't claim the same row.
+-- Returns the storage keys so the caller can delete objects and abort
+-- multipart uploads. Finished uploads are never touched.
+CREATE FUNCTION events.claim_stale_uploads(older_than interval, max_rows int)
+  RETURNS TABLE (id uuid, original_key text, preview_key text, multipart_id text)
+  LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = events, pg_temp AS $$
+  DELETE FROM events.uploads u
+   WHERE u.id IN (SELECT x.id FROM events.uploads x
+                   WHERE x.status = 'pending' AND x.created_at < now() - older_than
+                   ORDER BY x.created_at LIMIT max_rows
+                   FOR UPDATE SKIP LOCKED)
+  RETURNING u.id, u.original_key, u.preview_key, u.multipart_id
+$$;
+REVOKE ALL ON FUNCTION events.claim_stale_uploads(interval, int) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION events.claim_stale_uploads(interval, int) TO i2w2i_app;

@@ -8,7 +8,7 @@ import { verifyPassword } from '@/lib/auth/password';
 import { createSession } from '@/lib/auth/session';
 import { issueLink } from '@/lib/auth/links';
 import { sendEmail } from '@/lib/email';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimit, recordFailure, tooManyFailures } from '@/lib/rate-limit';
 import { audit } from '@/lib/audit';
 import { parseClient } from '@/lib/request-meta';
 
@@ -29,7 +29,8 @@ export async function loginWithPassword(_prev: FormState, form: FormData): Promi
   const password = String(form.get('password') ?? '');
   if (!email || !password) return { error: 'Enter your email and password.', email: typed };
   const ip = await clientIp();
-  if (!rateLimit(`pw:${email}`, 8, 15 * 60_000) || !rateLimit(`pw-ip:${ip}`, 30, 15 * 60_000)) {
+  const WINDOW = 15 * 60_000;
+  if (tooManyFailures(`pw:${email}`, 8, WINDOW) || tooManyFailures(`pw-ip:${ip}`, 30, WINDOW)) {
     return { error: 'Too many attempts. Wait a few minutes and try again.', email };
   }
 
@@ -37,6 +38,8 @@ export async function loginWithPassword(_prev: FormState, form: FormData): Promi
     SELECT id, password_hash, platform_role FROM core.users WHERE email = ${email} AND is_active`;
   const ok = await verifyPassword(password, user && canUsePassword(user.platform_role) ? user.password_hash : null);
   if (!user || !ok) {
+    recordFailure(`pw:${email}`, WINDOW);
+    recordFailure(`pw-ip:${ip}`, WINDOW);
     await audit(user?.id ?? null, 'login.password.failed', email, { client: parseClient(form.get('client')) });
     return { error: 'That email and password don’t match. You can also ask for a sign-in link.', email };
   }

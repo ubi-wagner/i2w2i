@@ -105,3 +105,56 @@ jobs:
             sleep 2
           done
           docker logs --tail 20 app | grep -q "\[migrate\] up to date"
+
+  # Every end-to-end suite in a real browser against the production build:
+  # accounts, the album flow, the access matrix, interrupted uploads,
+  # selection and zips, frames, comments and gift links.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: i2w2i
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: i2w2i
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U i2w2i" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://i2w2i:ci@localhost:5432/i2w2i
+      APP_DB_PASSWORD: ci_app_password_0123456789abcdef
+      APP_SECRET: ci-app-secret-0123456789abcdefghijkl
+      APP_URL: http://localhost:3000
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_DIR: /tmp/i2w2i-storage
+      HOUSEKEEPING: 'off'
+      E2E_ADMIN_EMAIL: eric@example.com
+      E2E_ADMIN_PASSWORD: supersecret123
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run migrate
+      - name: Admin for the tests
+        env:
+          BOOTSTRAP_ADMIN_EMAIL: eric@example.com
+          BOOTSTRAP_ADMIN_NAME: Eric Wagner
+          BOOTSTRAP_ADMIN_PASSWORD: supersecret123
+        run: npm run bootstrap-admin
+      - run: npm run build
+      - name: Start the production server
+        run: |
+          cp -r .next/static .next/standalone/.next/
+          cd .next/standalone && PORT=3000 HOSTNAME=127.0.0.1 nohup node server.js > /tmp/server.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/api/health && break; sleep 1; done
+      - name: End-to-end suites
+        run: npm run e2e
+      - name: Server log
+        if: failure()
+        run: tail -200 /tmp/server.log

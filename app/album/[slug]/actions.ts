@@ -8,7 +8,7 @@ import { parseClient } from '@/lib/request-meta';
 import { codeHmac, normalizeCode, qrHash } from '@/lib/events/codes';
 import { cleanName } from '@/lib/events/rules';
 import { endGuestSession, publicEvent, startGuestSession } from '@/lib/events/session';
-import { rateLimit } from '@/lib/rate-limit';
+import { recordFailure, tooManyFailures } from '@/lib/rate-limit';
 
 export interface JoinState {
   error?: string;
@@ -27,9 +27,12 @@ export async function joinWithCode(_prev: JoinState, form: FormData): Promise<Jo
   const echo = { name: String(form.get('name') ?? ''), code: typed };
   if (!name) return { error: 'Please tell us your name.', ...echo };
   const code = normalizeCode(typed);
-  // Codes are short, so attempts are limited per network and per album.
-  if (!rateLimit(`code:${await ip()}`, 10, 15 * 60_000) || !rateLimit(`code-album:${slug}`, 200, 15 * 60_000)) {
-    return { error: 'Too many tries. Wait a few minutes and try again.', ...echo };
+  // Codes are short, so wrong guesses are limited per network and per album.
+  // Only failures count: a whole venue shares one Wi-Fi address.
+  const WINDOW = 15 * 60_000;
+  const net = await ip();
+  if (tooManyFailures(`code:${net}`, 15, WINDOW) || tooManyFailures(`code-album:${slug}`, 100, WINDOW)) {
+    return { error: 'Too many wrong codes. Wait a few minutes and try again.', ...echo };
   }
   const client = parseClient(form.get('client'));
   const event = await publicEvent(slug);
@@ -46,7 +49,11 @@ export async function joinWithCode(_prev: JoinState, form: FormData): Promise<Jo
     // The wrong code someone typed is kept: it shows guessing.
     detail: { via: 'code', slug, ...(guestId ? { access_code_id: match!.access_code_id } : { tried: typed.slice(0, 40) }) },
   });
-  if (!guestId) return { error: 'That code doesn’t match this album. Check it and try again.', ...echo };
+  if (!guestId) {
+    recordFailure(`code:${net}`, WINDOW);
+    recordFailure(`code-album:${slug}`, WINDOW);
+    return { error: 'That code doesn’t match this album. Check it and try again.', ...echo };
+  }
   redirect(`/album/${slug}`);
 }
 
@@ -55,7 +62,8 @@ export async function joinWithQr(_prev: JoinState, form: FormData): Promise<Join
   const token = String(form.get('token') ?? '');
   const name = cleanName(String(form.get('name') ?? ''));
   if (!name) return { error: 'Please tell us your name.' };
-  if (!rateLimit(`qr:${await ip()}`, 30, 15 * 60_000)) return { error: 'Too many tries. Wait a few minutes.' };
+  const net = await ip();
+  if (tooManyFailures(`qr:${net}`, 30, 15 * 60_000)) return { error: 'Too many tries. Wait a few minutes.' };
   const client = parseClient(form.get('client'));
   const [match] = await sql<{ access_code_id: string; event_id: string; slug: string }[]>`
     SELECT access_code_id, event_id, slug FROM events.resolve_qr(${qrHash(token)})`;
@@ -70,7 +78,10 @@ export async function joinWithQr(_prev: JoinState, form: FormData): Promise<Join
     client,
     detail: { via: 'qr', slug, ...(guestId ? { access_code_id: match!.access_code_id } : {}) },
   });
-  if (!guestId) return { error: 'This QR code isn’t active anymore. Ask the host for a new one.' };
+  if (!guestId) {
+    recordFailure(`qr:${net}`, 15 * 60_000);
+    return { error: 'This QR code isn’t active anymore. Ask the host for a new one.' };
+  }
   redirect(`/album/${slug}`);
 }
 
