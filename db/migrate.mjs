@@ -7,7 +7,9 @@
 //   node db/migrate.mjs           apply pending migrations
 //   node db/migrate.mjs --check   report pending/drifted, apply nothing (exit 1 if any)
 //
-// Connects with DATABASE_URL_OWNER if set, else DATABASE_URL.
+// Connects with DATABASE_URL_OWNER if set, else DATABASE_URL. Holds a Postgres
+// advisory lock for the whole run, so two containers booting at once (old and
+// new during a deploy) can't apply the same migration twice.
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -23,9 +25,12 @@ if (!url) {
   process.exit(1);
 }
 
+// One connection, so the session-level advisory lock covers every statement.
 const sql = postgres(url, { max: 1, onnotice: () => {} });
+const LOCK_KEY = 4_242_001;
 
 async function main() {
+  await sql`SELECT pg_advisory_lock(${LOCK_KEY})`;
   await sql`CREATE TABLE IF NOT EXISTS public.schema_migrations (
     name       text PRIMARY KEY,
     sha256     text NOT NULL,

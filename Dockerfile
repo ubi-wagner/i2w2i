@@ -13,7 +13,7 @@ RUN npm run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000
 RUN addgroup -S -g 1001 nodejs && adduser -S -u 1001 -G nodejs nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
@@ -21,7 +21,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/postgres ./node_modules/postgres
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/bcryptjs ./node_modules/bcryptjs
 COPY --chown=nextjs:nodejs db ./db
-COPY --chown=nextjs:nodejs scripts/bootstrap-admin.mjs ./scripts/bootstrap-admin.mjs
+COPY --chown=nextjs:nodejs scripts/bootstrap-admin.mjs scripts/check-env.mjs ./scripts/
 COPY --chown=nextjs:nodejs entrypoint.sh ./entrypoint.sh
 USER nextjs
 EXPOSE 3000

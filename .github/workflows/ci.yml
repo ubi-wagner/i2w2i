@@ -5,6 +5,10 @@ on:
   push:
     branches: [main, claude/main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -41,3 +45,53 @@ jobs:
           npm run bootstrap-admin
           npm run bootstrap-admin
       - run: npm run build
+
+  # Builds the same Dockerfile Railway builds and boots it against Postgres
+  # with production settings, so a broken image never reaches main.
+  image:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: i2w2i
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: i2w2i
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U i2w2i" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t i2w2i:ci .
+      - name: Refuses to boot without APP_URL
+        run: |
+          if docker run --rm --network host -e DATABASE_URL=postgres://i2w2i:ci@127.0.0.1:5432/i2w2i i2w2i:ci; then
+            echo "container started without APP_URL" && exit 1
+          fi
+      - name: Boot, migrate, bootstrap, serve
+        run: |
+          docker run -d --name app --network host \
+            -e PORT=3000 \
+            -e DATABASE_URL=postgres://i2w2i:ci@127.0.0.1:5432/i2w2i \
+            -e APP_URL=https://i2w2i.example \
+            -e BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
+            -e BOOTSTRAP_ADMIN_PASSWORD=ci-password-123 \
+            i2w2i:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3000/api/health && break
+            sleep 2
+          done
+          docker logs app
+          curl -fsS http://127.0.0.1:3000/api/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/login)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/admin)" = 307
+      - name: Restart is idempotent
+        run: |
+          docker restart app
+          sleep 5
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3000/api/health && break
+            sleep 2
+          done
+          docker logs --tail 20 app | grep -q "\[migrate\] up to date"
