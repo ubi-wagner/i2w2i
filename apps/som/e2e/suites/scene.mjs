@@ -3,7 +3,7 @@
 // note, a video), check-ins, pause, "on my way", inspection, aftercare and
 // close. Notifications go to the right phone and say nothing about the
 // scene; the database and the bucket hold nothing readable.
-import { BASE, bucketObjects, check, databaseText, db, finish, looksReadable, newPod, png, pushService, pushTo, pushes, TITLES, webm } from '../lib.mjs';
+import { BASE, bucketObjects, check, databaseText, db, finish, looksReadable, newPod, pick, png, pushService, pushTo, pushes, TITLES, webm } from '../lib.mjs';
 
 const subscribe = await pushService();
 const { b, r } = await newPod();
@@ -18,20 +18,32 @@ await b.goto(`${BASE}/`);
 await b.getByRole('button', { name: 'New scene' }).click();
 await b.waitForURL(/\/scene\//);
 const id = b.url().split('/').pop();
-const open = async (title) => {
-  const h = b.getByRole('button', { name: new RegExp(`^${title}`) }).first();
-  if ((await h.getAttribute('aria-expanded')) !== 'true') await h.click();
-};
 await b.fill('#plan-title', TITLE);
-await b.getByRole('button', { name: '2 hours' }).click();
-await open('Presentation'); await b.getByRole('button', { name: /Shower/ }).click();
-await open('Domain maintenance'); await b.getByLabel('Room 1', { exact: true }).selectOption('Kitchen'); await b.getByRole('button', { name: /Before & after photos/ }).click();
-await open('Praise & task bank'); await b.getByRole('button', { name: /Daily affirmations/ }).click();
-await b.getByLabel('Custom task', { exact: true }).fill('Outfit options');
-await b.getByRole('button', { name: '+ 📷 Photos' }).last().click();
-await b.getByLabel('How many').last().fill('3');
-await open('Play break'); await b.getByRole('button', { name: /A dance, on video/ }).click();
-await open('Arrival routine'); await b.getByRole('button', { name: /Meet at the door/ }).click();
+// A long day's shape, partly filled: block 1 at home, and a dance in the free hour.
+await b.getByRole('button', { name: '8 hours' }).click();
+check((await b.getByRole('region', { name: /^Block \d/ }).allInnerTexts()).map((t) => t.split('\n')[0]).join(' · ') === '1. Home · 2. Out · 3. Free time · 4. Home · 5. Welcome home',
+  '8 hours is home, out, a free hour, home again, and welcome home');
+await pick(b, 1, 'Getting ready', 'Shower');
+await pick(b, 1, 'Two chores', 'Deep-clean the');
+await b.getByLabel('Deep-clean the ___: room').selectOption('Kitchen');
+await pick(b, 1, 'Devotion', 'Daily affirmations');
+// Something written for this scene alone, with its own proof.
+await b.getByRole('group', { name: `Block 1: For ${TITLES.lead} (15 min)` }).getByRole('button', { name: /^\+ / }).click();
+await sheet(b).getByRole('button', { name: '✍️ Write your own' }).click();
+await sheet(b).getByLabel('Your own: what to do').fill('Outfit options');
+await sheet(b).getByRole('button', { name: '+ 📷 Photos' }).click();
+await sheet(b).getByLabel('How many').last().fill('3');
+await sheet(b).getByRole('button', { name: 'Add it' }).click();
+await sheet(b).getByRole('button', { name: 'Done', exact: true }).click();
+await pick(b, 3, 'A play break', 'A dance, on video');
+const chores = b.getByRole('group', { name: 'Block 1: Two chores' });
+check((await chores.getByText('1/2').count()) === 1, 'a home block wants two chores (1/2 so far)');
+await b.getByRole('group', { name: 'Block 4: Two chores' }).getByRole('button', { name: /^\+ / }).click();
+check(await sheet(b).getByRole('button', { name: /Deep-clean the/ }).isDisabled() && (await sheet(b).getByText('In block 1').count()) === 1, 'nothing twice in a day: what block 1 has is greyed out in block 4');
+await closeSheet(b);
+const arrival = b.getByRole('button', { name: /Arrival routine/ }).first();
+if ((await arrival.getAttribute('aria-expanded')) !== 'true') await arrival.click();
+await b.getByRole('button', { name: /Meet at the door/ }).click();
 await b.selectOption('#plan-checkin', '15');
 await b.getByText('Saved').waitFor({ timeout: 10000 });
 await b.waitForTimeout(4500); // a poll or two after saving
@@ -46,13 +58,15 @@ await r.getByText('sent you this scene').waitFor();
 check(await r.inputValue('#plan-title') === TITLE, 'Kay sees Sunny’s draft');
 await r.getByRole('button', { name: 'Start now' }).click();
 await sheet(r).getByText('gets these 5 tasks').waitFor();
+check((await sheet(r).getByText(/^Not filled yet: 1\. Two chores/).count()) === 1, 'starting a day that isn’t full says what’s missing (but lets it start)');
 await sheet(r).getByRole('button', { name: 'Start now' }).click();
 await r.getByText(`${TITLES.follow}’s tasks`).waitFor();
 check(!!await pushTo('sunny', /started the scene/), 'Sunny hears it has started');
 
 // ── Sunny: several photos for one task ──────────────────────────────────────
 await b.getByText('Your tasks').waitFor({ timeout: 10000 });
-await b.getByRole('button', { name: /Clean: Kitchen/ }).click();
+check((await b.getByRole('region', { name: /^Block 1\. Home/ }).getByRole('button').count()) === 4, 'Sunny’s tasks come block by block');
+await b.getByRole('button', { name: /Deep-clean the Kitchen/ }).click();
 await sheet(b).getByText('0/2 photos').waitFor();
 await sheet(b).locator('input[type=file][accept="image/*,video/*,audio/*"]').setInputFiles([await png(b, 'BEFORE', '#7a3'), await png(b, 'AFTER', '#37a')]);
 await sheet(b).getByText('2/2 photos').waitFor({ timeout: 30000 });
@@ -107,7 +121,7 @@ check(!!await pushTo('kay', /checked in/), 'Kay hears Sunny checked in');
 // ── Kay reviews ───────────────────────────────────────────────────────────
 await r.reload();
 await r.getByText('checked in').waitFor();
-await r.getByRole('region', { name: 'Waiting for review' }).getByRole('button', { name: /Clean: Kitchen/ }).click();
+await r.getByRole('region', { name: 'Waiting for review' }).getByRole('button', { name: /Deep-clean the Kitchen/ }).click();
 await sheet(r).getByRole('button', { name: 'Open photo' }).first().click();
 await sheet(r).locator('img').waitFor({ timeout: 15000 });
 check((await sheet(r).getByText('Decrypted on this phone only').count()) === 1, 'Kay opens Sunny’s photo, decrypted on her phone');
@@ -161,7 +175,7 @@ await sheet(r).getByRole('button', { name: '20 min' }).click();
 check(!!await pushTo('sunny', /on the way: about 20 minutes/), 'Sunny hears Kay is on the way');
 await b.reload();
 await b.locator('#arrival').getByText('until arrival').waitFor();
-check((await b.getByText('Meet at the door with a drink').count()) === 1, 'Sunny gets a countdown and the arrival routine');
+check((await b.locator('#arrival').getByText('Meet at the door with a drink').count()) === 1, 'Sunny gets a countdown and the arrival routine');
 check(!!await pushTo('sunny', /arrives in about 5 minutes/, 25000) && !!await pushTo('sunny', /arriving now/, 25000), '…and reminders at 5 minutes and on arrival');
 
 // ── Inspection ──────────────────────────────────────────────────────────────

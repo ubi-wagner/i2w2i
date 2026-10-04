@@ -179,16 +179,13 @@ export function MenuEditor() {
         </p>
       </div>
 
-      <Collapsible id="pacing" title="Pacing guide" open={open} setOpen={setOpen} summary={menu.pacing.map((p) => p.label).join(' · ')}>
+      <Collapsible id="pacing" title="Lengths of day" open={open} setOpen={setOpen} summary={menu.pacing.map((p) => p.label).join(' · ')}>
+        <p className="text-sm text-ink-soft">How long a scene can be when there’s no offered time. The day is made of two-hour blocks from its hours: 2 is a block at home, 4 adds one out, 8 adds a free hour and welcome home.</p>
         {menu.pacing.map((p, i) => (
           <div key={p.id} className="space-y-2 rounded-xl border border-line p-3">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2">
               <Field label="Name" value={p.label} onChange={(v) => change((m) => { m.pacing[i]!.label = v; })} />
               <Num label="Hours" value={p.hours} onChange={(v) => change((m) => { m.pacing[i]!.hours = v; })} />
-              <Num label="Rooms" value={p.rooms} onChange={(v) => change((m) => { m.pacing[i]!.rooms = v; })} />
-              <Num label="Play breaks" value={p.playBreaks} onChange={(v) => change((m) => { m.pacing[i]!.playBreaks = v; })} />
-              <Num label="Praise tasks" value={p.praise} onChange={(v) => change((m) => { m.pacing[i]!.praise = v; })} />
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={p.errands} onChange={(e) => change((m) => { m.pacing[i]!.errands = e.target.checked; })} /> Errands</label>
             </div>
             <Field label="Guide" value={p.note} onChange={(v) => change((m) => { m.pacing[i]!.note = v; })} />
           </div>
@@ -203,8 +200,8 @@ export function MenuEditor() {
         const help = SECTION_KINDS.find((k) => k.kind === sec.kind)!.help;
         const count = sec.groups.reduce((n, g) => n + g.items.length, 0);
         return (
-          <Collapsible key={sec.id} id={sec.id} title={`${si + 1}. ${sec.title}`} open={open} setOpen={setOpen} summary={`${count} ${count === 1 ? 'item' : 'items'}`}>
-            <button type="button" className="btn-follow w-full" onClick={() => setIdeas(sec.kind)}>Ideas for {sec.title}</button>
+          <Collapsible key={sec.id} id={sec.id} title={`${si + 1}. ${sec.title.replace('{lead}', menu.titles.lead)}`} open={open} setOpen={setOpen} summary={`${count} ${count === 1 ? 'item' : 'items'}`}>
+            <button type="button" className="btn-follow w-full" onClick={() => setIdeas(sec.kind)}>Ideas for {sec.title.replace('{lead}', menu.titles.lead)}</button>
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm text-ink-soft">{help}</p>
               <span className="flex shrink-0 gap-3 text-sm">

@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
-import { cleanPlan, emptyPlan, pacingFor, type Plan } from '@/lib/plan';
+import { blocksFor, cleanPlan, emptyPlan, pacingFor, type Plan } from '@/lib/plan';
 import { newId, proofText, type Roleplay } from '@/lib/menu';
 import { lovedByAll } from '@/lib/profile';
 import { useProfiles } from '../Profiles';
@@ -12,6 +12,7 @@ import { CAPACITIES, startState, type Capacity, type Role } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ErrorText, Sheet } from '../ui';
 import { KIND_ICON } from './parts';
+import { DayList } from './Day';
 import { RoleplayCard } from './Roleplay';
 import { mmss, useCountdown, type SceneData, type SceneRow } from './useScene';
 
@@ -306,7 +307,7 @@ export function NewOffer({ open, onClose, last, history = {} }: {
           onSubmit={async ({ start, end, note }) => {
             if (kind === 'roleplay' && !rp) throw new Error('Pick a roleplay.');
             const id = crypto.randomUUID();
-            const plan: Plan = cleanPlan({ ...emptyPlan(pod.menu), pacing: pacingFor(pod.menu, hoursOf(start, end))?.id ?? null, note, roleplay: rp });
+            const plan: Plan = cleanPlan({ ...emptyPlan(pod.menu, hoursOf(start, end)), note, roleplay: rp });
             await api(`/api/pods/${pod.pod.id}/scenes`, { body: { id, planEnc: await pod.seal(plan, `plan:${id}`) } });
             try {
               await api(`/api/scenes/${id}/action`, { body: { action: 'offer', startsAt: start.toISOString(), endsAt: end.toISOString(), switched } });
@@ -464,7 +465,9 @@ export function OfferView({ data, reload }: { data: SceneData; reload: () => Pro
           submit="Send the new time"
           noteLabel={`A note for ${otherName} (optional)`}
           onSubmit={async ({ start, end, note }) => {
-            const next = cleanPlan({ ...plan, pacing: pacingFor(pod.menu, hoursOf(start, end))?.id ?? plan.pacing, note: note || plan.note });
+            const hours = hoursOf(start, end);
+            const empty = !plan.blocks.some((b) => b.items.length);
+            const next = cleanPlan({ ...plan, pacing: pacingFor(pod.menu, hours)?.id ?? plan.pacing, blocks: empty ? blocksFor(hours) : plan.blocks, note: note || plan.note });
             await api(`/api/scenes/${scene.id}/action`, { body: { action: 'offer', startsAt: start.toISOString(), endsAt: end.toISOString(), planEnc: await pod.seal(next, `plan:${scene.id}`) } });
             setSheet(null);
             await reload();
@@ -585,21 +588,17 @@ export function ReadyView({ data, reload, onOpen }: { data: SceneData; reload: (
       </section>
       {data.plan.note && <p className="card whitespace-pre-wrap">“{data.plan.note}”</p>}
       {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} />}
-      {(tasks.length > 0 || !data.plan.roleplay) && <section className="card space-y-1" aria-label="The tasks">
+      {(tasks.length > 0 || !data.plan.roleplay) && <section className="card space-y-2" aria-label="The tasks">
         <p className="eyebrow text-follow">{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}</p>
-        <ul className="divide-y divide-line">
-          {tasks.map((t) => (
-            <li key={t.id}>
-              <button type="button" className="flex w-full items-center gap-3 py-2.5 text-left" onClick={() => onOpen(t.id)}>
-                <span className="text-xl" aria-hidden>{KIND_ICON[t.body.kind]}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block font-medium">{t.body.title}</span>
-                  <span className="block truncate text-xs text-ink-soft">{[t.body.needs.map(proofText).join(' · '), t.minutes ? `${t.minutes} min` : ''].filter(Boolean).join(' · ')}</span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <DayList plan={data.plan} scene={scene} tasks={tasks} base={scene.starts_at} row={(t) => (
+          <button type="button" className="flex w-full items-center gap-3 py-2.5 text-left" onClick={() => onOpen(t.id)}>
+            <span className="text-xl" aria-hidden>{KIND_ICON[t.body.kind]}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">{t.body.title}</span>
+              <span className="block truncate text-xs text-ink-soft">{[t.body.needs.map(proofText).join(' · '), t.minutes ? `${t.minutes} min` : ''].filter(Boolean).join(' · ')}</span>
+            </span>
+          </button>
+        )} />
       </section>}
       <ErrorText>{error}</ErrorText>
       <div className="grid gap-2">

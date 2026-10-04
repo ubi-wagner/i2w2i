@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!scene.paused_at) return json({ paused: false });
   if (scene.paused_by && scene.paused_by !== me.id) return bad('Only the person who paused can resume.', 403);
   await sql`UPDATE som.scenes SET paused_at = NULL, paused_by = NULL, updated_at = now() WHERE id = ${id}`;
-  if (scene.status === 'active') await resumeTimers(id, scene.paused_at, scene.checkin_minutes);
+  if (scene.status === 'active') await resumeTimers(id, scene.paused_at);
   await restoreArrival(id);
   notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} resumed the scene.`, url, tag: `pause-${id}` });
   return json({ paused: false });

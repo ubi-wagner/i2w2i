@@ -49,8 +49,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const name = await nameOf(me.id);
   const url = `/scene/${id}${taskId ? `#task-${taskId}` : ''}`;
   if (kind === 'checkin') {
-    // Checking in starts the clock again (and clears the missed-check-in alarm).
-    if (!scene.paused_at) await scheduleCheckin(id, scene.checkin_minutes);
+    // Checking in starts the clock again (and clears the missed-check-in alarm);
+    // a block end only minutes away counts as done.
+    if (!scene.paused_at) await scheduleCheckin(id, true);
     notifySoon(await others(scene, me.id, 'lead'), { title: 'S-O-M', body: `${name} checked in.`, url, tag: `checkin-${id}` });
   } else if (kind === 'praise') {
     notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} praised you. ✨`, url, tag: `praise-${id}` });

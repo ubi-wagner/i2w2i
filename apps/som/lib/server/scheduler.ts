@@ -1,4 +1,5 @@
 import 'server-only';
+import { nextBlockCheckin } from '../blocks';
 import { sql } from './db';
 import { nameOf, sceneMembers } from './pods';
 import { notify } from './push';
@@ -25,12 +26,33 @@ async function add(sceneId: string, kind: Kind, at: Date, taskId?: string): Prom
   await sql`INSERT INTO som.timers (scene_id, kind, task_id, fire_at) VALUES (${sceneId}, ${kind}, ${taskId ?? null}, ${at})`;
 }
 
-/** The next check-in, `minutes` from now (or none). Replaces any pending one. */
-export async function scheduleCheckin(sceneId: string, minutes: number | null): Promise<void> {
+interface CheckinRow { checkin_minutes: number | null; checkin_blocks: boolean; checkin_at: number[]; checkin_base: Date | null }
+
+/** Just after a check-in, a block-end one due within this many minutes counts as done. */
+const BLOCK_GRACE = 15;
+
+function nextAt(s: CheckinRow, checkedIn: boolean, now = new Date()): Date | null {
+  if (s.checkin_minutes) return new Date(now.getTime() + s.checkin_minutes * MINUTE_MS);
+  if (s.checkin_blocks && s.checkin_base) return nextBlockCheckin(s.checkin_base, s.checkin_at, now, MINUTE_MS, checkedIn ? BLOCK_GRACE : 0);
+  return null;
+}
+
+/**
+ * Replaces any pending check-in with the next one, as the scene says: every
+ * so many minutes from now, or at the end of the next block. `checkedIn`:
+ * the follow just did, so a block end only minutes away is covered.
+ */
+export async function scheduleCheckin(sceneId: string, checkedIn = false): Promise<void> {
   await cancelTimers(sceneId, ['checkin_due', 'checkin_overdue']);
-  const at = minutes ? inMinutes(minutes) : null;
-  await sql`UPDATE som.scenes SET next_checkin_at = ${at}, checkin_minutes = ${minutes}, updated_at = now() WHERE id = ${sceneId}`;
+  const [s] = await sql<CheckinRow[]>`SELECT checkin_minutes, checkin_blocks, checkin_at, checkin_base FROM som.scenes WHERE id = ${sceneId}`;
+  const at = s ? nextAt(s, checkedIn) : null;
+  await sql`UPDATE som.scenes SET next_checkin_at = ${at}, updated_at = now() WHERE id = ${sceneId}`;
   if (at) await add(sceneId, 'checkin_due', at);
+}
+
+/** How the follow checks in from now on: every `minutes`, at the end of each block, or not at all. */
+export async function setCheckins(sceneId: string, minutes: number | null, blocks: boolean): Promise<void> {
+  await sql`UPDATE som.scenes SET checkin_minutes = ${minutes}, checkin_blocks = ${!minutes && blocks}, updated_at = now() WHERE id = ${sceneId}`;
 }
 
 export async function scheduleTask(sceneId: string, taskId: string, dueAt: Date): Promise<void> {
@@ -58,14 +80,16 @@ export async function pauseTimers(sceneId: string): Promise<void> {
   await cancelTimers(sceneId);
 }
 
-export async function resumeTimers(sceneId: string, pausedAt: Date, checkinMinutes: number | null): Promise<void> {
+export async function resumeTimers(sceneId: string, pausedAt: Date): Promise<void> {
   const shift = Date.now() - pausedAt.getTime();
+  // The blocks move on by the time spent paused, like the countdowns.
+  await sql`UPDATE som.scenes SET checkin_base = checkin_base + make_interval(secs => ${shift / 1000}) WHERE id = ${sceneId} AND checkin_base IS NOT NULL`;
   const tasks = await sql<{ id: string; due_at: Date }[]>`
     UPDATE som.tasks SET due_at = due_at + make_interval(secs => ${shift / 1000})
      WHERE scene_id = ${sceneId} AND due_at IS NOT NULL AND status IN ('started', 'returned')
     RETURNING id, due_at`;
   for (const t of tasks) await add(sceneId, 'task_due', t.due_at, t.id);
-  await scheduleCheckin(sceneId, checkinMinutes);
+  await scheduleCheckin(sceneId);
 }
 
 /** An arrival is real travel: pausing doesn't move it, but its reminder comes back on resume. */
@@ -77,8 +101,8 @@ export async function restoreArrival(sceneId: string): Promise<void> {
 interface Fired { id: string; scene_id: string; kind: Kind; task_id: string | null; fire_at: Date }
 
 async function fire(t: Fired): Promise<void> {
-  const [scene] = await sql<{ pod_id: string; switched: boolean; status: string; paused_at: Date | null; checkin_grace: number; checkin_minutes: number | null }[]>`
-    SELECT pod_id, switched, status, paused_at, checkin_grace, checkin_minutes FROM som.scenes WHERE id = ${t.scene_id}`;
+  const [scene] = await sql<(CheckinRow & { pod_id: string; switched: boolean; status: string; paused_at: Date | null; checkin_grace: number })[]>`
+    SELECT pod_id, switched, status, paused_at, checkin_grace, checkin_minutes, checkin_blocks, checkin_at, checkin_base FROM som.scenes WHERE id = ${t.scene_id}`;
   if (!scene || scene.paused_at || scene.status === 'closed') return;
   const members = await sceneMembers(scene);
   const leads = members.filter((m) => m.role === 'lead').map((m) => m.account_id);
@@ -91,6 +115,11 @@ async function fire(t: Fired): Promise<void> {
       if (!running) return;
       await notify(follows, { title: 'S-O-M', body: 'Time to check in.', url: `${url}#checkin`, tag: `checkin-${t.scene_id}` });
       await add(t.scene_id, 'checkin_overdue', inMinutes(scene.checkin_grace));
+      // Block ends come round whether or not the last one was answered.
+      if (!scene.checkin_minutes) {
+        const next = nextAt(scene, false, new Date(t.fire_at.getTime() + 1));
+        if (next) await add(t.scene_id, 'checkin_due', next);
+      }
       return;
     case 'checkin_overdue': {
       if (!running) return;

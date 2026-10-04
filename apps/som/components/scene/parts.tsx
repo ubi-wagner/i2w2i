@@ -25,12 +25,12 @@ const TASK_TONE: Record<TaskStatus, string> = {
 };
 
 export const KIND_ICON: Record<TaskKind, string> = {
-  presentation: '✨', domain: '🧽', errands: '🛍️', tasks: '✍️', play: '⏱️', arrival: '🚪', inspection: '📋', outcomes: '⚖️', service: '🍽️', aftercare: '🤍', demand: '⚡',
+  presentation: '✨', changeover: '👗', domain: '🧽', errands: '🛍️', tasks: '🙇', wishes: '💝', play: '⏱️', arrival: '🚪', inspection: '📋', outcomes: '⚖️', service: '🍽️', aftercare: '🤍', demand: '⚡',
 };
 
-/** "Presentation", "Domain maintenance"… or "Demand". */
-export function kindTitle(kind: TaskKind): string {
-  return kind === 'demand' ? 'Demand' : SECTION_KINDS.find((k) => k.kind === kind)?.title ?? '';
+/** "Getting ready", "Chores", "For Captain Kay"… or "Demand". */
+export function kindTitle(kind: TaskKind, lead: string): string {
+  return kind === 'demand' ? 'Demand' : (SECTION_KINDS.find((k) => k.kind === kind)?.title ?? '').replace('{lead}', lead);
 }
 
 export const NEED_LABEL = { photo: '📷 Photo', video: '🎥 Video', audio: '🎙️ Voice', text: '✍️ Words' } as const;

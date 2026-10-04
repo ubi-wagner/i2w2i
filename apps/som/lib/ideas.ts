@@ -15,6 +15,7 @@ export function withTitles(sections: MenuSection[], titles: { lead: string; foll
   const put = (s: string) => s.replace(/\{lead\}/g, titles.lead).replace(/\{follow\}/g, titles.follow);
   return sections.map((s) => ({
     ...s,
+    title: put(s.title),
     groups: s.groups.map((g) => ({ ...g, title: put(g.title), items: g.items.map((i) => ({ ...i, label: put(i.label), ...(i.detail ? { detail: put(i.detail) } : {}) })) })),
   }));
 }

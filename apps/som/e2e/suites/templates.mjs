@@ -65,10 +65,8 @@ await r.getByText(`${TITLES.follow}’s tasks`).waitFor();
 const second = await filled(r);
 await closeSheet(r);
 check((await r.getByText('New first: it skips what your last few scenes used').count()) === 1, 'the builder says it fills with new things first');
-const play = (xs) => xs.find((t) => /A dance, on video|A voice note telling me/.test(t));
-const room = (xs) => xs.find((t) => t.startsWith('Clean:'));
-check(play(first) && play(second) && play(first) !== play(second), `a different play break than last time (${play(first)} → ${play(second)})`);
-check(room(first) !== room(second), `a different room than last time (${room(first)} → ${room(second)})`);
+const again = second.filter((t) => t !== 'Getting ready' && first.includes(t));
+check(first.length === 5 && second.length === 5 && again.length === 0, `nothing from last time: different chores, devotion and one for Kay (${first.slice(1).join(', ')} → ${second.slice(1).join(', ')})`);
 
 // ── Roleplays: never played first ───────────────────────────────────────────
 await r.goto(`${BASE}/menu`);

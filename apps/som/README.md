@@ -68,15 +68,32 @@ There are two ways in:
   day): **accept**, or **ask for a change** (another window, a different
   capacity, or both, and why). The lead agrees, offers something else or
   takes it back. Once agreed, the lead's builder shows the window and the
-  follow's capacity and starts on the matching pacing (a light day is a
-  step lighter); **Fill it for me** fills it in one tap; change anything,
-  or change the time (the follow answers again). Then **send** it. The
-  follow sees the tasks and a countdown, gets a reminder when the window
-  opens, and can **start** it from half an hour before until the window
-  closes. The lead can take a sent scene back to change it until then.
-- **The follow drafts one**: tap to pick from the menu, pick rooms, pacing,
-  check-ins; it saves as you go. **Send** it to the lead, who adjusts
+  follow's capacity, and lays the day out in blocks to fit (a light day
+  has one work block fewer); **Fill it for me** fills it in one tap;
+  change anything, or change the time (the follow answers again). Then
+  **send** it. The follow sees the tasks block by block with their times
+  and a countdown, gets a reminder when the window opens, and can
+  **start** it from half an hour before until the window closes. The lead
+  can take a sent scene back to change it until then.
+- **The follow drafts one**: pick how long, then tap to pick for each
+  block; it saves as you go. **Send** it to the lead, who adjusts
   anything and **starts it now**.
+
+**The day, in two-hour blocks.** A block at home is getting ready (30
+minutes; after the first block, a 15-minute **change-over**, like out of
+the cleaning clothes and into something for the shops), then **exactly
+two chores** (clean the fridge, wash the windows, deep-clean a room from
+the room bank), then 15 minutes of **Devotion** (a praise act for the
+lead) and 15 minutes **For {lead}** (a sonnet about your marriage, plan a
+night out somewhere new, pick a date outfit). A block **out** swaps the
+chores for one or two errands, each with its proof. 2 hours is a block at
+home; 4 adds one out; 8 is home, out, a **free hour** (on call: the lead
+can still send a demand), home again, and **welcome home** (be ready, and
+the arrival routine). Time left over goes to free time. Each part has a
+picker: anything from that menu section (nothing twice in a day), or
+**write your own** for this scene. **Check-ins** come at the end of each
+block (or every so often, or none), and the lead can send a **demand**
+(a photo or a quick act, with proof) any time.
 
 **Templates, and something new each time.** A new offer starts from
 your last one: its hours, who leads, tasks or a roleplay. **Save as a
@@ -131,7 +148,9 @@ Then:
    a video). The follow sends proof and **sends for review**; the lead
    approves (with praise in one more tap), sends back (one-tap reasons like
    "Redo it, properly") or skips. Tasks with a countdown start it when
-   begun. Check-ins on a schedule (missed ones tell the lead).
+   begun. The tasks are listed block by block, the one on now marked.
+   Check-ins at the end of each block, or on a schedule (missed ones tell
+   the lead); pausing moves them on.
 2. **The lead's quick actions**, always at the top while it runs:
    **⚡ Demand** (ready-made ones: a photo right now, redo, a correction,
    devotion; or write your own; each with its proof and a countdown that
@@ -189,7 +208,7 @@ Follow: Sunny
 ## Rooms
 - Kitchen
 
-## Tasks: Praise & task bank
+## Tasks: Devotion
 Note: shown under the section's title
 ### Writing
 - Daily affirmations [10 notes (affirmations) + 1 voice note (read aloud)]
@@ -197,8 +216,11 @@ Note: shown under the section's title
   Details go on the lines under an item, indented.
 ```
 
-- `## Kind: title`: sections are Presentation, Domain, Errands, Tasks, Play,
+- `## Kind: title`: sections are Presentation (getting ready), Changeover,
+  Domain (chores), Errands, Tasks (devotion), Wishes (for the lead), Play,
   Arrival, Inspection, Outcomes, Service, Aftercare.
+- The Pacing lines are the lengths of day to pick from; only their hours
+  matter now (the room and break counts are from before blocks).
 - `[...]`: the proof, any number of photos, videos, voice notes and notes.
 - `(15 min)`: a countdown that starts when the task does.
 - `___` and `{mins}`: a blank filled in when it's picked, and what goes there.
@@ -210,15 +232,17 @@ An ideas pack is written the same way (sections, groups, items).
 - `app/`: pages and API routes. Every route checks the session and the pod.
 - `components/scene/`: the scene screens (builder, running, task, wrap-up).
 - `lib/crypto.ts`: all encryption (WebCrypto; runs in the browser and tests).
-- `lib/menu.ts`, `lib/menu-text.ts`, `lib/ideas.ts`, `lib/plan.ts`,
-  `lib/rules.ts`: the menu, its text form, the idea pool, plans → tasks and
-  proof, and who may do what. Pure, with unit tests. `lib/ideas-data.ts`
+- `lib/menu.ts`, `lib/menu-text.ts`, `lib/ideas.ts`, `lib/blocks.ts`,
+  `lib/plan.ts`, `lib/rules.ts`: the menu, its text form, the idea pool,
+  the day's blocks, plans → tasks and proof, and who may do what. Pure, with unit tests. `lib/ideas-data.ts`
   is the built-in ideas: server only (see above).
 - `lib/server/`: database, sessions, storage, push, the scheduler.
 - `db/migrations/`: schema `som`; same rules as the family site (never edit
   an applied migration).
 - The scheduler (`lib/server/scheduler.ts`) keeps check-ins, countdowns and
-  arrivals in `som.timers`, so a restart loses none.
+  arrivals in `som.timers`, so a restart loses none. Block-end check-ins
+  are minutes from the start (`checkin_at`, `checkin_base`): the server
+  knows when, never what.
 
 ## Run it locally
 

@@ -17,6 +17,9 @@ export interface SceneRow {
   plan_enc: string;
   checkin_minutes: number | null;
   next_checkin_at: string | null;
+  /** Check-ins at the end of each block (minutes from the start), and whether they're on. */
+  checkin_at: number[];
+  checkin_blocks: boolean;
   arrival_at: string | null;
   paused_at: string | null;
   paused_by: string | null;

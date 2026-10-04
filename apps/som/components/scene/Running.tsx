@@ -6,9 +6,10 @@ import { uploadMedia } from '@/lib/client/upload';
 import { proofText } from '@/lib/menu';
 import { arrivalChecklist, CHECKIN_CHOICES } from '@/lib/plan';
 import { usePod } from '../Pod';
-import { ErrorText, Section, Sheet } from '../ui';
+import { clock, ErrorText, Section, Sheet } from '../ui';
 import { Composer } from './Composer';
 import { Checklist, done, KIND_ICON, LastCheckin, MOODS, ProgressBar, TaskChip, Timeline, useLocalTicks } from './parts';
+import { DayList } from './Day';
 import { LeadBar } from './Lead';
 import { RoleplayCard } from './Roleplay';
 import { mmss, useCountdown, type SceneData, type TaskView } from './useScene';
@@ -39,15 +40,14 @@ export function Running({ data, reload, onOpen }: { data: SceneData; reload: () 
           {review.map((t) => <TaskRow key={t.id} t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} />)}
         </section>
       )}
-      {!lead && scene.checkin_minutes && <CheckinCard data={data} reload={reload} />}
+      {!lead && (scene.checkin_minutes || scene.checkin_blocks) && <CheckinCard data={data} reload={reload} />}
 
       {(tasks.length > 0 || !data.plan.roleplay) && (
         <Section title={lead ? `${pod.title('follow')}’s tasks` : 'Your tasks'} eyebrow="Running">
           <div className="card space-y-3">
             <ProgressBar tasks={tasks} />
-            <ul className="divide-y divide-line">
-              {tasks.map((t) => <li key={t.id}><TaskRow t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} /></li>)}
-            </ul>
+            <DayList plan={data.plan} scene={scene} tasks={tasks} base={scene.started_at} skew={data.skew}
+              row={(t) => <TaskRow t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} />} />
           </div>
         </Section>
       )}
@@ -89,7 +89,8 @@ function CheckinCard({ data, reload }: { data: SceneData; reload: () => Promise<
       <div>
         <p className="eyebrow text-lead">Check-in</p>
         <p className="font-medium">
-          {scene.paused_at ? 'Paused' : left === null ? `Every ${scene.checkin_minutes} minutes` : due ? `Due now: ${pod.title('lead')} is waiting` : `Next in ${mmss(left)}`}
+          {scene.paused_at ? 'Paused' : left === null ? (scene.checkin_minutes ? `Every ${scene.checkin_minutes} minutes` : 'No more block ends today')
+            : due ? `Due now: ${pod.title('lead')} is waiting` : scene.checkin_minutes ? `Next in ${mmss(left)}` : `End of this block, ${clock(scene.next_checkin_at!)}`}
         </p>
       </div>
       <button type="button" className={due ? 'btn-stop' : 'btn'} onClick={() => setOpen(true)}>Check in</button>
@@ -167,7 +168,7 @@ function LeadCheckins({ data, reload }: { data: SceneData; reload: () => Promise
   async function change(v: string) {
     setError('');
     try {
-      await api(`/api/scenes/${scene.id}/checkins`, { method: 'PUT', body: { minutes: v ? Number(v) : null } });
+      await api(`/api/scenes/${scene.id}/checkins`, { method: 'PUT', body: v === 'blocks' ? { minutes: null, blocks: true } : { minutes: v ? Number(v) : null } });
       await reload();
     } catch (err) {
       setError((err as Error).message);
@@ -179,12 +180,13 @@ function LeadCheckins({ data, reload }: { data: SceneData; reload: () => Promise
         <div>
           <p className="eyebrow text-lead">Check-ins</p>
           <LastCheckin entries={data.entries} />
-          {left !== null && <p className={`text-sm ${left <= 0 ? 'font-semibold text-stop' : 'text-ink-soft'}`}>{left > 0 ? `Next due in ${mmss(left)}` : `Due now; ${pod.title('follow')} has been asked.`}</p>}
+          {left !== null && <p className={`text-sm ${left <= 0 ? 'font-semibold text-stop' : 'text-ink-soft'}`}>{left > 0 ? `Next due ${clock(scene.next_checkin_at!)}, in ${mmss(left)}` : `Due now; ${pod.title('follow')} has been asked.`}</p>}
         </div>
       </div>
-      <select className="input" aria-label="How often" value={scene.checkin_minutes ?? ''} onChange={(e) => change(e.target.value)}>
-        <option value="">No check-ins</option>
+      <select className="input" aria-label="How often" value={scene.checkin_minutes ?? (scene.checkin_blocks ? 'blocks' : '')} onChange={(e) => change(e.target.value)}>
+        {scene.checkin_at.length > 0 && <option value="blocks">At the end of each block</option>}
         {CHECKIN_CHOICES.map((m) => <option key={m} value={m}>Every {m} minutes</option>)}
+        <option value="">No check-ins</option>
       </select>
       <ErrorText>{error}</ErrorText>
     </section>

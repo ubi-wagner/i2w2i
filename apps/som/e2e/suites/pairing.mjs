@@ -86,7 +86,7 @@ await b.getByRole('button', { name: 'Save menu' }).click();
 await b.getByText('Saved.').waitFor();
 
 // Edit one section as text in the app.
-await b.getByRole('button', { name: /^4\. Praise & task bank/ }).click();
+await b.getByRole('button', { name: /^\d+\. Devotion/ }).click();
 await b.getByRole('button', { name: 'Edit as text' }).click();
 const box = b.getByLabel('Menu as text');
 check((await box.inputValue()).includes(`- Gratitude list ${RUN} [5 notes (gratitudes)]`), '“Edit as text” shows the section the way it reads on paper, proof and all');
@@ -106,14 +106,14 @@ await r.goto(`${BASE}/menu`);
 await r.locator('#m-name').waitFor();
 await r.waitForFunction((v) => document.querySelector('#m-name')?.value === v, `Our menu ${RUN}`, { timeout: 10000 }).catch(() => {});
 check((await r.inputValue('#m-name')) === `Our menu ${RUN}`, 'the partner’s phone shows the imported menu');
-await r.getByRole('button', { name: /^3\. Out and about/ }).click();
+await r.getByRole('button', { name: /^\d+\. Out and about/ }).click();
 check((await r.getByText(`Post office run ${RUN}`).count()) === 1, '…with the section edits');
 text = await databaseText();
 check(!text.includes(`Gratitude list ${RUN}`) && !text.includes(`Our menu ${RUN}`) && !text.includes(`Post office run ${RUN}`), 'the menu is stored encrypted');
 
 // Ideas: a big pool; the menu is what's picked from it plus your own entries.
 await b.goto(`${BASE}/menu`);
-await b.getByRole('button', { name: /^5\. Play break/ }).click();
+await b.getByRole('button', { name: /^\d+\. Play break/ }).click();
 await b.getByRole('button', { name: 'Ideas for Play break' }).click();
 const sheetB = b.locator('dialog[open]').last();
 await sheetB.getByLabel('Search ideas').fill('squats');
@@ -124,12 +124,12 @@ await sheetB.getByLabel('Search ideas').fill('self-bondage');
 check((await sheetB.getByText('Self-bondage, done safely').count()) === 1, 'the pool includes common BDSM activities');
 await sheetB.getByRole('button', { name: 'Close' }).first().click();
 check((await b.getByRole('button', { name: /20 squats, on video/ }).count()) === 1, '…where it shows in its section, with its proof');
-await b.getByRole('button', { name: /^6\. Arrival routine/ }).click();
+await b.getByRole('button', { name: /^\d+\. Arrival routine/ }).click();
 await b.getByRole('button', { name: 'Ideas for Arrival routine' }).click();
 await sheetB.getByLabel('Search ideas').fill('kiss');
 check((await sheetB.getByRole('button', { name: `+ Kneel and kiss ${TITLES.lead}’s feet` }).count()) === 1, 'built-in ideas use the pod’s own titles');
 await sheetB.getByRole('button', { name: 'Close' }).first().click();
-await b.getByRole('button', { name: /^5\. Play break/ }).click();
+await b.getByRole('button', { name: /^\d+\. Play break/ }).click();
 const packFile = join(tmpdir(), `ideas-${RUN}.txt`);
 writeFileSync(packFile, `## Play\n### Our private ideas\n- Private idea ${RUN} [3 photos + 1 video] (10 min)\n- Another ${RUN}\n## Errands\n### Out and about\n- Errand idea ${RUN} [1 photo]\n`);
 await b.getByLabel('Import ideas').setInputFiles(packFile);
@@ -152,9 +152,10 @@ check(!text.includes(`Private idea ${RUN}`) && !text.includes(`Errand idea ${RUN
 await b.goto(`${BASE}/`);
 await b.getByRole('button', { name: 'New scene' }).click();
 await b.waitForURL(/\/scene\//);
-await b.getByRole('button', { name: /^Play break/ }).first().click();
-check((await b.getByRole('button', { name: new RegExp(`Private idea ${RUN}`) }).count()) === 1, 'ideas picked into the menu show up when building a scene');
-await b.getByRole('link', { name: 'More ideas for this section…' }).click();
+await b.getByRole('button', { name: '8 hours' }).click();
+await b.getByRole('group', { name: /^Block 3: A play break/ }).getByRole('button', { name: /^\+ / }).click();
+check((await b.locator('dialog[open]').getByRole('button', { name: new RegExp(`Private idea ${RUN}`) }).count()) === 1, 'ideas picked into the menu show up when building a scene');
+await b.locator('dialog[open]').getByRole('link', { name: 'More ideas…' }).click();
 await b.waitForURL(/\/menu#play/);
 await b.locator('dialog[open]').getByLabel('Search ideas').waitFor();
 check(true, '“More ideas” in the builder opens that section’s ideas');

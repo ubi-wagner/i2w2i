@@ -30,6 +30,10 @@ export interface SceneRow {
   checkin_minutes: number | null;
   checkin_grace: number;
   next_checkin_at: Date | null;
+  /** Check-ins at the end of each block: minutes from checkin_base (when the day started, moved on by pauses). */
+  checkin_at: number[];
+  checkin_base: Date | null;
+  checkin_blocks: boolean;
   arrival_at: Date | null;
   paused_at: Date | null;
   paused_by: string | null;

@@ -64,7 +64,7 @@ export function TaskSheet({ task, data, reload }: { task: TaskView; data: SceneD
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm text-ink-soft">{KIND_ICON[t.kind]} {kindTitle(t.kind)}</span>
+        <span className="text-sm text-ink-soft">{KIND_ICON[t.kind]} {kindTitle(t.kind, pod.title('lead'))}</span>
         <TaskChip status={task.status} />
       </div>
 

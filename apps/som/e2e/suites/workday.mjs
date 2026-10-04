@@ -9,7 +9,7 @@
 // and Sunny sees the results. Every new screen is checked on the small
 // phone; notifications say who, never what; the database holds nothing
 // readable.
-import { audit, BASE, call, check, databaseText, db, finish, newPod, png, pushService, pushTo, pushes, SMALL, TITLES } from '../lib.mjs';
+import { audit, BASE, call, check, databaseText, db, finish, newPod, pick, png, pushService, pushTo, pushes, SMALL, TITLES } from '../lib.mjs';
 
 console.log(`on ${SMALL}`);
 const subscribe = await pushService();
@@ -20,6 +20,7 @@ const sheet = (p) => p.locator('dialog[open]').last();
 const closeSheet = async (p) => { await sheet(p).getByRole('button', { name: 'Close' }).first().click(); };
 const pressed = async (l) => (await l.getAttribute('aria-pressed')) === 'true';
 const hours = (s) => (s.ends_at - s.starts_at) / 3_600_000;
+const LAUNDRY = 'Laundry: wash, dry, fold and put away';
 
 // ── Kay offers her day ──────────────────────────────────────────────────────
 await r.goto(`${BASE}/`);
@@ -73,8 +74,9 @@ check(!!await pushTo('sunny', /agreed to your change/), 'Sunny hears Kay agreed'
 [scene] = await db`SELECT status, starts_at, ends_at, change_request, reply_enc FROM som.scenes WHERE id = ${id}`;
 check(scene.status === 'accepted' && hours(scene) === 4 && scene.change_request === null && /^j1\./.test(scene.reply_enc), 'the scene is agreed for 4 hours; her capacity and note are stored encrypted');
 await r.getByText('Capacity: Light').waitFor();
-await r.locator('button[aria-pressed="true"]', { hasText: /^2 hours$/ }).waitFor();
-check(true, 'Kay’s builder shows Sunny’s capacity, and starts a light 4 hours on the 2-hour pacing');
+await r.getByRole('region', { name: 'Block 1: Home' }).waitFor();
+check((await r.getByRole('region', { name: /^Block 2/ }).count()) === 0 && (await r.getByRole('region', { name: 'Free time at the end' }).innerText()).includes('2. Free time'),
+  'Kay’s builder shows Sunny’s capacity; a light 4 hours is one block at home, then free time');
 
 await b.reload();
 await b.getByText(`${TITLES.lead} is building your scene`).waitFor();
@@ -102,14 +104,16 @@ await r.getByText(`Agreed with ${TITLES.follow}`).waitFor();
 
 // ── Kay fills it in and sends it ────────────────────────────────────────────
 await r.getByRole('button', { name: /Fill it for me/ }).click();
-const praiseBank = r.getByRole('button', { name: /^Praise & task bank/ }).first();
-if ((await praiseBank.getAttribute('aria-expanded')) !== 'true') await praiseBank.click();
-const laundry = r.getByRole('button', { name: /Fold the laundry for inspection/ });
-if (!(await pressed(laundry))) await laundry.click();
+const chores = r.getByRole('group', { name: 'Block 1: Two chores' });
+await chores.getByText('2/2').waitFor();
+if (!(await chores.getByText(LAUNDRY).count())) {
+  await chores.getByRole('button', { name: /^Take out/ }).first().click();
+  await pick(r, 1, 'Two chores', 'Laundry: wash');
+}
 await r.getByText('Saved').waitFor({ timeout: 10000 });
 const filled = Number((await r.getByText(/^\d+ tasks? ·/).innerText()).match(/^(\d+)/)[1]);
-check(filled >= 4, `“Fill it for me” fills a light 4 hours (${filled} tasks)`);
-check(await r.locator('#plan-checkin').inputValue() === '60', '…with an hourly check-in for the 4 hours');
+check(filled === 5, `“Fill it for me” fills the block: getting ready, two chores, devotion and one for Kay (${filled} tasks)`);
+check(await r.locator('#plan-checkin').inputValue() === 'blocks', '…with a check-in at the end of the block');
 await audit(r, 'builder, filled in');
 await r.getByRole('button', { name: `Send to ${TITLES.follow}` }).click();
 await sheet(r).getByText(`gets these ${filled} tasks`).waitFor();
@@ -140,7 +144,8 @@ await coming.click();
 await b.getByRole('timer').waitFor();
 check(/Starts in \d+ h \d+ min/.test(await b.getByRole('timer').innerText()), 'the ready screen counts down to the start');
 const list = b.getByRole('region', { name: 'The tasks' });
-check((await list.getByText('Fold the laundry for inspection').count()) === 1 && (await list.getByRole('listitem').count()) === filled, `Sunny can read all ${filled} tasks before she starts`);
+check((await list.getByText(LAUNDRY).count()) === 1 && (await list.getByRole('listitem').count()) === filled, `Sunny can read all ${filled} tasks before she starts`);
+check((await list.getByRole('region', { name: /^Block 1\. Home/ }).innerText()).includes('–'), '…block by block, with the times');
 check(await b.getByRole('button', { name: 'Start the scene' }).isDisabled() && (await b.getByText(/You can start from/).count()) === 1, 'it can’t start yet: she sees from when it can');
 check((await call(b, `/api/scenes/${id}/action`, 'POST', { action: 'start' })).status === 409, '…and the server agrees');
 await audit(b, 'ready to start');
@@ -153,9 +158,14 @@ await b.reload();
 await b.getByRole('button', { name: 'Start the scene' }).click();
 await b.getByText('Your tasks').waitFor();
 check(!!await pushTo('kay', /started the scene/), 'Kay hears Sunny started (a little early is fine)');
+const [blocks] = await db`SELECT checkin_minutes, checkin_blocks, checkin_at, checkin_base, next_checkin_at FROM som.scenes WHERE id = ${id}`;
+check(blocks.checkin_minutes === null && blocks.checkin_blocks && blocks.checkin_at.join() === '120' && blocks.next_checkin_at - blocks.checkin_base === 120 * 1000,
+  'the check-in is set for the end of the block (120 test minutes from the start)');
+await b.locator('#checkin').getByText(/^End of this block/).waitFor();
+check(true, 'Sunny sees when the block ends and her check-in is due');
 
 // ── Sunny sends proof; Kay approves with praise ─────────────────────────────
-await b.getByRole('button', { name: /Fold the laundry for inspection/ }).click();
+await b.getByRole('button', { name: /Laundry: wash/ }).click();
 await sheet(b).locator('input[type=file][accept="image/*,video/*,audio/*"]').setInputFiles([await png(b, 'FOLDED', '#3a7')]);
 await sheet(b).getByText('1/1 photo').waitFor({ timeout: 30000 });
 await sheet(b).getByRole('button', { name: 'Send for review' }).click();
@@ -166,7 +176,7 @@ check(!!await pushTo('kay', /sent something for review/), 'Kay hears the laundry
 await r.reload();
 await r.getByRole('button', { name: 'Demand' }).waitFor();
 await audit(r, 'running, with the lead’s quick actions');
-await r.getByRole('region', { name: 'Waiting for review' }).getByRole('button', { name: /Fold the laundry/ }).click();
+await r.getByRole('region', { name: 'Waiting for review' }).getByRole('button', { name: /Laundry: wash/ }).click();
 await sheet(r).getByRole('button', { name: 'Approve + praise' }).click();
 await sheet(r).getByRole('button', { name: 'Perfect.' }).waitFor();
 await audit(r, 'approve with praise');
@@ -177,7 +187,7 @@ check(!!await pushTo('sunny', /praised you/) && !!await pushTo('sunny', /approve
 // "Ask for more" about this task: a demand that says what it's about.
 await sheet(r).getByRole('button', { name: 'Ask for more' }).click();
 await sheet(r).getByRole('button', { name: /Show me the detail you missed/ }).click();
-check(await sheet(r).getByLabel('Details (optional)').inputValue() === 'About: Fold the laundry for inspection', '“Ask for more” on a task makes a demand about that task');
+check(await sheet(r).getByLabel('Details (optional)').inputValue() === `About: ${LAUNDRY}`, '“Ask for more” on a task makes a demand about that task');
 await sheet(r).getByRole('button', { name: 'Send the demand' }).click();
 await r.waitForFunction(() => document.querySelectorAll('dialog[open]').length === 1);
 await closeSheet(r);
@@ -266,7 +276,7 @@ await r.getByRole('button', { name: 'Start the inspection' }).click();
 await r.getByText('Each task').waitFor();
 const total = (await db`SELECT count(*)::int AS n FROM som.tasks WHERE scene_id = ${id}`)[0].n;
 check(total === filled + 3, `the scorecard lists every task she set, demands included (${total})`);
-await r.getByRole('radiogroup', { name: 'Score for Fold the laundry for inspection', exact: true }).getByRole('radio', { name: '5' }).click();
+await r.getByRole('radiogroup', { name: `Score for ${LAUNDRY}`, exact: true }).getByRole('radio', { name: '5' }).click();
 await r.getByRole('button', { name: 'all 4s' }).click();
 await r.getByText(`${total} of ${total} scored`).waitFor();
 check(true, 'one score by hand, “all 4s” for the rest');
@@ -284,7 +294,7 @@ const results = b.getByRole('region', { name: 'Results' });
 await results.waitFor();
 const text = await results.innerText();
 check(text.includes(`${sum}`) && text.includes(`/ ${max}`), `Sunny sees the total (${sum} / ${max})`);
-check(text.includes('Fold the laundry for inspection') && text.includes('⚡ Self-spank 10 per cheek, counting aloud') && /overall/i.test(text),
+check(text.includes(LAUNDRY) && text.includes('⚡ Self-spank 10 per cheek, counting aloud') && /overall/i.test(text),
   `…and the score for each task Kay set, demands marked ⚡, then the overall scores${/overall/i.test(text) ? '' : `: ${text}`}`);
 check((await results.getByLabel('5 of 5').count()) === 1, '…with the laundry at 5');
 await audit(b, 'results by task');
@@ -294,7 +304,7 @@ check(pushes.every((m) => !m.error), 'every notification decrypts on the phone i
 const leaks = pushes.filter((m) => /Big day|Doctor|laundry|spank|photo, right|proud|Perfect|closer|detail/i.test(`${m.title} ${m.body}`));
 check(leaks.length === 0, `notifications never say what’s in the scene${leaks.length ? `: ${JSON.stringify(leaks)}` : ''}`);
 const all = await databaseText();
-const found = ['Big day at work', 'Doctor at 2', '"capacity"', 'lighter?', 'Fold the laundry', 'Self-spank', 'A photo, right now', 'detail you missed', 'closer, more light', 'So proud of how', 'Perfect.', 'Lovely folding', TITLES.lead]
+const found = ['Big day at work', 'Doctor at 2', '"capacity"', 'lighter?', 'Laundry: wash', 'Self-spank', 'A photo, right now', 'detail you missed', 'closer, more light', 'So proud of how', 'Perfect.', 'Lovely folding', TITLES.lead]
   .filter((w) => all.includes(w));
 check(found.length === 0, `nothing readable in the database${found.length ? `: ${found.join(', ')}` : ''}`);
 

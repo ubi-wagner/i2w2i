@@ -133,18 +133,26 @@ export async function newPod(deviceName) {
   return { b, r, follow, lead, podId };
 }
 
-/** Sunny starts a scene from the menu and Kay starts it. Returns the scene id. */
+/**
+ * Picks something for one part of a block in the scene builder: block 1's
+ * "Two chores", say, and a menu item matching `label`.
+ */
+export async function pick(p, block, part, label) {
+  const group = p.getByRole('group', { name: new RegExp(`^Block ${block}: ${part}`) });
+  await group.getByRole('button', { name: /^\+ / }).click();
+  const sheet = p.locator('dialog[open]').last();
+  await sheet.getByRole('button', { name: label instanceof RegExp ? label : new RegExp(label) }).first().click();
+  await sheet.getByRole('button', { name: 'Done', exact: true }).click();
+}
+
+/** Sunny starts a scene from the menu (picks: [block, part, label]) and Kay starts it. Returns the scene id. */
 export async function runningScene(b, r, { title = `Scene ${RUN}`, picks = [], checkin = '' } = {}) {
   await b.goto(`${BASE}/`);
   await b.getByRole('button', { name: 'New scene' }).click();
   await b.waitForURL(/\/scene\//);
   const id = b.url().split('/').pop();
   await b.fill('#plan-title', title);
-  for (const [section, label] of picks) {
-    const header = b.getByRole('button', { name: new RegExp(`^${section}`) }).first();
-    if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
-    await b.getByRole('button', { name: new RegExp(label) }).first().click();
-  }
+  for (const [block, part, label] of picks) await pick(b, block, part, label);
   if (checkin) await b.selectOption('#plan-checkin', checkin);
   await b.getByText('Saved').waitFor({ timeout: 10000 });
   await b.getByRole('button', { name: `Send to ${TITLES.lead}` }).click();

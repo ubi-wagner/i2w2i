@@ -2,7 +2,7 @@
 // change it): nothing wider than the screen, text boxes at 16px or more (so
 // iPhones don't zoom in on them), and buttons big enough to tap. With
 // E2E_SHOTS=<dir>, saves a screenshot of each screen there.
-import { audit, BASE, check, finish, newPod, phone, SMALL as DEVICE, TITLES } from '../lib.mjs';
+import { audit, BASE, check, finish, newPod, phone, pick, SMALL as DEVICE, TITLES } from '../lib.mjs';
 
 const sheet = (p) => p.locator('dialog[open]').last();
 const close = (p) => sheet(p).getByRole('button', { name: 'Close' }).first().click();
@@ -21,7 +21,7 @@ await audit(b, 'home');
 // The menu, its ideas, text editing and one item.
 await b.goto(`${BASE}/menu`);
 await audit(b, 'menu');
-await b.getByRole('button', { name: /^5\. Play break/ }).click();
+await b.getByRole('button', { name: /^\d+\. Play break/ }).click();
 await audit(b, 'menu section');
 await b.getByRole('button', { name: 'Ideas for Play break' }).click();
 await sheet(b).getByLabel('Search ideas').waitFor();
@@ -40,17 +40,19 @@ await b.getByRole('button', { name: 'New scene' }).click();
 await b.waitForURL(/\/scene\//);
 const id = b.url().split('/').pop();
 await b.fill('#plan-title', 'Layout check');
-const open = async (title) => {
-  const h = b.getByRole('button', { name: new RegExp(`^${title}`) }).first();
-  if ((await h.getAttribute('aria-expanded')) !== 'true') await h.click();
-};
-await open('Presentation'); await b.getByRole('button', { name: /Shower/ }).first().click();
-await open('Domain maintenance'); await b.getByLabel('Room 1', { exact: true }).selectOption('Kitchen'); await b.getByRole('button', { name: /Before & after photos/ }).first().click();
-await open('Praise & task bank'); await b.getByRole('button', { name: /Daily affirmations/ }).first().click();
-await b.getByLabel('Custom task', { exact: true }).fill('Outfit options');
-await b.getByRole('button', { name: '+ 📷 Photos' }).last().click();
-await open('Play break'); await b.getByRole('button', { name: /A dance, on video/ }).first().click();
-await open('Consequences|Arrival routine');
+await b.getByRole('button', { name: '4 hours' }).click();
+await pick(b, 1, 'Getting ready', 'Shower');
+await pick(b, 1, 'Two chores', 'Deep-clean the');
+await b.getByLabel('Deep-clean the ___: room').selectOption('Kitchen');
+await pick(b, 1, 'Devotion', 'Daily affirmations');
+await b.getByRole('group', { name: 'Block 2: Errands' }).getByRole('button', { name: /^\+ / }).click();
+await sheet(b).getByRole('button', { name: /Pick up flowers/ }).click();
+await sheet(b).getByRole('button', { name: '✍️ Write your own' }).click();
+await sheet(b).getByLabel('Your own: what to do').fill('Outfit options');
+await audit(b, 'picking for a block');
+await sheet(b).getByRole('button', { name: 'Add it' }).click();
+await sheet(b).getByRole('button', { name: 'Done', exact: true }).click();
+await b.getByRole('button', { name: /Arrival routine/ }).first().click();
 await b.selectOption('#plan-checkin', '30');
 await b.getByText('Saved').waitFor({ timeout: 10000 });
 await audit(b, 'scene builder');

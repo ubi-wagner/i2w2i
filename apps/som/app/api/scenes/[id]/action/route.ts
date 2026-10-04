@@ -13,7 +13,7 @@ const ACTIONS: SceneAction[] = [
 ];
 
 type Body = {
-  action?: unknown; tasks?: unknown; planEnc?: unknown; checkinMinutes?: unknown;
+  action?: unknown; tasks?: unknown; planEnc?: unknown; checkinMinutes?: unknown; checkinAt?: unknown;
   startsAt?: unknown; endsAt?: unknown; replyEnc?: unknown; switched?: unknown;
 };
 type TaskIn = { id?: unknown; ord?: unknown; bodyEnc?: unknown; minutes?: unknown };
@@ -24,6 +24,13 @@ function windowOf(s: unknown, e: unknown): Window | string {
   if (typeof s !== 'string' || typeof e !== 'string') return 'Pick a day and a time.';
   const w = { start: new Date(s), end: new Date(e) };
   return windowProblem(w.start, w.end, new Date()) ?? w;
+}
+
+/** Check-ins at the end of each block: minutes from the start, up to 48 hours, at most 12. */
+function checkinTimes(v: unknown): number[] {
+  if (!Array.isArray(v)) return [];
+  const ok = v.filter((x): x is number => Number.isInteger(x) && x >= 1 && x <= 2880);
+  return [...new Set(ok)].sort((a, b) => a - b).slice(0, 12);
 }
 
 /** Tasks from a phone; a sent scene may have none (a roleplay). */
@@ -68,6 +75,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (b?.replyEnc != null && !isCipher(b.replyEnc, 'j1', 8_000)) return bad('That doesn’t look like an answer.');
   const replyEnc = (b?.replyEnc as string | undefined) ?? null;
   const every = typeof b?.checkinMinutes === 'number' && CHECKIN_CHOICES.includes(b.checkinMinutes) ? b.checkinMinutes : null;
+  // How the follow checks in: every so often, or at the end of each block.
+  const blockEnds = every ? [] : checkinTimes(b?.checkinAt);
+  const checkins = sql`checkin_minutes = ${every}, checkin_at = ${blockEnds}, checkin_blocks = ${blockEnds.length > 0}`;
 
   // Changes only if nobody else moved the scene first.
   const move = async (fields?: ReturnType<typeof sql>) => {
@@ -120,7 +130,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const tasks = taskList(b?.tasks ?? [], true);
       if (!tasks) return bad('That doesn’t look like a task list.');
       const ok = await sql.begin(async (tx) => {
-        const [s] = await tx`UPDATE som.scenes SET status = 'ready', updated_at = now(), change_request = NULL, checkin_minutes = ${every}
+        const [s] = await tx`UPDATE som.scenes SET status = 'ready', updated_at = now(), change_request = NULL, ${checkins}
                               WHERE id = ${id} AND status = ${scene.status} RETURNING 1`;
         if (!s) return false;
         for (const t of tasks) {
@@ -171,7 +181,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const tasks = taskList(b?.tasks, true);
       if (!tasks) return bad('That doesn’t look like a task list.');
       const ok = await sql.begin(async (tx) => {
-        const [s] = await tx`UPDATE som.scenes SET status = 'ready', updated_at = now(), checkin_minutes = ${every},
+        const [s] = await tx`UPDATE som.scenes SET status = 'ready', updated_at = now(), ${checkins},
                                     plan_enc = coalesce(${planEnc}, plan_enc), plan_rev = plan_rev + 1
                               WHERE id = ${id} AND status = ${scene.status} RETURNING 1`;
         if (!s) return false;
@@ -204,16 +214,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const when = startState(scene.starts_at, scene.ends_at, new Date());
         if (when === 'early') return bad('It’s too early: it can start half an hour before its time.', 409);
         if (when === 'over') return bad('This scene’s time has passed. Ask for a new time.', 409);
-        if (!(await move(sql`started_at = now()`))) return raced();
+        if (!(await move(sql`started_at = now(), checkin_base = now()`))) return raced();
         await cancelTimers(id, ['scene_start']);
-        await scheduleCheckin(id, scene.checkin_minutes);
+        await scheduleCheckin(id);
         await tell(`${name} started the scene.`);
         return json({ status: 'active' });
       }
       const tasks = taskList(b?.tasks);
       if (!tasks) return bad('That doesn’t look like a task list.');
       const ok = await sql.begin(async (tx) => {
-        const [s] = await tx`UPDATE som.scenes SET status = 'active', started_at = now(), updated_at = now(),
+        const [s] = await tx`UPDATE som.scenes SET status = 'active', started_at = now(), updated_at = now(), checkin_base = now(), ${checkins},
                                     plan_enc = coalesce(${planEnc}, plan_enc), plan_rev = plan_rev + 1
                               WHERE id = ${id} AND status = ${scene.status} RETURNING 1`;
         if (!s) return false;
@@ -223,7 +233,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return true;
       });
       if (!ok) return raced();
-      await scheduleCheckin(id, every);
+      await scheduleCheckin(id);
       await tell(`${name} started the scene.`);
       return json({ status: 'active' });
     }

@@ -43,11 +43,13 @@ export function cleanProofs(raw: unknown): Proof[] {
 }
 
 export type SectionKind =
-  | 'presentation' // getting ready: one checklist task
-  | 'domain' // rooms from the room bank, with required evidence
-  | 'errands' // one task each
-  | 'tasks' // writing, performance and custom tasks, and the story assignment
-  | 'play' // one task each, proof recorded
+  | 'presentation' // getting ready (the first 30 minutes): one checklist task
+  | 'changeover' // the 15 minutes between blocks: into the next outfit
+  | 'domain' // chores, two to a block at home (a ___ {room} blank picks from the room bank)
+  | 'errands' // out of the house, in an "out" block
+  | 'tasks' // devotion: praise acts for the lead
+  | 'wishes' // for the lead: things about the two of you
+  | 'play' // a play break in the free hour
   | 'arrival' // what happens when the lead arrives (a checklist, not tasks)
   | 'inspection' // categories scored 1–5
   | 'outcomes' // consequences and rewards, chosen at inspection
@@ -55,11 +57,13 @@ export type SectionKind =
   | 'aftercare'; // closing the scene and coming back to "us"
 
 export const SECTION_KINDS: { kind: SectionKind; title: string; help: string }[] = [
-  { kind: 'presentation', title: 'Presentation', help: 'Getting ready. Becomes one checklist, with a photo when done.' },
-  { kind: 'domain', title: 'Domain maintenance', help: 'Rooms from the room bank. The evidence picked here applies to every room.' },
-  { kind: 'errands', title: 'Errands', help: 'Each one picked becomes its own task.' },
-  { kind: 'tasks', title: 'Praise & task bank', help: 'Writing and performance tasks, the story assignment, and a custom task.' },
-  { kind: 'play', title: 'Play break', help: 'Each one picked becomes a task with proof recorded.' },
+  { kind: 'presentation', title: 'Getting ready', help: 'The first 30 minutes of the day. Becomes one checklist, with a photo when done.' },
+  { kind: 'changeover', title: 'Change-overs', help: 'The 15 minutes between blocks: out of one outfit, into the next.' },
+  { kind: 'domain', title: 'Chores', help: 'Specific chores, two to a block at home. Write ___ with the blank “room” to pick from the room bank.' },
+  { kind: 'errands', title: 'Errands', help: 'Out of the house: one or two to an “out” block, proof and all.' },
+  { kind: 'tasks', title: 'Devotion', help: 'Praise acts for the lead: one to a block, about 15 minutes.' },
+  { kind: 'wishes', title: 'For {lead}', help: 'Things for the lead and the two of you: one to a block, about 15 minutes.' },
+  { kind: 'play', title: 'Play break', help: 'A break in the free hour, proof recorded.' },
   { kind: 'arrival', title: 'Arrival routine', help: 'Shown when the lead says they’re on the way.' },
   { kind: 'inspection', title: 'Inspection & scorecard', help: 'Each item is a 1–5 score at inspection.' },
   { kind: 'outcomes', title: 'Consequences & rewards', help: 'Chosen by the lead after inspection.' },
@@ -321,6 +325,9 @@ const g = (title: string, items: (string | Omit<MenuItem, 'id'>)[]): MenuGroup =
   items: items.map((i) => (typeof i === 'string' ? { id: newId(), label: i } : { id: newId(), ...i })),
 });
 
+const photo: Proof = { kind: 'photo', count: 1 };
+const beforeAfter: Proof = { kind: 'photo', count: 2, label: 'before & after' };
+
 /** A neutral starting point, in the shape of the Select-O-Matic. */
 export function starterMenu(): Menu {
   return {
@@ -330,24 +337,46 @@ export function starterMenu(): Menu {
     titles: { lead: 'Lead', follow: 'Follow' },
     switchTitles: { lead: '', follow: '' },
     pacing: [
-      { id: 'p2', label: '2 hours', hours: 2, rooms: 1, playBreaks: 1, praise: 1, errands: false, note: '1 room, 1 break, 1 praise task.' },
-      { id: 'p4', label: '4 hours', hours: 4, rooms: 2, playBreaks: 2, praise: 2, errands: false, note: '2–3 rooms, 2 breaks, 2 praise tasks.' },
-      { id: 'p8', label: '8 hours', hours: 8, rooms: 4, playBreaks: 3, praise: 3, errands: true, note: '4+ rooms, a full break, 3 praise tasks and errands.' },
+      { id: 'p2', label: '2 hours', hours: 2, rooms: 1, playBreaks: 1, praise: 1, errands: false, note: 'One block at home: getting ready, two chores, devotion, one for you.' },
+      { id: 'p4', label: '4 hours', hours: 4, rooms: 2, playBreaks: 2, praise: 2, errands: false, note: 'A block at home, then one out on errands.' },
+      { id: 'p8', label: '8 hours', hours: 8, rooms: 4, playBreaks: 3, praise: 3, errands: true, note: 'Home, out, a free hour, home again, then welcome home.' },
     ],
     rooms: ['Kitchen', 'Living room', 'Bedroom', 'Bathroom', 'Laundry', 'Office'],
     sections: [
-      { id: newId(), kind: 'presentation', title: 'Presentation', groups: [g('Getting ready', ['Shower', 'Hair done', 'Outfit of your choosing']), g('Shoes', ['Barefoot', 'Slippers'])] },
+      { id: newId(), kind: 'presentation', title: 'Getting ready', groups: [g('Getting ready', ['Shower', 'Hair done', 'Outfit of your choosing']), g('Shoes', ['Barefoot', 'Slippers'])] },
       {
-        id: newId(), kind: 'domain', title: 'Domain maintenance',
-        groups: [g('Required evidence', [{ label: 'Before & after photos of each room', needs: [{ kind: 'photo', count: 2, label: 'before & after' }] }, { label: 'A message when each room is done', needs: [{ kind: 'text', count: 1 }] }])],
-      },
-      { id: newId(), kind: 'errands', title: 'Errands', groups: [g('Errands', [{ label: 'Pick up flowers', needs: [{ kind: 'photo', count: 1 }] }, { label: 'Grocery run', needs: [{ kind: 'photo', count: 1, label: 'the receipt' }] }])] },
-      {
-        id: newId(), kind: 'tasks', title: 'Praise & task bank',
+        id: newId(), kind: 'changeover', title: 'Change-overs',
         groups: [
-          g('Writing', [{ label: 'Write a love note', needs: [{ kind: 'text', count: 1 }] }, { label: 'List 20 things you adore about me', needs: [{ kind: 'text', count: 20, label: 'one thing each' }] }, { label: 'Daily affirmations', needs: [{ kind: 'text', count: 10, label: 'affirmations' }, { kind: 'audio', count: 1, label: 'read aloud' }] }]),
-          g('Performance & pictures', [{ label: 'Prepare a welcome-home comfort station', needs: [{ kind: 'photo', count: 3 }] }, { label: 'Fold the laundry for inspection', needs: [{ kind: 'photo', count: 1 }] }]),
+          g('Into the next thing', [{ label: 'Out of the cleaning clothes, into ___ for going out', param: 'what', needs: [photo] }, { label: 'Hair redone, fresh lipstick, a photo', needs: [photo] }, { label: 'Into your apron for the chores', needs: [photo] }]),
+          g('Welcome home', [{ label: 'Into your best outfit, waiting at the door', needs: [photo] }]),
         ],
+      },
+      {
+        id: newId(), kind: 'domain', title: 'Chores',
+        groups: [
+          g('Rooms', [{ label: 'Deep-clean the ___', param: 'room', needs: [beforeAfter] }, { label: 'Vacuum and mop the ___ floor', param: 'room', needs: [beforeAfter] }]),
+          g('Kitchen & bath', [{ label: 'Clean the refrigerator, inside and out', needs: [beforeAfter] }, { label: 'Scrub the shower and tiles', needs: [beforeAfter] }]),
+          g('Around the house', [{ label: 'Wash the windows, inside', needs: [beforeAfter] }, { label: 'Laundry: wash, dry, fold and put away', needs: [photo] }]),
+        ],
+      },
+      { id: newId(), kind: 'errands', title: 'Errands', groups: [g('Errands', [{ label: 'Pick up flowers', needs: [photo] }, { label: 'Grocery run', needs: [{ kind: 'photo', count: 1, label: 'the receipt' }] }])] },
+      {
+        id: newId(), kind: 'tasks', title: 'Devotion',
+        groups: [g('Devotion', [
+          { label: 'Write a love note', needs: [{ kind: 'text', count: 1 }] },
+          { label: 'List 20 things you adore about me', needs: [{ kind: 'text', count: 20, label: 'one thing each' }] },
+          { label: 'Daily affirmations', needs: [{ kind: 'text', count: 10, label: 'affirmations' }, { kind: 'audio', count: 1, label: 'read aloud' }] },
+          { label: 'Sing me a song', needs: [{ kind: 'video', count: 1 }] },
+        ])],
+      },
+      {
+        id: newId(), kind: 'wishes', title: 'For {lead}',
+        groups: [g('For me', [
+          { label: 'Write me a sonnet about our marriage', needs: [{ kind: 'text', count: 1 }] },
+          { label: 'Plan a night out: a new activity in a new place', needs: [{ kind: 'text', count: 1, label: 'the plan' }] },
+          { label: 'Prepare a welcome-home comfort station', needs: [{ kind: 'photo', count: 3 }] },
+          { label: 'Pick an outfit for a date, underwear to shoes, and surprise me with it this week', needs: [photo] },
+        ])],
       },
       { id: newId(), kind: 'play', title: 'Play break', groups: [g('Breaks', [{ label: 'A dance, on video', needs: [{ kind: 'video', count: 1 }], minutes: 2 }, { label: 'A voice note telling me about your day', needs: [{ kind: 'audio', count: 1 }] }])] },
       { id: newId(), kind: 'arrival', title: 'Arrival routine', groups: [g('The greeting', ['Meet at the door with a drink']), g('The service', ['Take my coat and shoes'])] },
