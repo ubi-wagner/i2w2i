@@ -1,14 +1,27 @@
 'use client';
 
-import type { MenuSection } from '../menu';
+import type { MenuSection, Proof } from '../menu';
 import { api } from './api';
 
-// The built-in ideas come from the server (pod members only), once per visit.
-let loading: Promise<MenuSection[]> | null = null;
-export function loadBuiltInIdeas(): Promise<MenuSection[]> {
-  loading ??= api<{ sections: MenuSection[] }>('/api/ideas').then((r) => r.sections).catch((err) => {
+export interface DemandIdea { group: string; label: string; param?: string; needs: Proof[]; minutes?: number }
+export interface BuiltIns { sections: MenuSection[]; demands: DemandIdea[] }
+
+// The built-in ideas and demands come from the server (pod members only), once per visit.
+let loading: Promise<BuiltIns> | null = null;
+export function loadIdeas(): Promise<BuiltIns> {
+  loading ??= api<BuiltIns>('/api/ideas').catch((err) => {
     loading = null;
     throw err;
   });
   return loading;
+}
+
+/** The built-in ideas for the menu. */
+export async function loadBuiltInIdeas(): Promise<MenuSection[]> {
+  return (await loadIdeas()).sections;
+}
+
+/** {lead} / {follow} → this pod's titles. */
+export function putTitles(s: string, titles: { lead: string; follow: string }): string {
+  return s.replace(/\{lead\}/g, titles.lead).replace(/\{follow\}/g, titles.follow);
 }

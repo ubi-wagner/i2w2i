@@ -6,7 +6,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const CANARIES = ['Self-bondage, done safely', 'Spank yourself ___ times per cheek', 'Kneel and kiss {lead}', 'Edge ___ times, stopping each time', 'Fill the car with fuel'];
+const CANARIES = ['Self-bondage, done safely', 'Spank yourself ___ times per cheek', 'Kneel and kiss {lead}', 'Edge ___ times, stopping each time', 'Fill the car with fuel', 'Self-spank ___ per cheek, counting aloud', 'Lick ___ clean, on video'];
 const root = join(import.meta.dirname, '..', '.next', 'static');
 const files = [];
 (function walk(d) {

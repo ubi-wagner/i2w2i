@@ -7,7 +7,7 @@ import { notify } from './push';
 // arrivals. Kept in som.timers, so a restart never loses one, and claimed
 // with SKIP LOCKED, so two servers never send the same one twice.
 
-type Kind = 'checkin_due' | 'checkin_overdue' | 'task_due' | 'arrival_soon' | 'arrival';
+type Kind = 'checkin_due' | 'checkin_overdue' | 'task_due' | 'arrival_soon' | 'arrival' | 'scene_start';
 const TICK_MS = Number(process.env.SOM_TICK_MS) || 15_000;
 /** Tests shorten minutes to seconds. */
 export const MINUTE_MS = Number(process.env.SOM_MINUTE_MS) || 60_000;
@@ -45,6 +45,12 @@ export async function scheduleArrival(sceneId: string, minutes: number): Promise
   if (minutes > 5) await add(sceneId, 'arrival_soon', inMinutes(minutes - 5));
   await add(sceneId, 'arrival', at);
   return at;
+}
+
+/** A sent scene's start time: both phones hear when it's due. */
+export async function scheduleSceneStart(sceneId: string, at: Date): Promise<void> {
+  await cancelTimers(sceneId, ['scene_start']);
+  await add(sceneId, 'scene_start', at);
 }
 
 /** Pausing stops every reminder; resuming moves countdowns on by the time spent paused. */
@@ -98,6 +104,13 @@ async function fire(t: Fired): Promise<void> {
       if (!running) return;
       await notify(follows, { title: 'S-O-M', body: 'Time’s up on a task.', url: t.task_id ? `${url}#task-${t.task_id}` : url, tag: `task-${t.task_id}` });
       return;
+    case 'scene_start': {
+      if (scene.status !== 'ready') return;
+      const who = follows.length === 1 ? await nameOf(follows[0]!) : 'Your partner';
+      await notify(follows, { title: 'S-O-M', body: 'Your scene starts now. Open it and tap Start.', url, tag: `scene-${t.scene_id}` });
+      await notify(leads, { title: 'S-O-M', body: `${who}’s scene is due to start.`, url, tag: `scene-${t.scene_id}` });
+      return;
+    }
     case 'arrival_soon':
     case 'arrival': {
       const who = leads.length === 1 ? await nameOf(leads[0]!) : 'They';

@@ -9,20 +9,28 @@ import { usePod } from '../Pod';
 import { ErrorText, Section, Sheet } from '../ui';
 import { Composer } from './Composer';
 import { Checklist, done, KIND_ICON, LastCheckin, MOODS, ProgressBar, TaskChip, Timeline, useLocalTicks } from './parts';
+import { LeadBar } from './Lead';
 import { mmss, useCountdown, type SceneData, type TaskView } from './useScene';
 
-const ARRIVAL_CHOICES = [5, 10, 15, 20, 30, 45, 60, 90, 120];
 
 /** The scene while it runs: tasks, review, check-ins, "on my way" and notes. */
 export function Running({ data, reload, onOpen }: { data: SceneData; reload: () => Promise<void>; onOpen: (taskId: string) => void }) {
   const pod = usePod();
   const { scene, role, tasks } = data;
   const review = tasks.filter((t) => t.status === 'submitted');
+  const demands = tasks.filter((t) => t.body.kind === 'demand' && (t.status === 'todo' || t.status === 'started' || t.status === 'returned'));
   const lead = role === 'lead';
 
   return (
     <div className="space-y-6">
+      {lead && <LeadBar data={data} reload={reload} />}
       {!lead && <ArrivalCard data={data} />}
+      {!lead && demands.length > 0 && (
+        <section className="card space-y-1 border-follow/50 bg-follow-light" aria-label="Demands">
+          <p className="eyebrow text-follow-dark">⚡ From {pod.title('lead')}</p>
+          {demands.map((t) => <TaskRow key={t.id} t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} />)}
+        </section>
+      )}
       {lead && review.length > 0 && (
         <section className="card space-y-2 border-follow/50 bg-follow-light" aria-label="Waiting for review">
           <p className="eyebrow text-follow-dark">For review</p>
@@ -41,7 +49,6 @@ export function Running({ data, reload, onOpen }: { data: SceneData; reload: () 
       </Section>
 
       {lead && <LeadCheckins data={data} reload={reload} />}
-      {lead && <OnMyWay data={data} reload={reload} />}
 
       <Notes data={data} reload={reload} />
 
@@ -180,34 +187,6 @@ function LeadCheckins({ data, reload }: { data: SceneData; reload: () => Promise
   );
 }
 
-function OnMyWay({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
-  const { scene } = data;
-  const left = useCountdown(scene.arrival_at, data.skew);
-  const [error, setError] = useState('');
-  const coming = left !== null && left > 0;
-  async function go(minutes: number) {
-    setError('');
-    try {
-      await api(`/api/scenes/${scene.id}/arrival`, { body: { minutes } });
-      await reload();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-  return (
-    <section className="card space-y-3" id="arrival">
-      <div>
-        <p className="eyebrow text-lead">On my way</p>
-        <p className="text-sm text-ink-soft">{coming ? `You’re arriving in ${mmss(left)}. Change it:` : 'Tell them you’re coming; they get a countdown and the arrival routine.'}</p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {ARRIVAL_CHOICES.map((m) => <button key={m} type="button" className="chip" onClick={() => go(m)}>{m < 60 ? `${m} min` : `${m / 60} h`.replace('1.5 h', '1½ h')}</button>)}
-      </div>
-      <ErrorText>{error}</ErrorText>
-    </section>
-  );
-}
-
 export function ArrivalCard({ data }: { data: SceneData }) {
   const pod = usePod();
   const { scene } = data;
@@ -228,7 +207,7 @@ export function ArrivalCard({ data }: { data: SceneData }) {
 }
 
 export function Notes({ data, reload, title = 'Notes' }: { data: SceneData; reload: () => Promise<void>; title?: string }) {
-  const entries = data.entries.filter((e) => !e.task_id && (e.kind === 'comment' || e.kind === 'checkin'));
+  const entries = data.entries.filter((e) => !e.task_id && (e.kind === 'comment' || e.kind === 'checkin' || e.kind === 'praise'));
   const media = data.media.filter((m) => !m.task_id);
   return (
     <Section title={title} eyebrow="Between you">

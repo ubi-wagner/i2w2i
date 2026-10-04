@@ -1,6 +1,6 @@
 import { bad, guard, json } from '@/lib/server/api';
 import { sql } from '@/lib/server/db';
-import { builtInIdeas } from '@/lib/ideas-data';
+import { builtInIdeas, demandIdeas } from '@/lib/ideas-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,5 +11,5 @@ export async function GET(req: Request) {
   if (me instanceof Response) return me;
   const [member] = await sql`SELECT 1 FROM som.members WHERE account_id = ${me.id} AND key_backup IS NOT NULL LIMIT 1`;
   if (!member) return bad('Not found', 404);
-  return json({ sections: builtInIdeas() });
+  return json({ sections: builtInIdeas(), demands: demandIdeas() });
 }

@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { api } from '@/lib/client/api';
-import { proofText, SECTION_KINDS } from '@/lib/menu';
+import { proofText } from '@/lib/menu';
 import { proofProgress } from '@/lib/plan';
 import { taskTransition, type TaskAction } from '@/lib/rules';
 import { usePod } from '../Pod';
-import { ErrorText } from '../ui';
+import { ErrorText, Sheet } from '../ui';
+import { DemandForm, PraiseForm } from './Lead';
 import { Composer } from './Composer';
-import { Checklist, KIND_ICON, ProofMeter, TaskChip, Timeline, useLocalTicks, useProofCounts } from './parts';
+import { Checklist, KIND_ICON, kindTitle, ProofMeter, TaskChip, Timeline, useLocalTicks, useProofCounts } from './parts';
 import { mmss, useCountdown, type SceneData, type TaskView } from './useScene';
 
 /** One task: what to do, the proof so far, the conversation about it, and the buttons that move it on. */
@@ -30,6 +31,7 @@ export function TaskSheet({ task, data, reload }: { task: TaskView; data: SceneD
   const [error, setError] = useState('');
   const [returning, setReturning] = useState(false);
   const [why, setWhy] = useState('');
+  const [extra, setExtra] = useState<'praise' | 'demand' | null>(null);
   const live = scene.status === 'active' && !scene.paused_at;
   const can = (a: TaskAction) => live && Boolean(taskTransition(task.status, a, role));
   const textProof = t.needs.filter((n) => n.kind === 'text');
@@ -62,7 +64,7 @@ export function TaskSheet({ task, data, reload }: { task: TaskView; data: SceneD
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm text-ink-soft">{KIND_ICON[t.kind]} {SECTION_KINDS.find((k) => k.kind === t.kind)?.title}</span>
+        <span className="text-sm text-ink-soft">{KIND_ICON[t.kind]} {kindTitle(t.kind)}</span>
         <TaskChip status={task.status} />
       </div>
 
@@ -102,6 +104,9 @@ export function TaskSheet({ task, data, reload }: { task: TaskView; data: SceneD
       {returning ? (
         <div className="space-y-2 rounded-2xl bg-warn-light p-3">
           <label className="label" htmlFor="why">What to fix (optional)</label>
+          <div className="flex flex-wrap gap-2">
+            {REDO.map((r) => <button key={r} type="button" className="chip" aria-pressed={why === r} onClick={() => setWhy(r)}>{r}</button>)}
+          </div>
           <textarea id="why" className="input" rows={2} value={why} onChange={(e) => setWhy(e.target.value)} maxLength={2000} />
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-quiet" onClick={() => setReturning(false)}>Cancel</button>
@@ -113,6 +118,10 @@ export function TaskSheet({ task, data, reload }: { task: TaskView; data: SceneD
           {can('skip') && <button type="button" className="btn-quiet" disabled={busy} onClick={() => act('skip')}>Skip it</button>}
           {can('reopen') && <button type="button" className="btn-quiet" disabled={busy} onClick={() => act('reopen')}>Reopen</button>}
           {can('return') && <button type="button" className="btn-quiet" disabled={busy} onClick={() => setReturning(true)}>Send back</button>}
+          {role === 'lead' && scene.status === 'active' && !scene.paused_at && (
+            <button type="button" className="btn-quiet" disabled={busy} onClick={() => setExtra('demand')}>Ask for more</button>
+          )}
+          {can('approve') && <button type="button" className="btn-quiet" disabled={busy} onClick={() => setExtra('praise')}>Approve + praise</button>}
           {can('approve') && <button type="button" className="btn" disabled={busy} onClick={() => act('approve')}>Approve ✓</button>}
           {can('start') && (task.status !== 'returned' || Boolean(t.minutes)) && (
             <button type="button" className="btn-quiet" disabled={busy} onClick={() => act('start')}>{t.minutes ? `${task.status === 'returned' ? 'Restart' : 'Start'} the ${t.minutes}-minute timer` : 'Start'}</button>
@@ -121,6 +130,15 @@ export function TaskSheet({ task, data, reload }: { task: TaskView; data: SceneD
         </div>
       )}
       {role === 'follow' && task.status === 'submitted' && <p className="text-right text-sm text-ink-soft">With {pod.title('lead')} for review.</p>}
+      <Sheet open={extra === 'praise'} onClose={() => setExtra(null)} title="Approve with praise">
+        <PraiseForm data={data} taskId={task.id} approve onDone={async () => { setExtra(null); await reload(); }} />
+      </Sheet>
+      <Sheet open={extra === 'demand'} onClose={() => setExtra(null)} title="Ask for more" wide>
+        <DemandForm data={data} about={t.title} onDone={async () => { setExtra(null); await reload(); }} />
+      </Sheet>
     </div>
   );
 }
+
+/** One-tap reasons for sending something back. */
+const REDO = ['Redo it, properly', 'A better photo: closer, more light', 'Show your face', 'More effort', 'Longer video', 'Again, slower'];

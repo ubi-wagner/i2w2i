@@ -11,11 +11,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ podId: s
   if (!isUuid(podId) || !(await podRole(me.id, podId))) return bad('Not found', 404);
   const scenes = await sql`
     SELECT s.id, s.status, s.plan_enc, s.created_by, s.created_at, s.started_at, s.closed_at, s.paused_at, s.delete_votes,
+           s.starts_at, s.hours, (s.change_request IS NOT NULL) AS change_requested,
            (SELECT count(*)::int FROM som.tasks t WHERE t.scene_id = s.id) AS tasks,
            (SELECT count(*)::int FROM som.tasks t WHERE t.scene_id = s.id AND t.status IN ('approved', 'skipped')) AS done,
            (SELECT count(*)::int FROM som.tasks t WHERE t.scene_id = s.id AND t.status = 'submitted') AS waiting
       FROM som.scenes s WHERE s.pod_id = ${podId}
-     ORDER BY (s.status = 'closed'), coalesce(s.started_at, s.created_at) DESC
+     ORDER BY (s.status = 'closed'), coalesce(s.started_at, s.starts_at, s.created_at) DESC
      LIMIT 300`;
   return json({ scenes });
 }

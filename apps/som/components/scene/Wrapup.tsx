@@ -4,14 +4,20 @@ import { useState } from 'react';
 import { api } from '@/lib/client/api';
 import { section, type MenuItem } from '@/lib/menu';
 import { withParam } from '@/lib/plan';
+import type { TaskStatus } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { clock, ErrorText, Section } from '../ui';
 import { MediaGrid } from './Media';
 import { ArrivalCard, Notes, TaskRow } from './Running';
-import { done, ProgressBar } from './parts';
+import { done, KIND_ICON, ProgressBar, TaskChip } from './parts';
 import type { EntryView, SceneData } from './useScene';
 
-interface Scores { items: { id: string; label: string; score: number }[]; note: string }
+interface Scores {
+  items: { id: string; label: string; score: number }[];
+  /** Each task the lead set, scored 1–5 (older scorecards have none). */
+  tasks?: { id: string; title: string; score: number; status: TaskStatus; demand?: boolean }[];
+  note: string;
+}
 interface Outcomes { groups: { title: string; items: string[] }[]; service: string[] }
 
 const latest = (entries: EntryView[], kind: EntryView['kind']) => [...entries].reverse().find((e) => e.kind === kind && e.body);
@@ -35,7 +41,7 @@ export function Inspection({ data, reload, onOpen }: { data: SceneData; reload: 
   return (
     <div className="space-y-6">
       {!lead && <ArrivalCard data={data} />}
-      {lead ? <Scorecard data={data} reload={reload} /> : shared ? <Results data={data} /> : (
+      {lead ? <Scorecard data={data} reload={reload} onOpen={onOpen} /> : shared ? <Results data={data} /> : (
         <div className="card border-lead/40 bg-lead-light text-center">
           <p className="font-display text-2xl text-lead-dark">Inspection</p>
           <p className="text-sm text-lead-dark">{pod.title('lead')} is looking everything over. The scorecard shows here when it’s ready.</p>
@@ -47,7 +53,7 @@ export function Inspection({ data, reload, onOpen }: { data: SceneData; reload: 
   );
 }
 
-function Scorecard({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
+function Scorecard({ data, reload, onOpen }: { data: SceneData; reload: () => Promise<void>; onOpen: (id: string) => void }) {
   const pod = usePod();
   const cats = section(pod.menu, 'inspection').groups.flatMap((g) => g.items);
   const outcomeGroups = section(pod.menu, 'outcomes').groups;
@@ -55,12 +61,19 @@ function Scorecard({ data, reload }: { data: SceneData; reload: () => Promise<vo
   const prevS = latest(data.entries.filter((e) => e.author_id === pod.account.id), 'scores')?.body as Scores | undefined;
   const prevO = latest(data.entries.filter((e) => e.author_id === pod.account.id), 'outcomes')?.body as Outcomes | undefined;
   const [scores, setScores] = useState<Record<string, number>>(() => Object.fromEntries((prevS?.items ?? []).map((i) => [i.id, i.score])));
+  const [taskScores, setTaskScores] = useState<Record<string, number>>(() => Object.fromEntries((prevS?.tasks ?? []).map((i) => [i.id, i.score])));
+  const follows = data.members.filter((m) => m.role === 'follow').map((m) => m.account_id);
+  const proofCount = (taskId: string) => data.media.filter((m) => m.task_id === taskId).length
+    + data.entries.filter((e) => e.task_id === taskId && follows.includes(e.author_id) && (e.kind === 'comment' || e.kind === 'writing')).length;
+  const unscored = data.tasks.filter((t) => !taskScores[t.id]);
+  const fillRest = (n: number) => setTaskScores((s) => ({ ...s, ...Object.fromEntries(unscored.map((t) => [t.id, n])) }));
   const [note, setNote] = useState(prevS?.note ?? '');
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(Boolean(prevS));
-  const total = Object.values(scores).reduce((a, b) => a + b, 0);
+  const total = Object.values(scores).reduce((a, b) => a + b, 0) + Object.values(taskScores).reduce((a, b) => a + b, 0);
+  const max = (Object.keys(scores).length + Object.keys(taskScores).length) * 5;
 
   const label = (it: MenuItem) => withParam(it.label, picks[it.id] || undefined, it.param);
   const toggle = (it: MenuItem) => setPicks((p) => {
@@ -74,7 +87,11 @@ function Scorecard({ data, reload }: { data: SceneData; reload: () => Promise<vo
     setBusy(true);
     setError('');
     try {
-      const s: Scores = { items: cats.filter((c) => scores[c.id]).map((c) => ({ id: c.id, label: c.label, score: scores[c.id]! })), note: note.trim() };
+      const s: Scores = {
+        items: cats.filter((c) => scores[c.id]).map((c) => ({ id: c.id, label: c.label, score: scores[c.id]! })),
+        tasks: data.tasks.filter((t) => taskScores[t.id]).map((t) => ({ id: t.id, title: t.body.title, score: taskScores[t.id]!, status: t.status, ...(t.body.kind === 'demand' ? { demand: true } : {}) })),
+        note: note.trim(),
+      };
       const o: Outcomes = {
         groups: outcomeGroups.map((g) => ({ title: g.title, items: g.items.filter((i) => i.id in picks).map(label) })).filter((g) => g.items.length),
         service: service.filter((i) => i.id in picks).map(label),
@@ -117,7 +134,36 @@ function Scorecard({ data, reload }: { data: SceneData; reload: () => Promise<vo
 
   return (
     <div className="space-y-6">
-      <Section title="Scorecard" eyebrow="Inspection">
+      {data.tasks.length > 0 && (
+        <Section title="Each task" eyebrow="What you set" action={<span className="text-sm text-ink-soft" role="status">{data.tasks.length - unscored.length} of {data.tasks.length} scored</span>}>
+          <div className="card space-y-4">
+            {data.tasks.map((t) => (
+              <div key={t.id} className="space-y-1.5">
+                <button type="button" className="flex w-full items-start justify-between gap-3 text-left" onClick={() => onOpen(t.id)}>
+                  <span className="min-w-0">
+                    <span className="font-medium">{KIND_ICON[t.body.kind]} {t.body.title}</span>
+                    <span className="block text-xs text-ink-soft">{proofCount(t.id)} sent · tap to look</span>
+                  </span>
+                  <TaskChip status={t.status} />
+                </button>
+                <div className="flex gap-2" role="radiogroup" aria-label={`Score for ${t.body.title}`}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button key={n} type="button" role="radio" aria-checked={taskScores[t.id] === n} className="chip h-11 w-11 justify-center px-0 text-lg" aria-pressed={taskScores[t.id] === n}
+                      onClick={() => setTaskScores((s) => ({ ...s, [t.id]: n }))}>{n}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {unscored.length > 0 && (
+              <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+                <span className="self-center text-sm text-ink-soft">The rest:</span>
+                {[3, 4, 5].map((n) => <button key={n} type="button" className="btn-quiet min-h-10 px-3" onClick={() => fillRest(n)}>all {n}s</button>)}
+              </div>
+            )}
+          </div>
+        </Section>
+      )}
+      <Section title="Scorecard" eyebrow="Inspection" action={max > 0 ? <span className="font-display text-xl text-lead" role="status">{total}<span className="text-sm text-ink-soft"> / {max}</span></span> : undefined}>
         <div className="card space-y-4">
           {cats.length === 0 && <p className="text-sm text-ink-soft">No categories in the menu yet; add some under Inspection & scorecard.</p>}
           {cats.map((c) => (
@@ -131,7 +177,6 @@ function Scorecard({ data, reload }: { data: SceneData; reload: () => Promise<vo
               </div>
             </div>
           ))}
-          {cats.length > 0 && <p className="text-sm text-ink-soft">Total {total} / {cats.length * 5}</p>}
           <textarea className="input" rows={3} placeholder="Notes for them" aria-label="Inspection notes" value={note} onChange={(e) => setNote(e.target.value)} maxLength={4000} />
         </div>
       </Section>
@@ -167,19 +212,39 @@ export function Results({ data }: { data: SceneData }) {
   if (!s && !o) return null;
   const scores = s?.body as Scores | undefined;
   const outcomes = o?.body as Outcomes | undefined;
-  const total = scores?.items.reduce((a, i) => a + i.score, 0) ?? 0;
+  const rows = [...(scores?.tasks ?? []), ...(scores?.items ?? [])];
+  const total = rows.reduce((a, i) => a + i.score, 0);
+  const Dots = ({ n }: { n: number }) => (
+    <span className="shrink-0 tracking-widest text-follow" aria-label={`${n} of 5`}>{'●'.repeat(n)}<span className="text-line">{'●'.repeat(5 - n)}</span></span>
+  );
   return (
     <section className="card space-y-4" aria-label="Results">
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-display text-2xl text-lead-dark">Scorecard</p>
-        {scores && scores.items.length > 0 && <p className="font-display text-2xl text-lead">{total}<span className="text-base text-ink-soft"> / {scores.items.length * 5}</span></p>}
+        {rows.length > 0 && <p className="font-display text-2xl text-lead">{total}<span className="text-base text-ink-soft"> / {rows.length * 5}</span></p>}
       </div>
-      {scores?.items.map((i) => (
-        <div key={i.id} className="flex items-center justify-between gap-3">
-          <span>{i.label}</span>
-          <span className="tracking-widest text-follow" aria-label={`${i.score} of 5`}>{'●'.repeat(i.score)}<span className="text-line">{'●'.repeat(5 - i.score)}</span></span>
+      {scores?.tasks && scores.tasks.length > 0 && (
+        <div className="space-y-2">
+          <p className="eyebrow text-follow">Tasks</p>
+          {scores.tasks.map((t) => (
+            <div key={t.id} className="flex items-center justify-between gap-3">
+              <span className="min-w-0">{t.demand ? '⚡ ' : ''}{t.title}{t.status === 'skipped' ? <span className="text-ink-faint"> (skipped)</span> : null}</span>
+              <Dots n={t.score} />
+            </div>
+          ))}
         </div>
-      ))}
+      )}
+      {scores && scores.items.length > 0 && (
+        <div className="space-y-2">
+          {scores.tasks && scores.tasks.length > 0 && <p className="eyebrow text-follow">Overall</p>}
+          {scores.items.map((i) => (
+            <div key={i.id} className="flex items-center justify-between gap-3">
+              <span>{i.label}</span>
+              <Dots n={i.score} />
+            </div>
+          ))}
+        </div>
+      )}
       {scores?.note && <p className="whitespace-pre-wrap rounded-xl bg-paper-sunk p-3">{scores.note}</p>}
       {outcomes?.groups.map((g) => (
         <div key={g.title}><p className="eyebrow text-follow">{g.title}</p><ul className="list-disc pl-5">{g.items.map((x) => <li key={x}>{x}</li>)}</ul></div>

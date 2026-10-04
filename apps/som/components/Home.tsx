@@ -7,13 +7,19 @@ import { api } from '@/lib/client/api';
 import { cleanPlan, emptyPlan, type Plan } from '@/lib/plan';
 import type { SceneStatus } from '@/lib/rules';
 import { NotifyToggle } from './NotifyToggle';
+import { NewOffer, when as whenText } from './scene/Offer';
 import { usePod } from './Pod';
 import { ErrorText, Section, Spinner, timeAgo } from './ui';
 
-interface SceneListRow { id: string; status: SceneStatus; plan_enc: string; created_by: string; created_at: string; started_at: string | null; closed_at: string | null; paused_at: string | null; delete_votes: string[]; tasks: number; done: number; waiting: number }
+interface SceneListRow {
+  id: string; status: SceneStatus; plan_enc: string; created_by: string; created_at: string; started_at: string | null; closed_at: string | null;
+  paused_at: string | null; delete_votes: string[]; tasks: number; done: number; waiting: number;
+  starts_at: string | null; hours: number | null; change_requested: boolean;
+}
 
 export const STATUS_LABEL: Record<SceneStatus, string> = {
-  draft: 'Draft', proposed: 'Waiting to start', active: 'Running', inspection: 'Inspection', aftercare: 'Aftercare', closed: 'Closed',
+  draft: 'Draft', offered: 'Offered', accepted: 'Accepted', proposed: 'Waiting to start', ready: 'Ready to start',
+  active: 'Running', inspection: 'Inspection', aftercare: 'Aftercare', closed: 'Closed',
 };
 
 export function Home() {
@@ -22,6 +28,7 @@ export function Home() {
   const [scenes, setScenes] = useState<(SceneListRow & { plan: Plan | null })[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [offering, setOffering] = useState(false);
 
   const load = useCallback(async () => {
     const r = await api<{ scenes: SceneListRow[] }>(`/api/pods/${pod.pod.id}/scenes`);
@@ -44,7 +51,11 @@ export function Home() {
   const partner = pod.members.find((m) => m.account_id !== pod.account.id);
   const other = pod.role === 'lead' ? 'follow' : 'lead';
   const running = scenes?.filter((s) => ['active', 'inspection', 'aftercare'].includes(s.status)) ?? [];
+  const offers = scenes?.filter((s) => s.status === 'offered') ?? [];
+  const upcoming = (scenes?.filter((s) => s.status === 'accepted' || s.status === 'ready') ?? [])
+    .sort((a, b) => (a.starts_at ?? '').localeCompare(b.starts_at ?? ''));
   const proposed = scenes?.filter((s) => s.status === 'proposed') ?? [];
+  const lead = pod.role === 'lead';
   const drafts = scenes?.filter((s) => s.status === 'draft') ?? [];
   const past = scenes?.filter((s) => s.status === 'closed') ?? [];
 
@@ -71,12 +82,25 @@ export function Home() {
       {!scenes ? <Spinner /> : (
         <>
           {running.map((s) => <SceneCard key={s.id} s={s} big />)}
+          {lead && (
+            <button type="button" className="btn w-full min-h-14 text-lg" onClick={() => setOffering(true)}>Offer {pod.title('follow')} a scene</button>
+          )}
+          {offers.length > 0 && (
+            <Section title={lead ? 'Offered' : `From ${pod.title('lead')}`} eyebrow="Offers">
+              {offers.map((s) => <SceneCard key={s.id} s={s} big={!lead} />)}
+            </Section>
+          )}
+          {upcoming.length > 0 && (
+            <Section title="Coming up" eyebrow="Agreed">
+              {upcoming.map((s) => <SceneCard key={s.id} s={s} />)}
+            </Section>
+          )}
           {proposed.length > 0 && (
             <Section title={pod.role === 'lead' ? 'Waiting for you' : 'Sent'} eyebrow="Proposed">
               {proposed.map((s) => <SceneCard key={s.id} s={s} />)}
             </Section>
           )}
-          <Section title="Drafts" eyebrow="Build" action={<button type="button" className={pod.role === 'follow' ? 'btn-follow' : 'btn'} disabled={busy} onClick={newScene}>New scene</button>}>
+          <Section title="Drafts" eyebrow="Build" action={<button type="button" className={pod.role === 'follow' ? 'btn-follow' : 'btn-quiet'} disabled={busy} onClick={newScene}>{lead ? 'Build one now' : 'New scene'}</button>}>
             {drafts.length ? drafts.map((s) => <SceneCard key={s.id} s={s} />) : <p className="text-sm text-ink-soft">No drafts. {pod.role === 'follow' ? `Start one and send it to ${pod.title('lead')}.` : `Start one, or wait for ${pod.title('follow')} to send you one.`}</p>}
           </Section>
           {past.length > 0 && (
@@ -86,6 +110,7 @@ export function Home() {
           )}
         </>
       )}
+      {lead && <NewOffer open={offering} onClose={() => setOffering(false)} />}
     </div>
   );
 }
@@ -96,11 +121,15 @@ function SceneCard({ s, big = false }: { s: SceneListRow & { plan: Plan | null }
   return (
     <Link href={`/scene/${s.id}`} className={`card block space-y-1 ${big ? 'border-lead/40 p-5' : ''} ${s.paused_at ? 'border-stop/50' : ''}`}>
       <div className="flex items-start justify-between gap-3">
-        <h3 className={`font-display ${big ? 'text-2xl' : 'text-lg'}`}>{s.plan?.title || 'Untitled scene'}</h3>
+        <h3 className={`font-display ${big ? 'text-2xl' : 'text-lg'}`}>{s.plan?.title || (s.starts_at ? `A scene from ${pod.title('lead')}` : 'Untitled scene')}</h3>
         <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${s.paused_at ? 'bg-stop text-white' : s.status === 'closed' ? 'bg-paper-sunk text-ink-soft' : 'bg-lead-light text-lead-dark'}`}>
           {s.paused_at ? 'Paused' : STATUS_LABEL[s.status]}
         </span>
       </div>
+      {s.starts_at && ['offered', 'accepted', 'ready'].includes(s.status) && (
+        <p className="font-medium text-lead-dark">{whenText(s.starts_at, s.hours)}</p>
+      )}
+      {s.change_requested && <p className="text-sm font-medium text-follow-dark">Change asked for</p>}
       <p className="text-sm text-ink-soft">
         {s.tasks > 0 ? `${s.done} of ${s.tasks} done` : `By ${pod.nameOf(s.created_by)}`} · {timeAgo(when)}
         {s.waiting > 0 && <span className="ml-2 rounded-full bg-follow-light px-2 py-0.5 font-medium text-follow-dark">{s.waiting} to review</span>}

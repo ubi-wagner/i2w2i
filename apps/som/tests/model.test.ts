@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cleanMenu, itemsById, proofText, section, SECTION_KINDS, starterMenu, type Menu } from '@/lib/menu';
-import { arrivalChecklist, cleanPlan, emptyPlan, noProof, pacingCheck, planToTasks, proofComplete, proofProgress, withParam, type Plan } from '@/lib/plan';
+import { arrivalChecklist, autoFill, cleanPlan, emptyPlan, noProof, pacingCheck, pacingForHours, planToTasks, proofComplete, proofProgress, withParam, type Plan } from '@/lib/plan';
 import { allAgreed, canDelete, sceneTransition, taskTransition } from '@/lib/rules';
 
 const find = (menu: Menu, label: string) => [...itemsById(menu).values()].find((x) => x.item.label === label)!.item;
@@ -186,3 +186,63 @@ describe('proof: any number of each kind', () => {
     expect(planToTasks(menu, p)[0]!.needs).toEqual([{ kind: 'photo', count: 5 }, { kind: 'video', count: 1 }]);
   });
 });
+
+describe('offering a day', () => {
+  it('the lead offers; the follow accepts or asks for a change; the lead agrees, builds, sends; either starts', () => {
+    expect(sceneTransition('draft', 'offer', 'lead')).toBe('offered');
+    expect(sceneTransition('draft', 'offer', 'follow')).toBeNull();
+    expect(sceneTransition('offered', 'accept', 'follow')).toBe('accepted');
+    expect(sceneTransition('offered', 'accept', 'lead')).toBeNull();
+    expect(sceneTransition('offered', 'request_change', 'follow')).toBe('offered');
+    expect(sceneTransition('offered', 'agree_change', 'lead')).toBe('accepted');
+    expect(sceneTransition('offered', 'agree_change', 'follow')).toBeNull();
+    expect(sceneTransition('offered', 'offer', 'lead')).toBe('offered');
+    expect(sceneTransition('accepted', 'edit', 'lead')).toBe('accepted');
+    expect(sceneTransition('accepted', 'edit', 'follow')).toBeNull();
+    expect(sceneTransition('accepted', 'send', 'lead')).toBe('ready');
+    expect(sceneTransition('accepted', 'send', 'follow')).toBeNull();
+    expect(sceneTransition('ready', 'unsend', 'lead')).toBe('accepted');
+    expect(sceneTransition('ready', 'start', 'follow')).toBe('active');
+    expect(sceneTransition('ready', 'start', 'lead')).toBe('active');
+    expect(sceneTransition('ready', 'edit', 'lead')).toBeNull();
+    expect(sceneTransition('offered', 'cancel', 'lead')).toBe('draft');
+    expect(sceneTransition('ready', 'cancel', 'lead')).toBeNull();
+    expect(sceneTransition('accepted', 'start', 'follow')).toBeNull();
+  });
+});
+
+describe('fill it for me', () => {
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const menu = starterMenu();
+
+  it('an offered length picks the closest pacing', () => {
+    expect(pacingForHours(menu, 8)?.hours).toBe(8);
+    expect(pacingForHours(menu, 5)?.hours).toBe(4);
+    expect(pacingForHours(menu, 30)?.hours).toBe(8);
+  });
+
+  it('tops the plan up to its pacing and keeps what was picked', () => {
+    const shower = section(menu, 'presentation').groups[0]!.items[0]!;
+    const base = cleanPlan({ ...emptyPlan(menu), pacing: 'p8', picks: { [shower.id]: {} } });
+    const p = autoFill(menu, base, rand);
+    const check = pacingCheck(menu, p)!;
+    expect(check.rooms[0]).toBe(4);
+    expect(check.play[0]).toBeGreaterThanOrEqual(Math.min(check.play[1], section(menu, 'play').groups.flatMap((g) => g.items).length));
+    expect(check.praise[0]).toBeGreaterThanOrEqual(check.praise[1]);
+    expect(p.picks[shower.id]).toEqual({});
+    expect(arrivalChecklist(menu, p).length).toBeGreaterThan(0);
+    expect(planToTasks(menu, p).filter((t) => t.kind === 'domain')).toHaveLength(4);
+    expect(p.checkinMinutes).toBe(60);
+    // Running it again adds nothing new.
+    expect(Object.keys(autoFill(menu, p, rand).picks).sort()).toEqual(Object.keys(p.picks).sort());
+  });
+
+  it('fills a blank with a sensible number', () => {
+    const massage = find(menu, 'Massage');
+    const m = cleanMenu({ ...menu, sections: menu.sections.map((s) => (s.kind === 'play' ? { ...s, groups: [{ id: 'g', title: 'g', items: [{ ...massage, id: 'mm' }] }] } : s)) });
+    const p = autoFill(m, cleanPlan({ ...emptyPlan(m), pacing: 'p2' }), rand);
+    expect(p.picks.mm).toEqual({ param: '10' });
+  });
+});
+

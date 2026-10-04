@@ -98,8 +98,11 @@ export function withParam(label: string, param?: string, unit?: string): string 
   return `${label} (${param}${unit && !param.includes(unit) ? ` ${unit}` : ''})`;
 }
 
+/** Where a task came from: a menu section, or a demand the lead added while it ran. */
+export type TaskKind = SectionKind | 'demand';
+
 export interface TaskDraft {
-  kind: SectionKind;
+  kind: TaskKind;
   title: string;
   details: string;
   checklist: string[];
@@ -194,3 +197,60 @@ export function livePicks(menu: Menu, plan: Plan): number {
   const all = itemsById(menu);
   return Object.keys(plan.picks).filter((k) => all.has(k)).length;
 }
+
+/** The pacing closest to a length in hours (an offer says "8 hours"). */
+export function pacingForHours(menu: Menu, hours: number): Pacing | null {
+  if (!menu.pacing.length) return null;
+  return menu.pacing.reduce((best, p) => (Math.abs(p.hours - hours) < Math.abs(best.hours - hours) ? p : best));
+}
+
+/**
+ * Fill it for me: tops the plan up to its pacing (rooms, play breaks,
+ * praise tasks, errands) with picks from the menu, plus a little
+ * presentation, evidence and an arrival routine if there's none yet.
+ * Keeps everything already picked. `rand` is for tests.
+ */
+export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.random): Plan {
+  const next = cleanPlan(structuredClone(plan));
+  const pace = pacingOf(menu, next) ?? menu.pacing[0] ?? null;
+  if (pace && !next.pacing) next.pacing = pace.id;
+  const shuffle = <T,>(xs: T[]) => xs.map((x) => [rand(), x] as const).sort((a, b) => a[0] - b[0]).map(([, x]) => x);
+  const pickFrom = (kind: SectionKind, n: number, oneEachGroup = false) => {
+    if (n <= 0) return;
+    const groups = section(menu, kind).groups.filter((g) => g.items.length);
+    const pool = oneEachGroup
+      ? shuffle(groups).map((g) => shuffle(g.items.filter((i) => !next.picks[i.id]))[0]).filter((i): i is MenuItem => !!i)
+      : shuffle(groups.flatMap((g) => g.items).filter((i) => !next.picks[i.id]));
+    for (const it of pool.slice(0, n)) next.picks[it.id] = it.param ? { param: defaultParam(it.param) } : {};
+  };
+  const have = (kind: SectionKind) => picked(menu, next, kind).length;
+
+  // Rooms, as many as the pacing says.
+  const want = pace?.rooms ?? 0;
+  const chosen = next.rooms.filter((r) => r.room);
+  const free = shuffle(menu.rooms.filter((r) => !chosen.some((c) => c.room === r)));
+  while (chosen.length < want && free.length) chosen.push({ room: free.shift()!, note: '' });
+  next.rooms = chosen.length ? chosen : next.rooms.slice(0, 1);
+  if (chosen.length && !have('domain')) pickFrom('domain', 1);
+
+  if (!have('presentation')) pickFrom('presentation', 3, true);
+  const check = pacingCheck(menu, next);
+  if (check) {
+    pickFrom('tasks', check.praise[1] - check.praise[0]);
+    pickFrom('play', check.play[1] - check.play[0]);
+    if (check.errands && !have('errands')) pickFrom('errands', 1 + Math.floor(rand() * 2));
+  }
+  if (!have('arrival')) pickFrom('arrival', 3, true);
+  if (!next.checkinMinutes && pace && pace.hours >= 4) next.checkinMinutes = 60;
+  return cleanPlan(next);
+}
+
+/** A sensible number for a blank ("mins" → 10). */
+function defaultParam(unit: string): string {
+  if (/min/i.test(unit)) return '10';
+  if (/hour/i.test(unit)) return '2';
+  if (/day/i.test(unit)) return '3';
+  if (/many|lash|stroke|times|lines/i.test(unit)) return '20';
+  return '';
+}
+

@@ -18,7 +18,8 @@ leaves them. The server stores ciphertext and can't read it.
 |---|---|
 | The menu, the pod's name and titles | Usernames and account names (needed to sign in) |
 | Scene plans, tasks, notes, writing, check-ins | Who is in a pod and which role they have |
-| Scorecards, consequences, rewards, aftercare, reflections | A scene's stage, and when things happened |
+| Offer notes and the reason for asking for a change; demands and praise | An offered scene's day, start time and length (for the start reminder) |
+| Scorecards (overall and per task), consequences, rewards, aftercare, reflections | A scene's stage, and when things happened |
 | Photos, videos, voice notes, files (and their thumbnails, names, sizes in the file) | Encrypted file sizes, check-in times, countdown times |
 
 - **Keys.** Each pod has one key (AES-256-GCM), kept on each phone where it
@@ -52,24 +53,44 @@ leaves them. The server stores ciphertext and can't read it.
 
 ## How a scene runs
 
-1. **Draft** (usually the follow): tap to pick from the menu, pick rooms,
-   pacing, check-ins; it saves as you go. **Send** it to the lead.
-2. **Start** (the lead): adjust anything, then start. The plan becomes the
-   follow's tasks.
-3. **Running**: each task says what proof it needs, as many of each as the
+There are two ways in:
+
+- **The lead offers a day** (say, a day of tasks while they're at work).
+  **Offer {follow} a scene** on the home screen: today, tomorrow or another
+  day, a start time, how long (from the menu's pacing) and a note. The follow
+  **accepts** or **asks for a change** (another day, time or length, and
+  why); the lead agrees, offers something else or takes it back. Once
+  agreed, the lead builds it (**Fill it for me** fills it to the pacing in
+  one tap; change anything) and **sends** it. The follow sees the tasks and
+  a countdown, gets a reminder at the start time, and taps **Start**. The
+  lead can take a sent scene back to change it until then.
+- **The follow drafts one**: tap to pick from the menu, pick rooms, pacing,
+  check-ins; it saves as you go. **Send** it to the lead, who adjusts
+  anything and **starts it now**.
+
+Then:
+
+1. **Running**: each task says what proof it needs, as many of each as the
    menu says (2 photos "before & after", 10 notes "affirmations", a voice note,
    a video). The follow sends proof and **sends for review**; the lead
-   approves, sends back (with a note) or skips. Tasks with a countdown start
-   it when begun. Check-ins on a schedule (missed ones tell the lead). The lead
-   can say **On my way** with a time; the follow gets a countdown and the
-   arrival routine.
-4. **Pause**: either of you, any time. Everything stops. Only whoever paused
+   approves (with praise in one more tap), sends back (one-tap reasons like
+   "Redo it, properly") or skips. Tasks with a countdown start it when
+   begun. Check-ins on a schedule (missed ones tell the lead).
+2. **The lead's quick actions**, always at the top while it runs:
+   **⚡ Demand** (ready-made ones: a photo right now, redo, a correction,
+   devotion; or write your own; each with its proof and a countdown that
+   starts at once; **Ask for more** on a task makes one about that task),
+   **✨ Praise**, and **🚗 On my way** (two taps; the follow gets a countdown,
+   the arrival routine and reminders).
+3. **Pause**: either of you, any time. Everything stops. Only whoever paused
    can resume.
-5. **Inspection** (the lead): a 1–5 scorecard, notes, consequences, rewards
-   and service, shared with the follow.
-6. **Aftercare**: calmer colours, a shared closing checklist, reflections
+4. **Inspection** (the lead): every task that was set (demands too) with
+   what was sent for it, scored 1–5 ("the rest: all 4s" for speed), then
+   the overall 1–5 scorecard, notes, consequences, rewards and service,
+   shared with the follow, who sees the score for each task.
+5. **Aftercare**: calmer colours, a shared closing checklist, reflections
    (private if you like), and **I'm back to us** from each of you closes it.
-7. **Record**: the closed scene, its scorecard, everything sent, reflections.
+6. **Record**: the closed scene, its scorecard, everything sent, reflections.
 
 ## The menu and Ideas
 
@@ -167,9 +188,10 @@ npm run check:bundle   # built-in ideas aren't in the public browser files
 npm run e2e     # against a running build; see e2e/run.mjs for the settings it needs
 ```
 
-The end-to-end suites run two phones through pairing, a whole scene and
-deleting, with a stand-in push service, and check that the database and the
-bucket hold nothing readable. The layout suite walks every screen on a small
+The end-to-end suites run two phones through pairing, a whole scene, a
+workday (offer, change, agree, fill, send, start, demands, praise, redo, on
+my way, per-task scores) and deleting, with a stand-in push service, and
+check that the database and the bucket hold nothing readable. The layout suite walks every screen on a small
 phone (iPhone SE; `E2E_LAYOUT_DEVICE` for another) and checks nothing is
 wider than the screen, text boxes are 16px (so iPhones don't zoom) and
 buttons are big enough to tap; `E2E_SHOTS=<dir>` saves a screenshot of each.

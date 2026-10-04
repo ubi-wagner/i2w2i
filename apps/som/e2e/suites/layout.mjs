@@ -2,39 +2,8 @@
 // change it): nothing wider than the screen, text boxes at 16px or more (so
 // iPhones don't zoom in on them), and buttons big enough to tap. With
 // E2E_SHOTS=<dir>, saves a screenshot of each screen there.
-import { mkdirSync } from 'node:fs';
-import { BASE, check, finish, newPod, phone, TITLES } from '../lib.mjs';
+import { audit, BASE, check, finish, newPod, phone, SMALL as DEVICE, TITLES } from '../lib.mjs';
 
-const DEVICE = process.env.E2E_LAYOUT_DEVICE ?? 'iPhone SE';
-const SHOTS = process.env.E2E_SHOTS;
-if (SHOTS) mkdirSync(SHOTS, { recursive: true });
-let n = 0;
-
-async function audit(p, name) {
-  await p.waitForTimeout(400);
-  const r = await p.evaluate(() => {
-    const shown = (el) => {
-      const b = el.getBoundingClientRect();
-      return b.width > 0 && b.height > 0 && getComputedStyle(el).visibility !== 'hidden' && !el.closest('.sr-only') && !el.closest('dialog:not([open])');
-    };
-    const label = (el) => (el.getAttribute('aria-label') || el.textContent || el.getAttribute('placeholder') || el.tagName).trim().replace(/\s+/g, ' ').slice(0, 40);
-    const wide = [...document.querySelectorAll('body *')].filter(shown).filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1);
-    const smallText = [...document.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea, select')]
-      .filter(shown).filter((el) => parseFloat(getComputedStyle(el).fontSize) < 16);
-    const smallTaps = [...document.querySelectorAll('.btn, .btn-follow, .btn-quiet, .btn-stop, .chip')]
-      .filter(shown).filter((el) => el.getBoundingClientRect().height < 36);
-    return {
-      overflow: document.documentElement.scrollWidth - window.innerWidth,
-      wide: wide.slice(0, 4).map(label),
-      smallText: smallText.map(label),
-      smallTaps: smallTaps.map(label),
-    };
-  });
-  check(r.overflow <= 0 && !r.wide.length, `${name}: nothing wider than the screen${r.wide.length ? ` (${r.wide.join(' | ')})` : ''}`);
-  check(!r.smallText.length, `${name}: text boxes are 16px or more${r.smallText.length ? ` (${r.smallText.join(' | ')})` : ''}`);
-  check(!r.smallTaps.length, `${name}: buttons are big enough to tap${r.smallTaps.length ? ` (${r.smallTaps.join(' | ')})` : ''}`);
-  if (SHOTS) await p.screenshot({ path: `${SHOTS}/${String(++n).padStart(2, '0')}-${name.replace(/[^\w]+/g, '-')}.png`, fullPage: true });
-}
 const sheet = (p) => p.locator('dialog[open]').last();
 const close = (p) => sheet(p).getByRole('button', { name: 'Close' }).first().click();
 
@@ -95,9 +64,9 @@ await audit(r, 'home with a scene waiting');
 await r.goto(`${BASE}/scene/${id}`);
 await r.getByText('sent you this scene').waitFor();
 await audit(r, 'proposed scene');
-await r.getByRole('button', { name: 'Start the scene' }).click();
-await audit(r, 'start the scene?');
 await r.getByRole('button', { name: 'Start now' }).click();
+await audit(r, 'start the scene?');
+await sheet(r).getByRole('button', { name: 'Start now' }).click();
 await r.getByText(`${TITLES.follow}’s tasks`).waitFor();
 
 // Running.
@@ -113,7 +82,9 @@ await audit(b, 'check in');
 await close(b);
 await r.reload();
 await audit(r, 'running (lead)');
-await r.locator('#arrival').getByRole('button', { name: '20 min' }).click();
+await r.getByRole('button', { name: /On my way/ }).click();
+await audit(r, 'on my way?');
+await sheet(r).getByRole('button', { name: '20 min' }).click();
 await b.reload();
 await b.locator('#arrival').getByText('until arrival').waitFor();
 await audit(b, 'on the way');
@@ -126,7 +97,7 @@ await b.getByRole('button', { name: 'Resume' }).click();
 await r.getByRole('button', { name: 'Start the inspection' }).click();
 await r.getByText('Scorecard').first().waitFor();
 await audit(r, 'scorecard');
-for (const cat of ['Presentation', 'Task completion', 'Quality of work', 'Attitude']) await r.getByRole('radiogroup', { name: cat }).getByRole('radio', { name: '4' }).click();
+for (const cat of ['Presentation', 'Task completion', 'Quality of work', 'Attitude']) await r.getByRole('radiogroup', { name: cat, exact: true }).getByRole('radio', { name: '4' }).click();
 await r.getByRole('button', { name: /Massage/ }).click();
 await r.getByRole('button', { name: `Share with ${TITLES.follow}` }).click();
 await r.getByRole('region', { name: 'Results' }).waitFor();

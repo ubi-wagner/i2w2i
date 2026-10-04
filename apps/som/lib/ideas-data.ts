@@ -327,3 +327,35 @@ export function builtInIdeas(): MenuSection[] {
   };
   return cleanMenu(raw).sections;
 }
+
+/**
+ * Quick demands the lead can send while a scene runs: tap, adjust, send.
+ * Most come with a short countdown that starts right away.
+ */
+export interface DemandIdea { group: string; label: string; param?: string; needs: Proof[]; minutes?: number }
+const D = (group: string, label: string, needs: Proof[], minutes?: number, param?: string): DemandIdea => ({ group, label, needs, ...(minutes ? { minutes } : {}), ...(param ? { param } : {}) });
+
+export function demandIdeas(): DemandIdea[] {
+  return [
+    D('Right now', 'A photo, right now', [P(1)], 5),
+    D('Right now', 'A video, right now', [V(1)], 5),
+    D('Right now', 'A voice note, right now', [A(1)], 5),
+    D('Right now', 'Show me where you are and what you’re wearing', [P(2)], 5),
+    D('Right now', 'Check in: how are you doing?', [T(1)], 5),
+    D('Redo', 'Redo it, properly', [P(1)], 30),
+    D('Redo', 'A better photo: closer, more light', [P(2)], 10),
+    D('Redo', 'Show me the detail you missed', [P(1)], 10),
+    D('Correction', 'Self-spank ___ per cheek, counting aloud', [V(1)], 5, 'how many'),
+    D('Correction', 'Kneel for ___ minutes, then report', [P(1), T(1)], 15, 'mins'),
+    D('Correction', 'Corner time, ___ minutes', [P(1)], 15, 'mins'),
+    D('Correction', 'Write “I obey the first time” ___ times', [P(1, 'the page')], 20, 'how many'),
+    D('Correction', 'Clothespins for ___ minutes', [P(1)], 15, 'mins'),
+    D('Devotion', 'Lick ___ clean, on video', [V(1)], 5, 'what'),
+    D('Devotion', 'Kiss {lead}’s photo and give thanks', [V(1)], 5),
+    D('Devotion', 'Tell me why you belong to {lead}', [A(1)], 10),
+    D('Devotion', 'Edge once, then stop and report', [V(1), T(1)], 10),
+    D('Devotion', 'Change into ___ and show me', [P(2)], 15, 'what'),
+    D('Devotion', 'A pose for {lead}', [P(3)], 5),
+  ];
+}
+

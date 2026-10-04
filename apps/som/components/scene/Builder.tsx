@@ -4,11 +4,12 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
 import { proofText, section, type MenuItem, type SectionKind } from '@/lib/menu';
-import { cleanPlan, CHECKIN_CHOICES, pacingCheck, pacingOf, picked, planToTasks, withParam, type Plan } from '@/lib/plan';
+import { autoFill, cleanPlan, CHECKIN_CHOICES, pacingCheck, pacingForHours, pacingOf, picked, planToTasks, withParam, type Plan } from '@/lib/plan';
 import { sceneTransition } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ProofEditor } from '../ProofEditor';
 import { ErrorText, Sheet } from '../ui';
+import { OfferForm, when } from './Offer';
 import type { SceneData } from './useScene';
 
 const BUILD_KINDS: SectionKind[] = ['presentation', 'domain', 'errands', 'tasks', 'play', 'arrival'];
@@ -22,7 +23,8 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
   const [rev, setRev] = useState(scene.plan_rev);
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState('');
-  const [confirmStart, setConfirmStart] = useState(false);
+  const [confirming, setConfirm] = useState<'start' | 'send' | null>(null);
+  const [offering, setOffering] = useState(false);
   // Edits are numbered; a save covers the edits made before it began. One
   // save at a time, so a quick second edit never races the first.
   const planRef = useRef(plan);
@@ -97,7 +99,8 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
     }
   }
 
-  async function start() {
+  /** Start now, or send it for the follow to start: the phone turns the plan into encrypted tasks. */
+  async function go(action: 'start' | 'send') {
     setError('');
     try {
       await save();
@@ -106,12 +109,12 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
         const id = crypto.randomUUID();
         return { id, ord, bodyEnc: await pod.seal(t, `task:${id}`), minutes: t.minutes ?? null };
       }));
-      await api(`/api/scenes/${scene.id}/action`, { body: { action: 'start', tasks, planEnc: await pod.seal(plan, `plan:${scene.id}`), checkinMinutes: plan.checkinMinutes } });
-      setConfirmStart(false);
+      await api(`/api/scenes/${scene.id}/action`, { body: { action, tasks, planEnc: await pod.seal(plan, `plan:${scene.id}`), checkinMinutes: plan.checkinMinutes } });
+      setConfirm(null);
       await reload();
     } catch (err) {
       setError((err as Error).message);
-      setConfirmStart(false);
+      setConfirm(null);
     }
   }
 
@@ -121,9 +124,18 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
   const canPropose = sceneTransition(scene.status, 'propose', role);
   const canWithdraw = sceneTransition(scene.status, 'withdraw', role);
   const canStart = sceneTransition(scene.status, 'start', role);
+  const canSend = sceneTransition(scene.status, 'send', role);
+  const canOffer = scene.status === 'draft' && sceneTransition(scene.status, 'offer', role);
 
   return (
     <div className="space-y-5">
+      {scene.status === 'accepted' && (
+        <div className="card space-y-1 border-lead/40 bg-lead-light">
+          <p className="eyebrow text-lead">Agreed with {pod.title('follow')}</p>
+          <p className="font-display text-xl text-lead-dark">{when(scene.starts_at, scene.hours)}</p>
+          <p className="text-sm">Pick what you’d like (or let it fill itself in), then send it. {pod.title('follow')} starts it.</p>
+        </div>
+      )}
       {scene.status === 'proposed' && (
         <div className="card border-follow/40 bg-follow-light text-sm">
           {role === 'lead' ? `${pod.nameOf(scene.created_by)} sent you this scene. Change anything you like, then start it.` : `Sent to ${pod.title('lead')}. ${pod.title('lead')} can adjust it and start it.`}
@@ -159,6 +171,17 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
             </p>
           )}
         </div>
+        {editable && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" className="btn-follow flex-1" onClick={() => edit((p) => { Object.assign(p, autoFill(pod.menu, p)); })}>✨ Fill it for me</button>
+            {tasks.length > 0 && (
+              <button type="button" className="text-sm text-ink-soft underline"
+                onClick={() => { if (confirm('Clear every pick and start again?')) edit((p) => { p.picks = {}; p.rooms = p.rooms.map(() => ({ room: '', note: '' })); }); }}>
+                Clear picks
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {BUILD_KINDS.map((kind) => <SectionPicker key={kind} kind={kind} plan={plan} edit={edit} editable={editable} />)}
@@ -185,18 +208,36 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
         <span className="flex gap-2">
           {canWithdraw && <button type="button" className="btn-quiet" onClick={() => act('withdraw')}>Take it back</button>}
           {canPropose && <button type="button" className="btn-follow" disabled={!tasks.length} onClick={() => act('propose')}>Send to {pod.title('lead')}</button>}
-          {canStart && <button type="button" className="btn" disabled={!tasks.length} onClick={() => setConfirmStart(true)}>Start the scene</button>}
+          {canOffer && <button type="button" className="btn-quiet" onClick={() => setOffering(true)}>Offer a time</button>}
+          {canStart && <button type="button" className="btn" disabled={!tasks.length} onClick={() => setConfirm('start')}>Start now</button>}
+          {canSend && <button type="button" className="btn" disabled={!tasks.length} onClick={() => setConfirm('send')}>Send to {pod.title('follow')}</button>}
         </span>
       </div>
 
-      <Sheet open={confirmStart} onClose={() => setConfirmStart(false)} title="Start the scene?">
+      <Sheet open={confirming !== null} onClose={() => setConfirm(null)} title={confirming === 'send' ? `Send to ${pod.title('follow')}?` : 'Start the scene?'}>
         <div className="space-y-4">
-          <p>{pod.title('follow')} gets these {tasks.length} tasks{plan.checkinMinutes ? `, with a check-in every ${plan.checkinMinutes} minutes` : ''}:</p>
+          <p>
+            {pod.title('follow')} gets these {tasks.length} tasks{plan.checkinMinutes ? `, with a check-in every ${plan.checkinMinutes} minutes` : ''}
+            {confirming === 'send' && scene.starts_at ? `, to start ${when(scene.starts_at, null)}` : ''}:
+          </p>
           <ol className="list-decimal space-y-1 pl-5 text-sm">
             {tasks.map((t, i) => <li key={i}>{t.title}</li>)}
           </ol>
-          <button type="button" className="btn w-full" onClick={start}>Start now</button>
+          <button type="button" className="btn w-full" onClick={() => go(confirming ?? 'start')}>{confirming === 'send' ? 'Send it' : 'Start now'}</button>
         </div>
+      </Sheet>
+      <Sheet open={offering} onClose={() => setOffering(false)} title={`Offer it to ${pod.title('follow')}`}>
+        <OfferForm
+          submit="Send the offer"
+          noteLabel={`A note for ${pod.title('follow')} (optional)`}
+          onSubmit={async ({ startsAt, hours, note }) => {
+            await save();
+            const next = cleanPlan({ ...plan, pacing: plan.pacing ?? pacingForHours(pod.menu, hours)?.id ?? null, note: note || plan.note });
+            await api(`/api/scenes/${scene.id}/action`, { body: { action: 'offer', startsAt: startsAt.toISOString(), hours, planEnc: await pod.seal(next, `plan:${scene.id}`) } });
+            setOffering(false);
+            await reload();
+          }}
+        />
       </Sheet>
     </div>
   );

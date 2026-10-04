@@ -44,9 +44,9 @@ check(!!await pushTo('kay', /sent you a scene/), 'Kay hears a scene is waiting f
 await r.goto(`${BASE}/scene/${id}`);
 await r.getByText('sent you this scene').waitFor();
 check(await r.inputValue('#plan-title') === TITLE, 'Kay sees Sunny’s draft');
-await r.getByRole('button', { name: 'Start the scene' }).click();
-await r.getByText('gets these 5 tasks').waitFor();
 await r.getByRole('button', { name: 'Start now' }).click();
+await sheet(r).getByText('gets these 5 tasks').waitFor();
+await sheet(r).getByRole('button', { name: 'Start now' }).click();
 await r.getByText(`${TITLES.follow}’s tasks`).waitFor();
 check(!!await pushTo('sunny', /started the scene/), 'Sunny hears it has started');
 
@@ -156,7 +156,8 @@ await b.getByText('Your tasks').waitFor();
 
 // ── On my way ───────────────────────────────────────────────────────────────
 await r.reload();
-await r.locator('#arrival').getByRole('button', { name: '20 min' }).click();
+await r.getByRole('button', { name: /On my way/ }).click();
+await sheet(r).getByRole('button', { name: '20 min' }).click();
 check(!!await pushTo('sunny', /on the way: about 20 minutes/), 'Sunny hears Kay is on the way');
 await b.reload();
 await b.locator('#arrival').getByText('until arrival').waitFor();
@@ -169,7 +170,7 @@ await r.getByText('Scorecard').first().waitFor();
 check(r.dialogs.some((d) => /tasks? aren’t finished/.test(d)), 'starting the inspection with tasks open asks first');
 check(!!await pushTo('sunny', /Inspection time/), 'Sunny hears it’s inspection time');
 for (const cat of ['Presentation', 'Task completion', 'Quality of work', 'Attitude']) {
-  await r.getByRole('radiogroup', { name: cat }).getByRole('radio', { name: cat === 'Attitude' ? '5' : '4' }).click();
+  await r.getByRole('radiogroup', { name: cat, exact: true }).getByRole('radio', { name: cat === 'Attitude' ? '5' : '4' }).click();
 }
 await r.getByLabel('Inspection notes').fill('Lovely work on the kitchen.');
 await r.getByRole('button', { name: /Massage/ }).click();

@@ -7,7 +7,7 @@ import type { Role, SceneStatus } from '@/lib/rules';
 
 export const dynamic = 'force-dynamic';
 
-type Kind = 'comment' | 'writing' | 'checkin' | 'scores' | 'outcomes' | 'aftercare' | 'reflection';
+type Kind = 'comment' | 'writing' | 'checkin' | 'scores' | 'outcomes' | 'aftercare' | 'reflection' | 'praise';
 
 /** Who may add each kind of entry, and when. */
 function allowed(kind: Kind, role: Role, status: SceneStatus): boolean {
@@ -19,6 +19,7 @@ function allowed(kind: Kind, role: Role, status: SceneStatus): boolean {
     case 'outcomes': return role === 'lead' && (status === 'inspection' || status === 'aftercare');
     case 'aftercare': return status === 'aftercare';
     case 'reflection': return status === 'aftercare' || status === 'closed';
+    case 'praise': return role === 'lead' && status !== 'closed';
   }
 }
 
@@ -31,7 +32,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { scene, role } = found;
   const b = await body<{ id?: unknown; kind?: unknown; taskId?: unknown; bodyEnc?: unknown; private?: unknown }>(req);
   const kind = b?.kind as Kind;
-  if (!['comment', 'writing', 'checkin', 'scores', 'outcomes', 'aftercare', 'reflection'].includes(kind)) return bad('Unknown kind.');
+  if (!['comment', 'writing', 'checkin', 'scores', 'outcomes', 'aftercare', 'reflection', 'praise'].includes(kind)) return bad('Unknown kind.');
   if (!isUuid(b?.id) || !isCipher(b?.bodyEnc, 'j1', 300_000)) return bad('That doesn’t look right.');
   if (!allowed(kind, role, scene.status)) return bad('That can’t be added now.', 409);
   const taskId = b?.taskId == null ? null : isUuid(b.taskId) ? b.taskId : undefined;
@@ -51,6 +52,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // Checking in starts the clock again (and clears the missed-check-in alarm).
     if (!scene.paused_at) await scheduleCheckin(id, scene.checkin_minutes);
     notifySoon(await others(scene.pod_id, me.id, 'lead'), { title: 'S-O-M', body: `${name} checked in.`, url, tag: `checkin-${id}` });
+  } else if (kind === 'praise') {
+    notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M', body: `${name} praised you. ✨`, url, tag: `praise-${id}` });
   } else if (kind === 'comment') {
     notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M', body: `New note from ${name}.`, url, tag: `note-${id}` });
   } else if (kind === 'scores' || kind === 'outcomes') {

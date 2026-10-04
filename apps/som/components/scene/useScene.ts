@@ -22,6 +22,9 @@ export interface SceneRow {
   paused_by: string | null;
   started_at: string | null;
   closed_at: string | null;
+  starts_at: string | null;
+  hours: number | null;
+  change_request: { by: string; startsAt: string | null; hours: number | null; noteEnc: string | null } | null;
   close_votes: string[];
   delete_votes: string[];
   created_at: string;
@@ -39,7 +42,7 @@ export interface TaskView {
   body: TaskDraft;
 }
 
-export type EntryKind = 'comment' | 'writing' | 'checkin' | 'scores' | 'outcomes' | 'aftercare' | 'reflection';
+export type EntryKind = 'comment' | 'writing' | 'checkin' | 'scores' | 'outcomes' | 'aftercare' | 'reflection' | 'praise';
 
 export interface EntryView {
   id: string;

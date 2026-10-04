@@ -8,6 +8,7 @@ import { STATUS_LABEL } from '../Home';
 import { usePod } from '../Pod';
 import { clock, ErrorText, Sheet, Spinner } from '../ui';
 import { Builder } from './Builder';
+import { BeingBuilt, OfferView, ReadyView } from './Offer';
 import { Running } from './Running';
 import { TaskSheet } from './TaskSheet';
 import { useScene, type SceneData } from './useScene';
@@ -15,6 +16,7 @@ import { Aftercare, Inspection, Record } from './Wrapup';
 
 /** One scene, whatever stage it's at. */
 export function ScenePage({ id }: { id: string }) {
+  const pod = usePod();
   const { data, error, reload } = useScene(id);
   const [taskId, setTaskId] = useState<string | null>(null);
 
@@ -58,7 +60,7 @@ export function ScenePage({ id }: { id: string }) {
       <header className="space-y-1">
         <Link href="/" className="text-sm text-ink-soft">← Scenes</Link>
         <div className="flex items-start justify-between gap-3">
-          <h1 className="font-display text-3xl text-lead-dark">{data.plan.title || 'Untitled scene'}</h1>
+          <h1 className="font-display text-3xl text-lead-dark">{data.plan.title || (scene.starts_at ? `A scene from ${pod.title('lead')}` : 'Untitled scene')}</h1>
           <span className={`mt-2 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${scene.paused_at ? 'bg-stop text-white' : 'bg-lead-light text-lead-dark'}`}>
             {scene.paused_at ? 'Paused' : STATUS_LABEL[scene.status]}
           </span>
@@ -69,6 +71,9 @@ export function ScenePage({ id }: { id: string }) {
       <PausedBanner data={data} reload={reload} />
       <DeleteRequest data={data} reload={reload} />
 
+      {scene.status === 'offered' && <OfferView data={data} reload={reload} />}
+      {scene.status === 'accepted' && (data.role === 'lead' ? <Builder data={data} reload={reload} /> : <BeingBuilt data={data} />)}
+      {scene.status === 'ready' && <ReadyView data={data} reload={reload} onOpen={setTaskId} />}
       {(scene.status === 'draft' || scene.status === 'proposed') && <Builder data={data} reload={reload} />}
       {scene.status === 'active' && <Running data={data} reload={reload} onOpen={setTaskId} />}
       {scene.status === 'inspection' && <Inspection data={data} reload={reload} onOpen={setTaskId} />}
