@@ -31,7 +31,10 @@ leaves them. The server stores ciphertext and can't read it.
   after the `#`, which browsers never send to a server; it opens once, for
   that person only, and they then choose their own passphrase.
 - **Files** get their own key each and are encrypted in 8 MiB pieces, so big
-  videos upload in parts and resume. Photos are redrawn on the phone first
+  videos upload in parts, each retried on its own (a dropped connection
+  picks up where it stopped; closing the app mid-send means sending it
+  again, and the unfinished one can be removed). Videos and files are up to
+  250 MB, so they can be opened on a phone. Photos are redrawn on the phone first
   (when the browser can read the format, as iPhones and Android phones do),
   which drops location and camera details.
 - **Notifications** only say that something happened and who did it ("Sunny
