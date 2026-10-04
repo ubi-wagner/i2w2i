@@ -100,30 +100,43 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       return json({ error: 'Unknown action' }, 400);
   }
 
-  if (u.multipart_id) {
-    const stored = await listParts(u.original_key, u.multipart_id);
-    const missing = missingParts(declared, stored);
-    if (missing.length) return json({ error: 'Some parts didn’t arrive. Resuming…', missing }, 409);
-    await completeMultipart(u.original_key, u.multipart_id, completeParts(declared, stored));
-  }
-  const size = await objectSize(u.original_key);
-  if (size === null) return json({ error: 'The file didn’t arrive. Try again.' }, 409);
-  if (size > MAX_UPLOAD_BYTES || size === 0) {
-    await deleteObject(u.original_key);
-    return json({ error: 'That file is too large.' }, 400);
-  }
-  let previewKey = u.preview_key;
-  if (previewKey) {
-    const p = await objectSize(previewKey);
-    if (p === null || p > MAX_PREVIEW_BYTES) {
-      if (p !== null) await deleteObject(previewKey);
-      previewKey = null;
+  // One completion at a time per upload: a resumed page and the one it
+  // replaced (or a retry) can both say "complete", and two at once would
+  // glue the parts together twice. The second waits, then finds it done.
+  const done = await withCtx(album.ctx, async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`upload:${id}`}, 0))`;
+    const [now] = await tx<{ status: string; multipart_id: string | null; preview_key: string | null }[]>`
+      SELECT status, multipart_id, preview_key FROM events.uploads WHERE id = ${id} AND event_id = ${album.event.id}`;
+    if (!now || now.status !== 'pending') return { finished: true } as const;
+    if (now.multipart_id) {
+      const stored = await listParts(u.original_key, now.multipart_id);
+      const missing = missingParts(declared, stored);
+      if (missing.length) return { response: json({ error: 'Some parts didn’t arrive. Resuming…', missing }, 409) };
+      await completeMultipart(u.original_key, now.multipart_id, completeParts(declared, stored));
     }
-  }
-  await withCtx(album.ctx, (tx) => tx`
-    UPDATE events.uploads SET status = 'ready', completed_at = now(), size_bytes = ${size},
-                              preview_key = ${previewKey}, multipart_id = NULL
-     WHERE id = ${id} AND status = 'pending'`);
+    const size = await objectSize(u.original_key);
+    if (size === null) return { response: json({ error: 'The file didn’t arrive. Try again.' }, 409) };
+    if (size > MAX_UPLOAD_BYTES || size === 0) {
+      await deleteObject(u.original_key);
+      return { response: json({ error: 'That file is too large.' }, 400) };
+    }
+    let previewKey = now.preview_key;
+    if (previewKey) {
+      const p = await objectSize(previewKey);
+      if (p === null || p > MAX_PREVIEW_BYTES) {
+        if (p !== null) await deleteObject(previewKey);
+        previewKey = null;
+      }
+    }
+    await tx`
+      UPDATE events.uploads SET status = 'ready', completed_at = now(), size_bytes = ${size},
+                                preview_key = ${previewKey}, multipart_id = NULL
+       WHERE id = ${id} AND status = 'pending'`;
+    return { size, previewKey };
+  });
+  if ('finished' in done) return json({ ok: true, complete: true });
+  if ('response' in done) return done.response!;
+  const { size, previewKey } = done;
   await logActivity({
     eventId: album.event.id,
     action: 'upload.complete',

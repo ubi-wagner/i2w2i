@@ -79,8 +79,23 @@ const slow = (p) => p.route(/op=part/, (route) => setTimeout(() => route.continu
   await added(p);
   check(parts.ok - before > 0 && parts.ok - before < PARTS && parts.ok <= PARTS, `re-pick: only the missing parts were sent (${parts.ok - before})`);
   check((await storedSha('ria.mp4', 'Ria')) === bigSha, 're-pick: stored video is byte-identical');
-  const [{ n }] = await db`SELECT count(*)::int AS n FROM events.uploads WHERE filename = 'ria.mp4' AND uploader_name = 'Ria'`;
+  const [{ n }] = await db`SELECT count(*)::int AS n FROM events.uploads WHERE filename = 'ria.mp4' AND uploader_name = 'Ria' AND event_id = ${ev.id}`;
   check(n === 1, 're-pick: no duplicate upload');
+}
+{ // Two "complete"s at once (a resumed page and the one it replaced, or a retry): one finishes, the other waits and finds it done
+  const { p } = await guest('Duo');
+  let second = null;
+  await p.route(/\/api\/uploads\/[0-9a-f-]{36}$/, async (route) => {
+    const body = route.request().postData() ?? '';
+    if (!second && body.includes('"complete"')) {
+      second = p.evaluate(([url, b]) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: b }).then((r) => r.status), [route.request().url(), body]);
+    }
+    await route.continue();
+  });
+  await p.locator('input[type=file]').setInputFiles(file('duo.mp4'));
+  await added(p);
+  check(second && (await second) === 200, 'two completions at once: both succeed');
+  check((await storedSha('duo.mp4', 'Duo')) === bigSha, 'two completions at once: stored video is byte-identical');
 }
 { // Too big, wrong type: refused before anything is sent
   const { p } = await guest('Big Ben');

@@ -177,12 +177,15 @@ One-time setup, after the S-O-M code is merged to `main`:
 2. **Add → Database → PostgreSQL.** Turn on scheduled **Backups** (they hold
    ciphertext, usernames and timestamps).
 3. **Add → Bucket.**
-4. **Add → GitHub Repo → `ubi-wagner/i2w2i`**, then on that service:
-   - **Settings → Source → Root Directory:** `/apps/som`
-   - **Settings → Source → Branch:** `main`, and **Wait for CI:** on
-   - **Settings → Config-as-code → Railway config file:** `/apps/som/railway.json`
-     (Dockerfile build, `/api/health` healthcheck, and it only redeploys when
-     something under `apps/som` changes)
+4. **Add → GitHub Repo → `ubi-wagner/i2w2i`**, then on that service's
+   **Settings** (Railway has deprecated `railway.json` files, so S-O-M sets
+   these in the dashboard):
+   - **Source → Root Directory:** `/apps/som`
+   - **Source → Branch:** `main`, and **Wait for CI:** on
+   - **Build → Builder:** Dockerfile (found at `apps/som/Dockerfile`)
+   - **Build → Watch Paths:** `/apps/som/**` (only S-O-M changes redeploy it)
+   - **Deploy → Healthcheck Path:** `/api/health`, timeout 120
+   - No custom build or start command; the Dockerfile does it.
 5. **Variables** on the S-O-M service:
 
    | Variable | Value |
@@ -198,6 +201,8 @@ One-time setup, after the S-O-M code is merged to `main`:
    | `SOM_ADMIN_NAME` | a made-up name |
    | `SOM_ADMIN_PASSWORD` | 10+ characters; **delete after the first successful deploy** |
 
+   `Bucket` and `Postgres` are the services' names in the project: rename
+   the bucket to `Bucket`, or use its name (typing `${{` lists them).
    Don't set `PORT`, `PUSH_ALLOW_ANY_ENDPOINT`, `SOM_MINUTE_MS` or
    `SOM_TICK_MS` (the last three are for tests; it refuses to start with them).
 6. **Deploy.** The log should read:
@@ -225,3 +230,12 @@ One-time setup, after the S-O-M code is merged to `main`:
    your phones, not in the repository.
 
 GitHub ruleset: add **`som`** and **`som-image`** to the required checks.
+
+## Before 2026-12-01: the family site's `railway.json`
+
+Railway stops reading `railway.json` files on 2026-12-01. The family
+service's one (repo root) only sets the Dockerfile builder, the
+`/api/health` healthcheck and restart-on-failure. Before then, on the family
+service set **Deploy → Healthcheck Path:** `/api/health` (timeout 120) and
+check **Build → Builder** says Dockerfile; then `railway.json` can go.
+
