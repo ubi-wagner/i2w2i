@@ -1,0 +1,143 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api } from '@/lib/client/api';
+import type { MediaRow } from '@/lib/client/media';
+import { cleanProofs } from '@/lib/menu';
+import { cleanPlan, type Plan, type TaskDraft } from '@/lib/plan';
+import type { Role, SceneStatus, TaskStatus } from '@/lib/rules';
+import { usePod, type Member } from '../Pod';
+
+export interface SceneRow {
+  id: string;
+  pod_id: string;
+  created_by: string;
+  status: SceneStatus;
+  plan_rev: number;
+  plan_enc: string;
+  checkin_minutes: number | null;
+  next_checkin_at: string | null;
+  arrival_at: string | null;
+  paused_at: string | null;
+  paused_by: string | null;
+  started_at: string | null;
+  closed_at: string | null;
+  close_votes: string[];
+  delete_votes: string[];
+  created_at: string;
+}
+
+export interface TaskView {
+  id: string;
+  ord: number;
+  status: TaskStatus;
+  minutes: number | null;
+  due_at: string | null;
+  started_at: string | null;
+  submitted_at: string | null;
+  decided_at: string | null;
+  body: TaskDraft;
+}
+
+export type EntryKind = 'comment' | 'writing' | 'checkin' | 'scores' | 'outcomes' | 'aftercare' | 'reflection';
+
+export interface EntryView {
+  id: string;
+  task_id: string | null;
+  author_id: string;
+  kind: EntryKind;
+  private: boolean;
+  created_at: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  body: any;
+}
+
+export interface SceneData {
+  scene: SceneRow;
+  role: Role;
+  me: string;
+  members: Member[];
+  tasks: TaskView[];
+  entries: EntryView[];
+  media: MediaRow[];
+  plan: Plan;
+  /** Server clock minus this phone's, for countdowns. */
+  skew: number;
+}
+
+interface Raw {
+  scene: SceneRow;
+  role: Role;
+  me: string;
+  members: Member[];
+  tasks: (Omit<TaskView, 'body'> & { body_enc: string })[];
+  entries: (Omit<EntryView, 'body'> & { body_enc: string })[];
+  media: MediaRow[];
+  now: string;
+}
+
+function taskBody(t: TaskDraft): TaskDraft {
+  return { ...t, checklist: Array.isArray(t.checklist) ? t.checklist : [], needs: cleanProofs(t.needs) };
+}
+
+/** Loads a scene, decrypts it on the phone, and keeps it fresh while it's on screen. */
+export function useScene(id: string) {
+  const pod = usePod();
+  const [data, setData] = useState<SceneData | null>(null);
+  const [error, setError] = useState('');
+  const cache = useRef(new Map<string, unknown>());
+
+  const open = useCallback(async <T,>(payload: string, context: string): Promise<T> => {
+    const k = `${context}|${payload.slice(-24)}`;
+    if (!cache.current.has(k)) cache.current.set(k, await pod.open<T>(payload, context));
+    return cache.current.get(k) as T;
+  }, [pod]);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api<Raw>(`/api/scenes/${id}`);
+      const [plan, tasks, entries] = await Promise.all([
+        open(r.scene.plan_enc, `plan:${id}`).then(cleanPlan),
+        Promise.all(r.tasks.map(async ({ body_enc, ...t }) => ({ ...t, body: taskBody(await open<TaskDraft>(body_enc, `task:${t.id}`)) }))),
+        Promise.all(r.entries.map(async ({ body_enc, ...e }) => ({ ...e, body: await open(body_enc, `entry:${e.id}`).catch(() => null) }))),
+      ]);
+      setData({ scene: r.scene, role: r.role, me: r.me, members: r.members, tasks, entries, media: r.media, plan, skew: new Date(r.now).getTime() - Date.now() });
+      setError('');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }, [id, open]);
+
+  useEffect(() => {
+    void load();
+    const tick = () => { if (document.visibilityState === 'visible') void load(); };
+    const timer = setInterval(tick, 4000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [load]);
+
+  return { data, error, reload: load };
+}
+
+/** Seconds left until `at`, ticking every second (server-clock corrected). */
+export function useCountdown(at: string | null, skew = 0): number | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!at) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [at]);
+  if (!at) return null;
+  return Math.round((new Date(at).getTime() - (now + skew)) / 1000);
+}
+
+export function mmss(s: number): string {
+  const a = Math.abs(s);
+  const h = Math.floor(a / 3600);
+  const m = Math.floor((a % 3600) / 60);
+  const sec = a % 60;
+  return `${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${String(sec).padStart(2, '0')}`;
+}

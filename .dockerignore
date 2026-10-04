@@ -5,3 +5,5 @@ node_modules
 !.env.example
 tests
 e2e
+# Separate services with their own images (apps/som is S-O-M).
+apps

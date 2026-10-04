@@ -2,7 +2,7 @@ import 'server-only';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
-import { appendFile, mkdir, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import {
@@ -252,12 +252,23 @@ export async function listParts(key: string, uploadId: string): Promise<StoredPa
 
 export async function completeMultipart(key: string, uploadId: string, parts: StoredPart[]): Promise<void> {
   if (storageDriver === 'local') {
+    // Glue the parts together aside and rename into place, so the object is
+    // never half-written; if the parts are already gone because another
+    // completion of the same upload got there first, that one stands.
     const dir = `${localPath(key)}.mp-${uploadId}`;
     const out = await ensureLocalDir(key);
-    await writeFile(/*turbopackIgnore: true*/ out, Buffer.alloc(0));
-    for (const p of parts) await appendFile(/*turbopackIgnore: true*/ out, await readFile(/*turbopackIgnore: true*/ join(dir, String(p.n))));
-    const type = await readFile(/*turbopackIgnore: true*/ join(dir, 'type'), 'utf8').catch(() => 'application/octet-stream');
-    await writeFile(/*turbopackIgnore: true*/ `${out}.type`, type);
+    const tmp = `${out}.tmp-${randomUUID()}`;
+    try {
+      await writeFile(/*turbopackIgnore: true*/ tmp, Buffer.alloc(0));
+      for (const p of parts) await appendFile(/*turbopackIgnore: true*/ tmp, await readFile(/*turbopackIgnore: true*/ join(dir, String(p.n))));
+      const type = await readFile(/*turbopackIgnore: true*/ join(dir, 'type'), 'utf8').catch(() => 'application/octet-stream');
+      await writeFile(/*turbopackIgnore: true*/ `${out}.type`, type);
+      await rename(/*turbopackIgnore: true*/ tmp, out);
+    } catch (err) {
+      await rm(/*turbopackIgnore: true*/ tmp, { force: true });
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT' && (await objectSize(key)) !== null) return;
+      throw err;
+    }
     await rm(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
     return;
   }

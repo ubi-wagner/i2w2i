@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Colour channels (r g b). The Select-O-Matic's navy and pink; "us" mode is
+   warm and plain, for aftercare and looking back. */
+:root {
+  --ink: 24 26 46; --ink-soft: 82 86 112; --ink-faint: 142 146 168;
+  --paper: 247 246 251; --paper-raised: 255 255 255; --paper-sunk: 237 236 245;
+  --line: 223 222 236;
+  --lead: 33 56 160; --lead-dark: 22 37 112; --lead-light: 230 234 250;
+  --follow: 219 74 140; --follow-dark: 168 40 100; --follow-light: 252 233 242;
+  --ok: 22 128 72;
+  --warn: 180 110 10; --warn-light: 255 244 214;
+  --stop: 200 30 50; --stop-light: 255 230 232;
+  color-scheme: light;
+}
+[data-mode='us'] {
+  --paper: 250 247 242; --paper-sunk: 241 236 228; --line: 230 223 212;
+  --lead: 120 92 70; --lead-dark: 90 68 50; --lead-light: 243 236 228;
+  --follow: 120 92 70; --follow-dark: 90 68 50; --follow-light: 243 236 228;
+}
+
+html { -webkit-tap-highlight-color: transparent; }
+body { background: rgb(var(--paper)); color: rgb(var(--ink)); }
+
+@layer components {
+  .card { @apply rounded-2xl border border-line bg-paper-raised p-4 shadow-sm; }
+  .btn { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-lead px-4 py-2 font-semibold text-white active:scale-[0.98] disabled:opacity-50; }
+  .btn-follow { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-follow px-4 py-2 font-semibold text-white active:scale-[0.98] disabled:opacity-50; }
+  .btn-quiet { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line bg-paper-raised px-4 py-2 font-medium text-ink active:scale-[0.98] disabled:opacity-50; }
+  .btn-stop { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-stop px-4 py-2 font-semibold text-white active:scale-[0.98] disabled:opacity-50; }
+  .input { @apply w-full rounded-xl border border-line bg-paper-raised px-3 py-2.5 text-base text-ink placeholder:text-ink-faint focus:border-lead focus:outline-none focus:ring-2 focus:ring-lead/25; }
+  .label { @apply mb-1 block text-sm font-medium text-ink-soft; }
+  .eyebrow { @apply text-[11px] font-bold uppercase tracking-[0.18em]; }
+  .chip { @apply inline-flex min-h-10 items-center gap-2 rounded-xl border border-line bg-paper-raised px-3 py-2 text-left text-[15px] leading-snug text-ink active:scale-[0.98]; }
+  .chip[aria-pressed='true'] { @apply border-lead bg-lead-light font-medium text-lead-dark; }
+}

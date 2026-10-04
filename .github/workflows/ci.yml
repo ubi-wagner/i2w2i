@@ -154,10 +154,136 @@ jobs:
       - name: Start the production server
         run: |
           cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
-          cd .next/standalone && PORT=3000 HOSTNAME=127.0.0.1 nohup node server.js > /tmp/server.log 2>&1 &
+          cd .next/standalone && PORT=3000 HOSTNAME=127.0.0.1 KEEP_ALIVE_TIMEOUT=65000 nohup node server.js > /tmp/server.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/api/health && break; sleep 1; done
       - name: End-to-end suites
         run: npm run e2e
       - name: Server log
         if: failure()
         run: tail -200 /tmp/server.log
+
+  # S-O-M (apps/som) is its own service with its own database and bucket.
+  # Typecheck, unit tests, migrations, bootstrap, build, then every
+  # end-to-end suite on two phones against the production build.
+  som:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/som
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: som
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: som
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U som" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://som:ci@localhost:5432/som
+      APP_URL: http://localhost:3100
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_DIR: /tmp/som-storage
+      # Test-only: notifications go to the suite's stand-in push service, and
+      # minutes pass in seconds so check-ins and countdowns can be watched.
+      PUSH_ALLOW_ANY_ENDPOINT: '1'
+      SOM_MINUTE_MS: '1000'
+      SOM_TICK_MS: '500'
+      E2E_ADMIN_USERNAME: admin
+      E2E_ADMIN_PASSWORD: admin-password-1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/som/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Migrations apply cleanly and are idempotent
+        run: |
+          npm run migrate
+          npm run migrate:check
+      - name: Bootstrap is idempotent
+        env:
+          SOM_ADMIN_USERNAME: admin
+          SOM_ADMIN_NAME: Admin
+          SOM_ADMIN_PASSWORD: admin-password-1
+        run: |
+          npm run bootstrap
+          npm run bootstrap
+      - run: npm run build
+      - name: Built-in ideas stay out of the public browser files
+        run: npm run check:bundle
+      - run: npx playwright install --with-deps chromium
+      - name: Start the production server
+        run: |
+          cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
+          cd .next/standalone && PORT=3100 HOSTNAME=127.0.0.1 KEEP_ALIVE_TIMEOUT=65000 nohup node server.js > /tmp/som.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3100/api/health && break; sleep 1; done
+      - name: End-to-end suites
+        run: npm run e2e
+      - name: Server log
+        if: failure()
+        run: tail -200 /tmp/som.log
+
+  # S-O-M's Dockerfile, as Railway builds it, boots against Postgres with
+  # production settings and refuses test-only or missing ones.
+  som-image:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: som
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: som
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U som" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t som:ci apps/som
+      - name: Refuses to boot without APP_URL, or with test-only settings
+        run: |
+          if docker run --rm --network host -e DATABASE_URL=postgres://som:ci@127.0.0.1:5432/som \
+               -e STORAGE_DRIVER=local -e APP_SECRET=ci-app-secret-0123456789abcdefghijkl som:ci; then
+            echo "container started without APP_URL" && exit 1
+          fi
+          if docker run --rm --network host -e DATABASE_URL=postgres://som:ci@127.0.0.1:5432/som -e APP_URL=https://som.example \
+               -e STORAGE_DRIVER=local -e APP_SECRET=ci-app-secret-0123456789abcdefghijkl -e PUSH_ALLOW_ANY_ENDPOINT=1 som:ci; then
+            echo "container started with PUSH_ALLOW_ANY_ENDPOINT" && exit 1
+          fi
+      - name: Boot, migrate, bootstrap, serve
+        run: |
+          docker run -d --name som --network host \
+            -e PORT=3100 \
+            -e DATABASE_URL=postgres://som:ci@127.0.0.1:5432/som \
+            -e APP_URL=https://som.example \
+            -e STORAGE_DRIVER=local \
+            -e APP_SECRET=ci-app-secret-0123456789abcdefghijkl \
+            -e SOM_ADMIN_USERNAME=admin \
+            -e SOM_ADMIN_PASSWORD=ci-password-123 \
+            som:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3100/api/health && break
+            sleep 2
+          done
+          docker logs som
+          curl -fsS http://127.0.0.1:3100/api/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/login)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/)" = 307
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/api/me)" = 401
+      - name: Restart is idempotent
+        run: |
+          docker restart som
+          sleep 5
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3100/api/health && break
+            sleep 2
+          done
+          docker logs --tail 20 som | grep -q "\[migrate\] up to date"

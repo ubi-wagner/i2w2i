@@ -2,8 +2,9 @@
 
 ## One service, one domain
 
-Everything runs as **one Next.js service in one Railway container**, behind
-`i2w2i.com`, with one Postgres and one storage bucket. Each app is a path:
+The family site runs as **one Next.js service in one Railway container**,
+behind `i2w2i.com`, with one Postgres and one storage bucket. (The one
+exception is S-O-M, below: a separate service in `apps/som`.) Each app is a path:
 
 | Path | What |
 |---|---|
@@ -13,7 +14,7 @@ Everything runs as **one Next.js service in one Railway container**, behind
 | `/account` | Name, password, sign out everywhere |
 | `/events` | Events you're on; create, manage, codes, QR cards, moderation |
 | `/album/<slug>` | An event's album: join by code/QR, upload, gallery, chat |
-| `/couples` | Couples app (hidden unless granted; not built) |
+| `/couples` | Placeholder (unused: the couples app is S-O-M, a separate service; see below) |
 
 ## Who is who, and how they get in
 
@@ -240,15 +241,27 @@ applied migration stops the boot.
 - **Guests:** a separate token in the cookie `i2w2i_guest`, scoped to `/album/<slug>`, lasting 60 days.
 - **Sign-in links** (only with email set up, or from before usernames): single-use. Opening one signs no one in (message previews fetch links); pressing Continue does.
 
-## Plans for the Couples app
+## S-O-M: the couples app, as its own service
 
-It runs in the same container, but stricter by design:
+The couples app became **S-O-M** (`som.i2w2i.com`), built from `apps/som`
+as a separate Railway service with **its own database, bucket, accounts and
+cookie**. Nothing in it talks to the family site, and the family site's
+build, typecheck and image ignore `apps/` (root `tsconfig.json` and
+`.dockerignore`).
 
-- No public, family, link or code sharing exists in its code: only the couple.
-- Its own bucket prefix and short-lived signed URLs; its own schema and role.
-- Row-level security keyed to the couple.
-- A path-scoped step-up session (`Path=/couples`) on top of the normal sign-in.
-- Accounts can be made-up usernames with no real name or email, separate
-  from someone's family account. Since whoever makes an account knows its
-  starting password, Couples should make people choose their own password
-  before first use, and nobody but Eric should be able to reset one.
+Why separate rather than a `/couples` path here:
+
+- Its content is explicit and personal; a bug or a mistake on the family
+  site (a sharing path, an admin page, a backup restore) can't reach it.
+- It's **end-to-end encrypted**: the phones hold the keys, and the server
+  and database store ciphertext only. The family site's model (the server
+  reads everything and Postgres enforces who sees what) doesn't fit that.
+- It can grow (cousins' pods, maybe more) or move to its own repository
+  without untangling anything.
+
+Its own accounts are made-up usernames; whoever adds a partner hands them a
+password and a one-time key link, and each person chooses their own vault
+passphrase. Nobody, including the admin, can read a pod or reset into it.
+
+Details: [apps/som/README.md](../apps/som/README.md). Deploying:
+[RAILWAY.md](RAILWAY.md#s-o-m-somi2w2icom).

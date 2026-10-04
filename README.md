@@ -15,6 +15,10 @@ own Postgres schema.
   - see who uploaded what, from which device.
 - **Extras:** comments, frames and filters (originals untouched), and gift/Venmo links with QR codes.
 
+**S-O-M** (som.i2w2i.com): a private, end-to-end encrypted app for couples
+to build and run scenes together. A separate service in
+[apps/som](apps/som/README.md), with its own database and bucket.
+
 - How it fits together and who can do what: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Deploying on Railway: [docs/RAILWAY.md](docs/RAILWAY.md)
 - Conventions for working in this repo: [CLAUDE.md](CLAUDE.md)

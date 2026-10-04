@@ -80,3 +80,26 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
   serve an upload to others without going through the uploads RLS policy.
 - **Guests are told** on the join form that name, device and network details
   are recorded. Keep that notice if you change the form.
+
+## S-O-M (`apps/som`)
+A separate service (som.i2w2i.com) with its own `package.json`, database,
+bucket and CI jobs (`som`, `som-image`). Run its checks from `apps/som`:
+`npm run typecheck && npm test && npm run build`, and `npm run e2e` against a
+running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
+- **End-to-end encrypted.** Anything a couple writes or sends is encrypted on
+  the phone (`lib/crypto.ts`) before any API call. The server stores and
+  relays ciphertext; never add a route, log or notification that needs
+  plaintext. Notifications say who did something, never what.
+- **Never commit a couple's own menu, ideas pack** or anything from their
+  scenes; those are imported in the app. Built-in ideas
+  (`lib/ideas-data.ts`) are generic, use `{lead}`/`{follow}` for titles,
+  and are **for pod members only**: import that file only from
+  `app/api/ideas`, never from anything that runs in the browser
+  (`npm run check:bundle` fails the build if they leak into `.next/static`).
+- **Deleting:** people delete their own content any time (bucket too); a
+  whole scene needs every member's yes; an unsent draft is its author's.
+- **Pause** is a safety control: either can pause, only whoever paused
+  resumes, and nothing moves while paused. Don't weaken it.
+- Nothing in `apps/som` imports from the family site or vice versa; the root
+  build ignores `apps/`.
+
