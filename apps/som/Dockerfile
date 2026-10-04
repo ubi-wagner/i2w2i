@@ -14,7 +14,9 @@ RUN npm run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000
+# Idle connections stay open past the 5-6s Node default, so a proxy (or
+# client) reusing one never races the server closing it.
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 KEEP_ALIVE_TIMEOUT=65000
 RUN addgroup -S -g 1001 nodejs && adduser -S -u 1001 -G nodejs nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static

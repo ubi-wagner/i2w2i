@@ -154,7 +154,7 @@ jobs:
       - name: Start the production server
         run: |
           cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
-          cd .next/standalone && PORT=3000 HOSTNAME=127.0.0.1 nohup node server.js > /tmp/server.log 2>&1 &
+          cd .next/standalone && PORT=3000 HOSTNAME=127.0.0.1 KEEP_ALIVE_TIMEOUT=65000 nohup node server.js > /tmp/server.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/api/health && break; sleep 1; done
       - name: End-to-end suites
         run: npm run e2e
@@ -222,7 +222,7 @@ jobs:
       - name: Start the production server
         run: |
           cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
-          cd .next/standalone && PORT=3100 HOSTNAME=127.0.0.1 nohup node server.js > /tmp/som.log 2>&1 &
+          cd .next/standalone && PORT=3100 HOSTNAME=127.0.0.1 KEEP_ALIVE_TIMEOUT=65000 nohup node server.js > /tmp/som.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3100/api/health && break; sleep 1; done
       - name: End-to-end suites
         run: npm run e2e

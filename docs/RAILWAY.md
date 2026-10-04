@@ -12,6 +12,9 @@ claude/main ──PR──▶ main ──(CI green)──▶ Railway builds Dock
 ```
 
 - Claude pushes to **`claude/main`** only. CI runs there.
+- Both images set `KEEP_ALIVE_TIMEOUT=65000`: Node closes idle connections
+  after about 6 s by default, and a proxy or client reusing one just as it
+  closes gets a reset. Leave it set.
 - Eric opens a PR `claude/main` → `main` and merges once CI is green.
 - Railway deploys **`main`**. If any boot step fails, the healthcheck never passes,
   the new deploy is marked failed and **the previous deploy keeps serving**.
