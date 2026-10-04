@@ -166,6 +166,7 @@ const taskWhilePaused = await b.evaluate(async ([id, t]) => (await fetch(`/api/s
   [id, (await db`SELECT id FROM som.tasks WHERE scene_id = ${id} AND status = 'todo' LIMIT 1`)[0].id]);
 check(taskWhilePaused === 409, 'nothing moves while paused');
 await b.getByRole('button', { name: 'Resume' }).click();
+await b.getByText('You paused the scene').waitFor({ state: 'detached' });
 await b.getByText('Your tasks').waitFor();
 
 // ── On my way ───────────────────────────────────────────────────────────────

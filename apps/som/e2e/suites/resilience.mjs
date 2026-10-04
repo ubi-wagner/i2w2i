@@ -109,6 +109,7 @@ check(await r.getByRole('button', { name: 'Start the inspection' }).isDisabled()
 check((await call(r, `/api/scenes/${run}/action`, 'POST', { action: 'inspect' })).status === 409, '…and the server refuses it too');
 await audit(r, 'paused, lead');
 await b.getByRole('button', { name: 'Resume' }).click();
+await b.getByText('You paused the scene').waitFor({ state: 'detached' });
 await b.getByText('Your tasks').waitFor();
 
 // ── A retried note or demand arrives once ───────────────────────────────────

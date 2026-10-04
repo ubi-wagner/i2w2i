@@ -94,8 +94,10 @@ await b.getByRole('button', { name: 'Pause' }).click();
 await b.getByText('You paused the scene').waitFor();
 await audit(b, 'paused');
 await b.getByRole('button', { name: 'Resume' }).click();
+await b.getByText('You paused the scene').waitFor({ state: 'detached' });
 
-// Inspection, aftercare, record.
+// Inspection, aftercare, record (once Kay's phone has seen the resume).
+await r.reload();
 await r.getByRole('button', { name: 'Start the inspection' }).click();
 await r.getByText('Scorecard').first().waitFor();
 await audit(r, 'scorecard');
