@@ -89,9 +89,19 @@ it's on.
 **Roleplays** live on the Menu page: a title, who leads, where, intensity,
 what to wear, the setup, the action and the aftercare. Add them one by
 one, import a text file, or edit them all as text. In a roleplay scene the
-card is at the top while it runs (tasks and demands are optional), the
-lead can go **straight to aftercare** (no scorecard), and aftercare starts
-with the roleplay's own.
+card is at the top while it runs (tasks and demands are optional); the
+inspection works as usual (scorecard and rewards: there's no skipping it,
+it's where rewards are earned), and aftercare starts with the roleplay's
+own.
+
+**Loves and dislikes.** Each of you says how you feel about a roleplay
+with one tap (❤️ Love it, 👍 It's OK, 👎 Not for me) and, if you like, a few
+words: what you loved and what you didn't. Do it from the Menu before
+you've tried one, at the inspection after playing it (you each see the
+other's), or later in the record. They're kept in your profiles: the
+roleplay list shows how each of you feels, the picker puts the ones you
+both love first, one your partner said isn't for them can't be picked,
+and Together lists the roleplays you both love.
 
 **Us (profiles).** Each of you fills in your own: notes in your own words
 (what you like to be called, hard and soft limits, safeword and signals,
@@ -229,7 +239,8 @@ workday (offer a window, ask for a change of time and capacity, agree, no
 overlaps, expiry, fill, send, start in the window, demands, praise, redo, on
 my way, per-task scores), a switched roleplay (asked for by the usual lead,
 accepted by the usual follow, run with the roles swapped, straight to
-aftercare; and a request turned down), profiles (ratings, notes, the
+loves and dislikes from both at the inspection, rewards as usual; a
+roleplay marked "not for me" can't be picked; and a request turned down), profiles (ratings, notes, the
 other's view, Together, limits in the builder) and deleting, with a stand-in push service, and
 check that the database and the bucket hold nothing readable. The layout suite walks every screen on a small
 phone (iPhone SE; `E2E_LAYOUT_DEVICE` for another) and checks nothing is

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
 import { loadIdeas } from '@/lib/client/ideas';
 import { newId, type RateSection } from '@/lib/menu';
-import { ABOUT, cleanProfile, emptyProfile, matches, ratedCount, rateSections, rateSectionsToText, SCALE, SCORES, textToRateSections, type Match, type Profile, type Score } from '@/lib/profile';
+import { ABOUT, cleanProfile, emptyProfile, lovedByAll, matches, ratedCount, rateSections, rateSectionsToText, SCALE, SCORES, textToRateSections, type Match, type Profile, type Score } from '@/lib/profile';
 import { usePod } from './Pod';
 import { Collapsible, ErrorText, Section, Sheet, Spinner } from './ui';
 
@@ -12,13 +12,21 @@ interface Row { account_id: string; body_enc: string; rev: number; updated_at: s
 export interface Loaded { profile: Profile; rev: number }
 
 /** Each member's profile, decrypted on this phone (bound to whose it is, so rows can't be swapped). */
-export function useProfiles(): { profiles: Record<string, Loaded> | null; reload: () => Promise<void>; error: string } {
+export function useProfiles(): {
+  profiles: Record<string, Loaded> | null;
+  reload: () => Promise<void>;
+  /** Changes your own profile and saves it (on top of a newer copy if another phone saved first). */
+  update: (fn: (p: Profile) => void) => Promise<void>;
+  error: string;
+} {
   const pod = usePod();
   const [profiles, setProfiles] = useState<Record<string, Loaded> | null>(null);
   const [error, setError] = useState('');
   // The pod's functions change on every render; only another pod means loading again.
   const podRef = useRef(pod);
   podRef.current = pod;
+  const latest = useRef<Record<string, Loaded> | null>(null);
+  const queue = useRef<Promise<void>>(Promise.resolve());
   const podId = pod.pod.id;
   const reload = useCallback(async () => {
     try {
@@ -27,6 +35,7 @@ export function useProfiles(): { profiles: Record<string, Loaded> | null; reload
       for (const row of r.profiles) {
         out[row.account_id] = { rev: row.rev, profile: cleanProfile(await podRef.current.open(row.body_enc, `profile:${podId}:${row.account_id}`).catch(() => null)) };
       }
+      latest.current = out;
       setProfiles(out);
       setError('');
     } catch (err) {
@@ -34,7 +43,32 @@ export function useProfiles(): { profiles: Record<string, Loaded> | null; reload
     }
   }, [podId]);
   useEffect(() => { void reload(); }, [reload]);
-  return { profiles, reload, error };
+
+  const update = useCallback((fn: (p: Profile) => void) => {
+    // One save at a time, each on top of the last.
+    const run = queue.current.catch(() => {}).then(async () => {
+      const me = podRef.current.account.id;
+      for (let attempt = 0; ; attempt++) {
+        const cur = latest.current?.[me];
+        const next = structuredClone(cur?.profile ?? emptyProfile());
+        fn(next);
+        try {
+          const r = await api<{ rev: number }>(`/api/pods/${podId}/profiles`, {
+            method: 'PUT', body: { bodyEnc: await podRef.current.seal(next, `profile:${podId}:${me}`), rev: cur?.rev ?? 0 },
+          });
+          latest.current = { ...(latest.current ?? {}), [me]: { profile: next, rev: r.rev } };
+          setProfiles(latest.current);
+          return;
+        } catch (err) {
+          if (!(err instanceof ApiError && err.status === 409) || attempt) throw err;
+          await reload();
+        }
+      }
+    });
+    queue.current = run;
+    return run;
+  }, [podId, reload]);
+  return { profiles, reload, update, error };
 }
 
 /** The things to rate: the built-in list (from the server, pod members only) and the pod's own. */
@@ -313,9 +347,11 @@ function TheirProfile({ name, profile, sections }: { name: string; profile: Prof
 }
 
 function Together({ name, mine, theirs, sections }: { name: string; mine?: Profile; theirs?: Profile; sections: RateSection[] }) {
+  const pod = usePod();
   const [showNo, setShowNo] = useState(false);
   if (!mine || !theirs) return <p className="card text-ink-soft">This fills in once you’ve both rated some things.</p>;
   const m = matches(sections, mine, theirs);
+  const loved = lovedByAll(pod.menu.roleplays, [mine, theirs]);
   const row = (x: Match) => (
     <li key={`${x.id}-${x.way}`} className="border-b border-line py-2 last:border-0">
       <p className="font-medium">{x.label}</p>
@@ -327,6 +363,11 @@ function Together({ name, mine, theirs, sections }: { name: string; mine?: Profi
       <Section title="You both want" eyebrow={`${m.yes.length}`}>
         <div className="card">{m.yes.length ? <ul aria-label="You both want">{m.yes.map(row)}</ul> : <p className="text-sm text-ink-soft">Nothing yet where you’re both a 3 or more.</p>}</div>
       </Section>
+      {loved.length > 0 && (
+        <Section title="Roleplays you both love" eyebrow={`🎭 ${loved.length}`}>
+          <div className="card"><ul aria-label="Roleplays you both love">{loved.map((r) => <li key={r.id} className="border-b border-line py-2 last:border-0">❤️ {r.title}</li>)}</ul></div>
+        </Section>
+      )}
       <Section title="Worth talking about" eyebrow={`${m.talk.length}`}>
         <div className="card">{m.talk.length ? <ul aria-label="Worth talking about">{m.talk.map(row)}</ul> : <p className="text-sm text-ink-soft">Where one of you is keen and the other’s a maybe.</p>}</div>
       </Section>

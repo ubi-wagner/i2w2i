@@ -106,6 +106,13 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
   whole scene needs every member's yes; an unsent draft is its author's.
 - **Pause** is a safety control: either can pause, only whoever paused
   resumes, and nothing moves while paused. Don't weaken it.
+- **Enthusiastic consent:** whoever is offered or asked for a scene can
+  always say "Not this time", no reason needed. Keep that path one tap.
+- **Rewards are earned at the inspection.** A scene goes to aftercare only
+  from the inspection (roleplay scenes too); don't add a way to skip it
+  from a running scene. A roleplay itself isn't scored by the lead: each
+  partner gives quick loves and dislikes (kept in their profile), and one a
+  partner marked "not for me" can't be picked for them.
 - Nothing in `apps/som` imports from the family site or vice versa; the root
   build ignores `apps/`.
 

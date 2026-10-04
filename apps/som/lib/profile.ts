@@ -13,6 +13,16 @@ export const SCALE: Record<Score, string> = { 0: 'Never', 1: 'Not my thing', 2: 
 
 export interface Rating { give?: Score; recv?: Score }
 
+/** How someone feels about a roleplay: quick, before or after playing it. */
+export type Feel = 'love' | 'ok' | 'no';
+export const FEELS: Feel[] = ['love', 'ok', 'no'];
+export const FEEL: Record<Feel, { icon: string; label: string }> = {
+  love: { icon: '❤️', label: 'Love it' },
+  ok: { icon: '👍', label: 'It’s OK' },
+  no: { icon: '👎', label: 'Not for me' },
+};
+export interface RoleplayFeel { feel?: Feel; loved?: string; disliked?: string }
+
 export const ABOUT = [
   { key: 'called', label: 'What I like to be called' },
   { key: 'callYou', label: 'What I’d like to call you' },
@@ -33,10 +43,12 @@ export interface Profile {
   v: 1;
   ratings: Record<string, Rating>;
   about: Record<AboutKey, string>;
+  /** Quick loves and dislikes for each roleplay, by its id. */
+  roleplays: Record<string, RoleplayFeel>;
 }
 
 export function emptyProfile(): Profile {
-  return { v: 1, ratings: {}, about: Object.fromEntries(ABOUT.map((a) => [a.key, ''])) as Record<AboutKey, string> };
+  return { v: 1, ratings: {}, about: Object.fromEntries(ABOUT.map((a) => [a.key, ''])) as Record<AboutKey, string>, roleplays: {} };
 }
 
 const score = (v: unknown): Score | undefined => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 5 ? (v as Score) : undefined);
@@ -58,7 +70,25 @@ export function cleanProfile(raw: unknown): Profile {
       if (give !== undefined || recv !== undefined) out.ratings[k] = rating;
     }
   }
+  if (r.roleplays && typeof r.roleplays === 'object') {
+    for (const [k, v] of Object.entries(r.roleplays as Record<string, unknown>).slice(0, 200)) {
+      if (!/^[a-z0-9_-]{1,40}$/i.test(k)) continue;
+      const x = (v ?? {}) as Record<string, unknown>;
+      const f: RoleplayFeel = {};
+      if (FEELS.includes(x.feel as Feel)) f.feel = x.feel as Feel;
+      for (const key of ['loved', 'disliked'] as const) {
+        const t = typeof x[key] === 'string' ? (x[key] as string).trim().slice(0, 500) : '';
+        if (t) f[key] = t;
+      }
+      if (f.feel || f.loved || f.disliked) out.roleplays[k] = f;
+    }
+  }
   return out;
+}
+
+/** Roleplays everyone here loves (in the order given). */
+export function lovedByAll<T extends { id: string }>(roleplays: T[], profiles: Profile[]): T[] {
+  return profiles.length ? roleplays.filter((r) => profiles.every((p) => p.roleplays[r.id]?.feel === 'love')) : [];
 }
 
 /** Everything to rate: the built-in list (unless the pod turned it off) and the pod's own. */

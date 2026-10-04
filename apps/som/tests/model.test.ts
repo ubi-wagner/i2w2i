@@ -229,9 +229,10 @@ describe('offering a scene', () => {
     expect(sceneTransition('offered', 'accept_send', 'lead', true)).toBeNull();
   });
 
-  it('the lead can go straight to aftercare, without a scorecard', () => {
-    expect(sceneTransition('active', 'aftercare', 'lead')).toBe('aftercare');
-    expect(sceneTransition('active', 'aftercare', 'follow')).toBeNull();
+  it('aftercare comes after the inspection, never straight from the scene (rewards are earned there)', () => {
+    expect(sceneTransition('active', 'aftercare', 'lead')).toBeNull();
+    expect(sceneTransition('inspection', 'aftercare', 'lead')).toBe('aftercare');
+    expect(sceneTransition('inspection', 'aftercare', 'follow')).toBeNull();
   });
 
   it('switching swaps who leads in that scene', () => {

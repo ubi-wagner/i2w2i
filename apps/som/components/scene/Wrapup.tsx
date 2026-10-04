@@ -9,6 +9,7 @@ import { usePod } from '../Pod';
 import { clock, ErrorText, Section } from '../ui';
 import { MediaGrid } from './Media';
 import { RoleplayCard } from './Roleplay';
+import { RoleplayFeelings } from '../RoleplayFeel';
 import { ArrivalCard, Notes, TaskRow } from './Running';
 import { done, KIND_ICON, ProgressBar, TaskChip } from './parts';
 import type { EntryView, SceneData } from './useScene';
@@ -42,6 +43,7 @@ export function Inspection({ data, reload, onOpen }: { data: SceneData; reload: 
   return (
     <div className="space-y-6">
       {!lead && <ArrivalCard data={data} />}
+      {data.plan.roleplay && <RoleplayFeelings rp={data.plan.roleplay} />}
       {lead ? <Scorecard data={data} reload={reload} onOpen={onOpen} /> : shared ? <Results data={data} /> : (
         <div className="card border-lead/40 bg-lead-light text-center">
           <p className="font-display text-2xl text-lead-dark">Inspection</p>
@@ -431,6 +433,7 @@ export function Record({ data, reload, onOpen }: { data: SceneData; reload: () =
           : <p>A roleplay, played out.</p>}
       </div>
       {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} />}
+      {data.plan.roleplay && <RoleplayFeelings rp={data.plan.roleplay} />}
       <Results data={data} />
       {data.tasks.length > 0 && <Section title="Tasks" eyebrow="Record"><TaskList data={data} onOpen={onOpen} /></Section>}
       {theirs.length > 0 && (

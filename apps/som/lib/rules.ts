@@ -67,8 +67,8 @@ export function sceneTransition(status: SceneStatus, action: SceneAction, role: 
       return ((status === 'draft' || status === 'proposed') && lead) || status === 'ready' ? 'active' : null;
     case 'inspect':
       return status === 'active' && lead ? 'inspection' : null;
-    case 'aftercare': // after the inspection, or straight from the scene (no scorecard)
-      return (status === 'inspection' || status === 'active') && lead ? 'aftercare' : null;
+    case 'aftercare': // only after the inspection: the scorecard is where rewards are earned
+      return status === 'inspection' && lead ? 'aftercare' : null;
     case 'close':
       return status === 'aftercare' ? 'closed' : null;
   }

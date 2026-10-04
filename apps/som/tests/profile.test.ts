@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cleanMenu } from '@/lib/menu';
 import { builtInInventory } from '@/lib/inventory-data';
-import { cleanProfile, matches, ratedCount, rateSections, rateSectionsToText, textToRateSections } from '@/lib/profile';
+import { cleanProfile, lovedByAll, matches, ratedCount, rateSections, rateSectionsToText, textToRateSections } from '@/lib/profile';
 import { roleplaysToText, textToRoleplays } from '@/lib/roleplay-text';
 
 describe('roleplays as text', () => {
@@ -92,6 +92,15 @@ describe('profiles', () => {
     expect(m.no.map((x) => [x.label, x.way])).toEqual([['Spanking', 'recv'], ['Wax', 'give']]);
     expect(ratedCount(all, me)).toBe(3);
     expect(rateSections(sections, own, true)).toHaveLength(sections.length + 1);
+  });
+
+  it('quick loves and dislikes for roleplays, and the ones you both love', () => {
+    const me = cleanProfile({ roleplays: { r1: { feel: 'love', loved: ' The pace. ' }, r2: { feel: 'meh' }, 'bad id!': { feel: 'love' }, r3: { feel: 'no', disliked: 'Too long' } } });
+    expect(me.roleplays).toEqual({ r1: { feel: 'love', loved: 'The pace.' }, r3: { feel: 'no', disliked: 'Too long' } });
+    const you = cleanProfile({ roleplays: { r1: { feel: 'love' }, r3: { feel: 'love' } } });
+    const rps = [{ id: 'r1' }, { id: 'r2' }, { id: 'r3' }];
+    expect(lovedByAll(rps, [me, you]).map((r) => r.id)).toEqual(['r1']);
+    expect(lovedByAll(rps, [])).toEqual([]);
   });
 
   it('a list as text keeps ids for things already there', () => {

@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { newId, type Menu, type Roleplay } from '@/lib/menu';
 import { roleplaysToText, textToRoleplays, type RoleWords } from '@/lib/roleplay-text';
 import { usePod } from './Pod';
+import { useProfiles } from './Profiles';
+import { feelLine, FeelPicker } from './RoleplayFeel';
 import { Collapsible, ErrorText, Sheet } from './ui';
 
 /** Words that mean each of you in a roleplay's "Leads:" line: titles, switch titles and names. */
@@ -34,6 +36,7 @@ export function RoleplaysEditor({ menu, change, open, setOpen }: {
   const [asText, setAsText] = useState(false);
   const [error, setError] = useState('');
   const words = useMemo(() => roleWords(menu, pod.members), [menu, pod.members]);
+  const { profiles, update } = useProfiles();
   const who = (r: 'lead' | 'follow') => {
     const name = pod.members.find((m) => m.role === r)?.display_name;
     return r === 'lead' ? `${menu.titles.lead} leads` : `${menu.switchTitles.lead || name || menu.titles.follow} leads ⇄`;
@@ -85,6 +88,7 @@ export function RoleplaysEditor({ menu, change, open, setOpen }: {
                   <span className="min-w-0">
                     <span className="block font-medium">{r.title}</span>
                     <span className="block text-xs text-ink-soft">{[who(r.leads), r.location, r.intensity].filter(Boolean).join(' · ')}</span>
+                    {feelLine(r.id, profiles, pod.account.id, pod.nameOf) && <span className="block text-xs">{feelLine(r.id, profiles, pod.account.id, pod.nameOf)}</span>}
                   </span>
                 </button>
               </li>
@@ -104,6 +108,14 @@ export function RoleplaysEditor({ menu, change, open, setOpen }: {
       </div>
 
       <Sheet open={editing !== null} onClose={() => setEditing(null)} title={editing && menu.roleplays.some((r) => r.id === editing.id) ? 'Edit roleplay' : 'New roleplay'} wide>
+        {editing && (
+          <div className="mb-4 space-y-1.5 border-b border-line pb-4">
+            <span className="label">How you feel about it</span>
+            <FeelPicker value={profiles?.[pod.account.id]?.profile.roleplays[editing.id]?.feel} label="How you feel about it"
+              onPick={(f) => void update((p) => { p.roleplays[editing.id] = { ...(p.roleplays[editing.id] ?? {}), feel: f }; }).catch((e) => setError((e as Error).message))} />
+            <p className="text-xs text-ink-soft">Saved straight away, in your profile. {pod.members.length > 1 ? 'Your partner sees it too.' : ''}</p>
+          </div>
+        )}
         {editing && <RoleplayForm rp={editing} who={who} onSave={keep} onDelete={() => {
           if (!confirm(`Delete “${editing.title || 'this roleplay'}”?`)) return;
           change((m) => { m.roleplays = m.roleplays.filter((x) => x.id !== editing.id); });

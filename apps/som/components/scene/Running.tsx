@@ -223,18 +223,14 @@ export function Notes({ data, reload, title = 'Notes' }: { data: SceneData; relo
   );
 }
 
-/** The end of the running part: an inspection with a scorecard, or straight to aftercare (a roleplay usually does). */
+/** The end of the running part: the inspection, where the follow's work (a roleplay too) is scored and rewarded. */
 function StartInspection({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
   const [error, setError] = useState('');
   const open = data.tasks.filter((t) => !['approved', 'skipped'].includes(t.status)).length;
-  const roleplay = Boolean(data.plan.roleplay);
-  async function go(action: 'inspect' | 'aftercare') {
-    const ask = action === 'aftercare'
-      ? 'Go straight to aftercare (no scorecard)?'
-      : open ? `${open} ${open === 1 ? 'task isn’t' : 'tasks aren’t'} finished. Start the inspection anyway?` : 'Start the inspection?';
-    if (!confirm(ask)) return;
+  async function go() {
+    if (!confirm(open ? `${open} ${open === 1 ? 'task isn’t' : 'tasks aren’t'} finished. Start the inspection anyway?` : 'Start the inspection?')) return;
     try {
-      await api(`/api/scenes/${data.scene.id}/action`, { body: { action } });
+      await api(`/api/scenes/${data.scene.id}/action`, { body: { action: 'inspect' } });
       await reload();
     } catch (err) {
       setError((err as Error).message);
@@ -242,8 +238,7 @@ function StartInspection({ data, reload }: { data: SceneData; reload: () => Prom
   }
   return (
     <div className="space-y-2">
-      <button type="button" className={roleplay ? 'btn-quiet w-full' : 'btn w-full'} onClick={() => go('inspect')}>Start the inspection</button>
-      <button type="button" className={roleplay ? 'btn w-full' : 'btn-quiet w-full'} onClick={() => go('aftercare')}>Straight to aftercare</button>
+      <button type="button" className="btn w-full" onClick={go}>Start the inspection</button>
       <ErrorText>{error}</ErrorText>
     </div>
   );

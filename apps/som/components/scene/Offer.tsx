@@ -5,6 +5,10 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { proofText } from '@/lib/menu';
 import { cleanPlan, emptyPlan, pacingFor, type Plan } from '@/lib/plan';
+import type { Roleplay } from '@/lib/menu';
+import { lovedByAll } from '@/lib/profile';
+import { useProfiles } from '../Profiles';
+import { feelLine } from '../RoleplayFeel';
 import { CAPACITIES, startState, type Capacity, type Role } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ErrorText, Sheet } from '../ui';
@@ -232,17 +236,7 @@ export function NewOffer({ open, onClose }: { open: boolean; onClose: () => void
           {kind === 'roleplay' && !choices.length && (
             <p className="text-sm text-ink-soft">No roleplays where {leader === 'me' ? 'you lead' : `${them} leads`} yet. Add some on the Menu page.</p>
           )}
-          {kind === 'roleplay' && groups.map((g) => (
-            <div key={g} className="space-y-2" role="radiogroup" aria-label={g || 'Roleplays'}>
-              {g && <p className="eyebrow text-follow">{g}</p>}
-              {choices.filter((r) => r.group === g).map((r) => (
-                <button key={r.id} type="button" role="radio" aria-checked={rpId === r.id} aria-pressed={rpId === r.id} className="chip w-full flex-col items-start gap-0.5 text-left" onClick={() => setRpId(r.id)}>
-                  <span className="font-medium">{r.title}</span>
-                  {(r.location || r.intensity) && <span className="text-xs font-normal text-ink-soft">{[r.location, r.intensity].filter(Boolean).join(' · ')}</span>}
-                </button>
-              ))}
-            </div>
-          ))}
+          {kind === 'roleplay' && choices.length > 0 && <RoleplayPicker choices={choices} groups={groups} value={rpId} onChange={setRpId} />}
         </section>
         <OfferForm
           submit={leader === 'me' ? 'Send the offer' : 'Send the request'}
@@ -264,6 +258,39 @@ export function NewOffer({ open, onClose }: { open: boolean; onClose: () => void
         />
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * Picking a roleplay: how each of you feels about each one, the ones you
+ * both love first. One your partner said isn't for them can't be picked.
+ */
+function RoleplayPicker({ choices, groups, value, onChange }: { choices: Roleplay[]; groups: string[]; value: string | null; onChange: (id: string) => void }) {
+  const pod = usePod();
+  const { profiles } = useProfiles();
+  const partner = pod.members.find((m) => m.account_id !== pod.account.id);
+  const feel = (id: string, rp: string) => profiles?.[id]?.profile.roleplays[rp]?.feel;
+  const rank = (r: Roleplay) => (lovedByAll([r], Object.values(profiles ?? {}).map((p) => p.profile)).length && Object.keys(profiles ?? {}).length > 1 ? 0 : 1);
+  return (
+    <>
+      {groups.map((g) => (
+        <div key={g} className="space-y-2" role="radiogroup" aria-label={g || 'Roleplays'}>
+          {g && <p className="eyebrow text-follow">{g}</p>}
+          {choices.filter((r) => r.group === g).sort((a, b) => rank(a) - rank(b)).map((r) => {
+            const no = partner && feel(partner.account_id, r.id) === 'no';
+            const line = feelLine(r.id, profiles, pod.account.id, (id) => pod.members.find((m) => m.account_id === id)?.display_name ?? 'Them');
+            return (
+              <button key={r.id} type="button" role="radio" aria-checked={value === r.id} aria-pressed={value === r.id} disabled={no}
+                className="chip w-full flex-col items-start gap-0.5 text-left disabled:opacity-60" onClick={() => onChange(r.id)}>
+                <span className="font-medium">{r.title}</span>
+                {(r.location || r.intensity) && <span className="text-xs font-normal text-ink-soft">{[r.location, r.intensity].filter(Boolean).join(' · ')}</span>}
+                {no ? <span className="text-xs font-medium text-stop">👎 Not for {partner!.display_name}</span> : line && <span className="text-xs font-normal">{line}</span>}
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </>
   );
 }
 
