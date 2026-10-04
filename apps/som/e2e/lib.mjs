@@ -25,8 +25,13 @@ export const browser = await chromium.launch({
   args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
 });
 
-const iphone = { ...devices['iPhone 13'] };
-delete iphone.defaultBrowserType;
+/** The phone to pretend to be (E2E_DEVICE, any Playwright device name; default iPhone 13). */
+export function device(name = process.env.E2E_DEVICE ?? 'iPhone 13') {
+  const d = { ...devices[name] };
+  if (!d.viewport) throw new Error(`unknown device ${name}`);
+  delete d.defaultBrowserType;
+  return d;
+}
 
 let failures = 0;
 let passes = 0;
@@ -45,8 +50,8 @@ export async function finish() {
 }
 
 /** A phone. Confirm dialogs are accepted and remembered in `dialogs`. */
-export async function phone(who) {
-  const ctx = await browser.newContext({ ...iphone, acceptDownloads: true });
+export async function phone(who, deviceName) {
+  const ctx = await browser.newContext({ ...device(deviceName), acceptDownloads: true });
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write', 'microphone', 'camera'], { origin: BASE });
   const p = await ctx.newPage();
   p.dialogs = [];
@@ -93,9 +98,9 @@ export const TITLES = { lead: 'Captain Kay', follow: 'Sunny' };
  * passphrase, adds the lead (username, password and key link), and the lead
  * opens the link on their phone and picks their own passphrase.
  */
-export async function newPod() {
+export async function newPod(deviceName) {
   const follow = await account('Sunny');
-  const b = await phone('sunny');
+  const b = await phone('sunny', deviceName);
   await login(b, follow.username, follow.password);
   await b.getByText('Set up your pod').waitFor();
   await b.fill('#t-lead', TITLES.lead);
@@ -113,7 +118,7 @@ export async function newPod() {
   await b.getByLabel('Their key link').waitFor();
   const link = await b.getByLabel('Their key link').innerText();
   const lead = { name: 'Kay', username: await b.getByLabel('Their username').innerText(), password: await b.getByLabel('Their password').innerText(), link };
-  const r = await phone('kay');
+  const r = await phone('kay', deviceName);
   await r.goto(link);
   await r.fill('#username', lead.username);
   await r.fill('#password', lead.password);

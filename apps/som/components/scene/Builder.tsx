@@ -253,7 +253,7 @@ function Pick({ item, plan, edit, editable }: { item: MenuItem; plan: Plan; edit
         {item.needs && <span className="text-xs font-normal text-ink-soft">{item.needs.map(proofText).join(' · ')}</span>}
       </button>
       {on && item.param && (
-        <input className="input py-1.5 text-sm" placeholder={item.param} aria-label={`${item.label}: ${item.param}`} disabled={!editable} value={plan.picks[item.id]?.param ?? ''} maxLength={40}
+        <input className="input py-1.5 sm:text-sm" placeholder={item.param} aria-label={`${item.label}: ${item.param}`} disabled={!editable} value={plan.picks[item.id]?.param ?? ''} maxLength={40}
           onChange={(e) => edit((p) => { p.picks[item.id] = e.target.value ? { param: e.target.value } : {}; })} />
       )}
     </span>

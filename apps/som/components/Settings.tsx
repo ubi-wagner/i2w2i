@@ -93,7 +93,7 @@ function Partner() {
             <li key={m.account_id} className="flex flex-wrap items-center justify-between gap-2 py-2">
               <span>
                 <b>{m.display_name}</b> <span className="font-mono text-sm text-ink-soft">{m.username}</span>
-                <span className="ml-2 rounded-full bg-paper-sunk px-2 py-0.5 text-xs">{pod.title(m.role)}</span>
+                <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-paper-sunk px-2 py-0.5 text-xs">{pod.title(m.role)}</span>
                 {!m.has_key && <span className="ml-2 rounded-full bg-warn-light px-2 py-0.5 text-xs text-warn">hasn’t opened their key link</span>}
               </span>
               {m.account_id !== pod.account.id && (

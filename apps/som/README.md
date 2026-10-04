@@ -169,7 +169,11 @@ npm run e2e     # against a running build; see e2e/run.mjs for the settings it n
 
 The end-to-end suites run two phones through pairing, a whole scene and
 deleting, with a stand-in push service, and check that the database and the
-bucket hold nothing readable.
+bucket hold nothing readable. The layout suite walks every screen on a small
+phone (iPhone SE; `E2E_LAYOUT_DEVICE` for another) and checks nothing is
+wider than the screen, text boxes are 16px (so iPhones don't zoom) and
+buttons are big enough to tap; `E2E_SHOTS=<dir>` saves a screenshot of each.
+`E2E_DEVICE` picks the phone for the other suites.
 
 ## Settings
 

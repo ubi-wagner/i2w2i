@@ -108,7 +108,7 @@ function Scorecard({ data, reload }: { data: SceneData; reload: () => Promise<vo
         <span key={it.id} className="inline-flex flex-col gap-1">
           <button type="button" className="chip" aria-pressed={it.id in picks} onClick={() => toggle(it)}>{it.id in picks ? '✓ ' : ''}{label(it)}</button>
           {it.id in picks && it.param && (
-            <input className="input py-1.5 text-sm" placeholder={it.param} aria-label={`${it.label}: ${it.param}`} value={picks[it.id]} maxLength={40} onChange={(e) => setPicks((p) => ({ ...p, [it.id]: e.target.value }))} />
+            <input className="input py-1.5 sm:text-sm" placeholder={it.param} aria-label={`${it.label}: ${it.param}`} value={picks[it.id]} maxLength={40} onChange={(e) => setPicks((p) => ({ ...p, [it.id]: e.target.value }))} />
           )}
         </span>
       ))}

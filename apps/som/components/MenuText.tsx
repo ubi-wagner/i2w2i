@@ -26,7 +26,7 @@ export function MenuTextEditor({ initial, onApply, onCancel, expect }: {
   return (
     <div className="space-y-3">
       <textarea
-        className="input min-h-[50dvh] font-mono text-[13px] leading-relaxed"
+        className="input min-h-[50dvh] font-mono text-base leading-relaxed sm:text-[13px]"
         value={text}
         spellCheck={false}
         autoCapitalize="off"
