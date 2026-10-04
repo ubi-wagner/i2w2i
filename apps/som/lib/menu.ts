@@ -112,9 +112,16 @@ export interface Menu {
   pacing: Pacing[];
   rooms: string[];
   sections: MenuSection[];
+  /**
+   * The pod's own ideas: a bigger pool to pick menu items from (lib/ideas.ts
+   * adds the built-in ones). Same shape as the sections; not shown when
+   * building a scene.
+   */
+  library: MenuSection[];
 }
 
 const LIMITS = { sections: 10, groups: 12, items: 60, rooms: 40, pacing: 8, text: 160, detail: 600, note: 600 } as const;
+const LIBRARY_LIMITS = { groups: 40, items: 150 } as const;
 
 export function newId(): string {
   const b = globalThis.crypto.getRandomValues(new Uint8Array(6));
@@ -142,9 +149,9 @@ function cleanItem(raw: unknown): MenuItem | null {
   return item;
 }
 
-function cleanGroup(raw: unknown): MenuGroup | null {
+function cleanGroup(raw: unknown, maxItems: number = LIMITS.items): MenuGroup | null {
   const r = (raw ?? {}) as Record<string, unknown>;
-  const items = (Array.isArray(r.items) ? r.items : []).map(cleanItem).filter((x): x is MenuItem => !!x).slice(0, LIMITS.items);
+  const items = (Array.isArray(r.items) ? r.items : []).map(cleanItem).filter((x): x is MenuItem => !!x).slice(0, maxItems);
   const title = str(r.title, LIMITS.text);
   if (!title && !items.length) return null;
   return { id: id(r.id), title: title || 'Untitled', items };
@@ -174,15 +181,8 @@ function cleanPacing(raw: unknown): Pacing | null {
 export function cleanMenu(raw: unknown): Menu {
   const r = (raw ?? {}) as Record<string, unknown>;
   const titles = (r.titles ?? {}) as Record<string, unknown>;
-  const given = Array.isArray(r.sections) ? r.sections : [];
-  const sections: MenuSection[] = SECTION_KINDS.map(({ kind, title }) => {
-    const s = (given.find((x) => (x as { kind?: unknown })?.kind === kind) ?? {}) as Record<string, unknown>;
-    const groups = (Array.isArray(s.groups) ? s.groups : []).map(cleanGroup).filter((g): g is MenuGroup => !!g).slice(0, LIMITS.groups);
-    const section: MenuSection = { id: id(s.id), kind, title: str(s.title, LIMITS.text) || title, groups };
-    const note = str(s.note, LIMITS.note);
-    if (note) section.note = note;
-    return section;
-  });
+  const sections = cleanSections(r.sections, LIMITS.groups, LIMITS.items);
+  const library = cleanSections(r.library, LIBRARY_LIMITS.groups, LIBRARY_LIMITS.items);
   const pacing = (Array.isArray(r.pacing) ? r.pacing : []).map(cleanPacing).filter((p): p is Pacing => !!p).slice(0, LIMITS.pacing);
   const rooms = Array.from(new Set((Array.isArray(r.rooms) ? r.rooms : []).map((x) => str(x, 60)).filter(Boolean))).slice(0, LIMITS.rooms);
   return {
@@ -193,7 +193,21 @@ export function cleanMenu(raw: unknown): Menu {
     pacing: pacing.length ? pacing : starterMenu().pacing,
     rooms,
     sections,
+    library,
   };
+}
+
+/** Every section kind once, in the sheet's order, each cleaned. */
+function cleanSections(raw: unknown, maxGroups: number, maxItems: number): MenuSection[] {
+  const given = Array.isArray(raw) ? raw : [];
+  return SECTION_KINDS.map(({ kind, title }) => {
+    const s = (given.find((x) => (x as { kind?: unknown })?.kind === kind) ?? {}) as Record<string, unknown>;
+    const groups = (Array.isArray(s.groups) ? s.groups : []).map((g) => cleanGroup(g, maxItems)).filter((g): g is MenuGroup => !!g).slice(0, maxGroups);
+    const section: MenuSection = { id: id(s.id), kind, title: str(s.title, LIMITS.text) || title, groups };
+    const note = str(s.note, LIMITS.note);
+    if (note) section.note = note;
+    return section;
+  });
 }
 
 export function section(menu: Menu, kind: SectionKind): MenuSection {
@@ -247,5 +261,6 @@ export function starterMenu(): Menu {
       { id: newId(), kind: 'service', title: 'Service continuation', groups: [g('Service', ['Cook dinner', { label: 'Foot rub', param: 'mins' }])] },
       { id: newId(), kind: 'aftercare', title: 'Shutdown & aftercare', groups: [g('Scene closure', ['Declare the scene closed', 'Change into comfy clothes']), g('Couple aftercare', ['Cuddle on the couch', 'Talk about the day as equals'])] },
     ],
+    library: SECTION_KINDS.map(({ kind, title }) => ({ id: newId(), kind, title, groups: [] })),
   };
 }

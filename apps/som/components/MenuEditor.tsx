@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { cleanMenu, newId, proofText, SECTION_KINDS, type Menu, type MenuGroup, type MenuItem } from '@/lib/menu';
+import { newId, proofText, SECTION_KINDS, type Menu, type MenuGroup, type MenuItem, type SectionKind } from '@/lib/menu';
+import { describeParsed, KIND_WORD, menuToText, mergeMenus, readMenuFile, sectionText, type ParsedMenu } from '@/lib/menu-text';
+import { addIdeas, keepRemoved, ownIdeaCount, removeIdea, toggleIdea } from '@/lib/ideas';
+import { IdeasPicker } from './Ideas';
+import { MenuTextEditor } from './MenuText';
 import { ProofEditor } from './ProofEditor';
 import { usePod } from './Pod';
 import { ErrorText, Sheet } from './ui';
@@ -17,6 +21,20 @@ export function MenuEditor() {
   const [error, setError] = useState('');
   const [editing, setEditing] = useState<{ s: number; g: number; i: number } | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  /** The text box: the whole menu, or one section. */
+  const [asText, setAsText] = useState<'all' | SectionKind | null>(null);
+  /** The ideas sheet, for one section. */
+  const [ideas, setIdeas] = useState<SectionKind | null>(null);
+
+  // From the scene builder's "More ideas": /menu#play opens that section's ideas.
+  useEffect(() => {
+    const k = window.location.hash.slice(1) as SectionKind;
+    const sec = pod.menu.sections.find((x) => x.kind === k);
+    if (!sec) return;
+    setOpen(sec.id);
+    setIdeas(k);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { if (!dirty) setMenu(pod.menu); }, [pod.menu, dirty]);
   useEffect(() => {
@@ -26,8 +44,12 @@ export function MenuEditor() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
 
+  // Every change goes through here: anything that leaves the menu and isn't
+  // in the pool is kept in your own ideas, so nothing written is lost.
+  const update = (fn: (m: Menu) => Menu) => setMenu((m) => keepRemoved(m, fn(m), newId));
+
   const change = (fn: (m: Menu) => void) => {
-    setMenu((m) => {
+    update((m) => {
       const copy = structuredClone(m);
       fn(copy);
       return copy;
@@ -51,24 +73,40 @@ export function MenuEditor() {
     }
   }
 
-  async function importFile(file: File) {
-    try {
-      const parsed = cleanMenu(JSON.parse(await file.text()));
-      const items = parsed.sections.reduce((n, s) => n + s.groups.reduce((k, g) => k + g.items.length, 0), 0);
-      if (!confirm(`Replace the whole menu with “${parsed.name}” (${items} items)? Scenes already started keep their tasks.`)) return;
-      setMenu(parsed);
-      setDirty(true);
-      setMsg('Imported. Check it over, then Save.');
-    } catch {
-      setError('That file isn’t a menu S-O-M can read.');
-    }
+  /** A file or a text box brought these parts: they replace the same parts, the rest stays. */
+  function bring(parsed: ParsedMenu, what: string) {
+    update((m) => mergeMenus(m, parsed));
+    setDirty(true);
+    setMsg(`${what} updated. Check it over, then Save.`);
   }
 
-  function exportFile() {
-    const blob = new Blob([JSON.stringify(menu, null, 2)], { type: 'application/json' });
+  async function importFile(file: File) {
+    setError('');
+    const parsed = readMenuFile(await file.text());
+    const parts = describeParsed(parsed);
+    if (!parts) return setError(parsed.warnings[0] ?? 'Nothing in that file looks like a menu.');
+    const others = parsed.sections.length && parsed.sections.length < SECTION_KINDS.length ? ' The other sections stay as they are.' : '';
+    const skipped = parsed.warnings.length ? `\n\n${parsed.warnings.length} ${parsed.warnings.length === 1 ? 'line was' : 'lines were'} not understood and will be left out:\n${parsed.warnings.slice(0, 5).join('\n')}` : '';
+    if (!confirm(`Replace ${parts} from “${file.name}”?${others}${skipped}`)) return;
+    bring(parsed, parts.charAt(0).toUpperCase() + parts.slice(1));
+  }
+
+  async function importIdeas(file: File) {
+    setError('');
+    const parsed = readMenuFile(await file.text());
+    const count = parsed.sections.reduce((n, x) => n + x.groups.reduce((k, g) => k + g.items.length, 0), 0);
+    if (!count) return setError(parsed.warnings[0] ?? 'No ideas in that file. Ideas are written like the menu: ## section, ### group, - idea.');
+    const skipped = parsed.warnings.length ? `\n\n${parsed.warnings.length} ${parsed.warnings.length === 1 ? 'line was' : 'lines were'} not understood and will be left out.` : '';
+    if (!confirm(`Add ${count} ideas from “${file.name}” to your own ideas? They wait in Ideas until you pick them for the menu.${skipped}`)) return;
+    setMenu((m) => addIdeas(m, parsed.sections, newId));
+    setDirty(true);
+    setMsg(`Ideas added. Save to keep them, then pick from Ideas in each section.`);
+  }
+
+  function download(text: string, name: string) {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${menu.name.replace(/[^\w -]+/g, '').trim() || 'menu'}.json`;
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    a.download = `${name.replace(/[^\w -]+/g, '').trim() || 'menu'}.txt`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
@@ -99,12 +137,25 @@ export function MenuEditor() {
           <input id="m-name" className="input" value={menu.name} maxLength={80} onChange={(e) => change((m) => { m.name = e.target.value; })} />
         </div>
         <div className="flex flex-wrap gap-2 pt-1">
+          <button type="button" className="btn-quiet" onClick={() => setAsText('all')}>Edit it all as text</button>
           <label className="btn-quiet cursor-pointer">
             Import a menu file
-            <input type="file" accept="application/json,.json" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importFile(f); }} />
+            <input type="file" accept=".txt,.md,.json,text/plain,text/markdown,application/json" className="sr-only" aria-label="Import a menu file" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importFile(f); }} />
           </label>
-          <button type="button" className="btn-quiet" onClick={exportFile}>Download a copy</button>
+          <button type="button" className="btn-quiet" onClick={() => download(menuToText(menu), menu.name)}>Download as text</button>
+          <label className="btn-quiet cursor-pointer">
+            Import ideas
+            <input type="file" accept=".txt,.md,.json,text/plain,text/markdown,application/json" className="sr-only" aria-label="Import ideas" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importIdeas(f); }} />
+          </label>
+          {ownIdeaCount(menu) > 0 && (
+            <button type="button" className="btn-quiet" onClick={() => download(menu.library.filter((x) => x.groups.length).map(sectionText).join('\n\n') + '\n', `${menu.name} - our ideas`)}>
+              Download our ideas ({ownIdeaCount(menu)})
+            </button>
+          )}
         </div>
+        <p className="text-xs text-ink-soft">
+          Each section has Ideas to pick from: tap to add. The text version reads like the paper sheet and opens in any notes app; a file with only some sections replaces just those.
+        </p>
       </div>
 
       <Collapsible id="pacing" title="Pacing guide" open={open} setOpen={setOpen} summary={menu.pacing.map((p) => p.label).join(' · ')}>
@@ -132,7 +183,14 @@ export function MenuEditor() {
         const count = sec.groups.reduce((n, g) => n + g.items.length, 0);
         return (
           <Collapsible key={sec.id} id={sec.id} title={`${si + 1}. ${sec.title}`} open={open} setOpen={setOpen} summary={`${count} ${count === 1 ? 'item' : 'items'}`}>
-            <p className="text-sm text-ink-soft">{help}</p>
+            <button type="button" className="btn-follow w-full" onClick={() => setIdeas(sec.kind)}>Ideas for {sec.title}</button>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm text-ink-soft">{help}</p>
+              <span className="flex shrink-0 gap-3 text-sm">
+                <button type="button" className="text-lead underline" onClick={() => setAsText(sec.kind)}>Edit as text</button>
+                <button type="button" className="text-lead underline" onClick={() => download(sectionText(sec), `${menu.name} - ${sec.title}`)}>Download</button>
+              </span>
+            </div>
             <Field label="Section title" value={sec.title} onChange={(v) => change((m) => { m.sections[si]!.title = v; })} />
             {sec.groups.map((g, gi) => (
               <GroupEditor
@@ -156,6 +214,41 @@ export function MenuEditor() {
           <button type="button" className="btn" disabled={!dirty || busy} onClick={save}>Save menu</button>
         </div>
       </div>
+
+      <Sheet open={ideas !== null} onClose={() => setIdeas(null)} title={`Ideas: ${menu.sections.find((x) => x.kind === ideas)?.title ?? ''}`} wide>
+        {ideas && (
+          <IdeasPicker
+            menu={menu}
+            kind={ideas}
+            onForget={(label) => {
+              if (!confirm(`Take “${label}” out of your ideas?`)) return;
+              setMenu((m) => removeIdea(m, ideas, label));
+              setDirty(true);
+            }}
+            onToggle={(groupTitle, idea) => {
+              update((m) => toggleIdea(m, ideas, groupTitle, idea, newId));
+              setDirty(true);
+              setMsg('');
+            }}
+          />
+        )}
+      </Sheet>
+
+      <Sheet open={asText !== null} onClose={() => setAsText(null)} title={asText === 'all' || !asText ? 'The menu as text' : `${menu.sections.find((x) => x.kind === asText)?.title ?? ''} as text`} wide>
+        {asText && (
+          <MenuTextEditor
+            initial={asText === 'all' ? menuToText(menu) : sectionText(menu.sections.find((x) => x.kind === asText)!)}
+            expect={asText === 'all' ? undefined : KIND_WORD[asText]}
+            onCancel={() => setAsText(null)}
+            onApply={(parsed) => {
+              // Editing one section only ever changes that section.
+              const scoped = asText === 'all' ? parsed : { sections: parsed.sections.filter((x) => x.kind === asText), warnings: [] };
+              bring(scoped, asText === 'all' ? 'The menu' : menu.sections.find((x) => x.kind === asText)!.title);
+              setAsText(null);
+            }}
+          />
+        )}
+      </Sheet>
 
       <Sheet open={!!item} onClose={() => setEditing(null)} title="Edit item">
         {item && editing && (

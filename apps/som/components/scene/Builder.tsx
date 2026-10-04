@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
 import { proofText, section, type MenuItem, type SectionKind } from '@/lib/menu';
@@ -212,7 +213,7 @@ function SectionPicker({ kind, plan, edit, editable }: { kind: SectionKind; plan
   const n = picked(pod.menu, plan, kind).length + (kind === 'domain' ? plan.rooms.filter((r) => r.room).length : 0);
   const hasItems = sec.groups.some((g) => g.items.length);
   const [open, setOpen] = useState(n > 0);
-  if (!hasItems && kind !== 'domain' && kind !== 'tasks') return null;
+  if (!hasItems && kind !== 'domain' && kind !== 'tasks' && !editable) return null;
   return (
     <section className="card p-0">
       <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -231,6 +232,11 @@ function SectionPicker({ kind, plan, edit, editable }: { kind: SectionKind; plan
             </div>
           ))}
           {kind === 'tasks' && <TaskExtras plan={plan} edit={edit} editable={editable} />}
+          {editable && (
+            <Link href={`/menu#${kind}`} className="block text-sm text-lead underline">
+              {hasItems ? 'More ideas for this section…' : 'Nothing here yet: pick some from Ideas'}
+            </Link>
+          )}
         </div>
       )}
     </section>

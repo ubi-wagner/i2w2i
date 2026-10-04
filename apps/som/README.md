@@ -71,42 +71,61 @@ leaves them. The server stores ciphertext and can't read it.
    (private if you like), and **I'm back to us** from each of you closes it.
 7. **Record**: the closed scene, its scorecard, everything sent, reflections.
 
-## The menu
+## The menu and Ideas
 
-The app ships with a neutral starter menu. A couple's own menu is imported
-in the app (**Menu → Import a menu file**) and stored encrypted. **Never
-commit a real menu to this repository.**
+- **Ideas** is the big pool: about 160 everyday ideas built in (chores,
+  service, presentation, writing, rituals, aftercare), plus the couple's own
+  ideas, imported as an *ideas pack* (Menu → Import ideas) and stored
+  encrypted with the menu.
+- **The menu** (their Select-O-Matic) is what they've picked from Ideas, plus
+  their own entries. In each section, **Ideas for …** opens the pool: tap to
+  add, tap again to take out. Anything taken out of the menu that isn't in
+  the pool goes into their own ideas, so nothing written is lost.
+- **Scenes** are built from the menu ("More ideas for this section…" jumps to
+  that section's Ideas).
 
-A menu file is JSON. Sections are fixed (`presentation`, `domain`, `errands`,
-`tasks`, `play`, `arrival`, `inspection`, `outcomes`, `service`, `aftercare`);
-each has groups of items:
+The built-in ideas stay everyday on purpose. **Never commit a couple's menu
+or their ideas to this repository**; those come in as files in the app.
 
-```json
-{
-  "name": "Our menu",
-  "titles": { "lead": "Lead", "follow": "Follow" },
-  "pacing": [{ "label": "4 hours", "hours": 4, "rooms": 2, "playBreaks": 2, "praise": 2, "errands": false, "note": "2–3 rooms" }],
-  "rooms": ["Kitchen", "Bedroom"],
-  "sections": [
-    { "kind": "tasks", "groups": [{ "title": "Writing", "items": [
-      { "label": "Daily affirmations", "needs": [{ "kind": "text", "count": 10, "label": "affirmations" }, { "kind": "audio", "count": 1, "label": "read aloud" }] },
-      { "label": "Clamps for ___ mins", "param": "mins", "minutes": 10, "needs": [{ "kind": "photo", "count": 2 }] }
-    ] }] }
-  ]
-}
+The menu can be edited as **plain text** (Menu → Edit it all as text, or
+Edit as text in one section), downloaded as text, and imported from text or
+JSON. A file with only some sections replaces just those; items keep their
+identity by their wording, so drafts keep their picks. The text format:
+
+```
+# Our menu
+Lead: Captain Kay
+Follow: Sunny
+
+## Pacing
+- 4 hours: 2 rooms, 2 play breaks, 2 praise tasks, errands — 2–3 rooms
+
+## Rooms
+- Kitchen
+
+## Tasks: Praise & task bank
+Note: shown under the section's title
+### Writing
+- Daily affirmations [10 notes (affirmations) + 1 voice note (read aloud)]
+- Clamps for ___ mins {mins} (10 min)
+  Details go on the lines under an item, indented.
 ```
 
-- `needs`: the proof, any number of each kind (`photo`, `video`, `audio`,
-  `text`), with an optional label. `"photo"` on its own means one photo.
-- `param`: a blank filled in when picked (`___` in the label shows where).
-- `minutes`: a countdown that starts when the task does.
+- `## Kind: title`: sections are Presentation, Domain, Errands, Tasks, Play,
+  Arrival, Inspection, Outcomes, Service, Aftercare.
+- `[...]`: the proof, any number of photos, videos, voice notes and notes.
+- `(15 min)`: a countdown that starts when the task does.
+- `___` and `{mins}`: a blank filled in when it's picked, and what goes there.
+
+An ideas pack is written the same way (sections, groups, items).
 
 ## Code
 
 - `app/`: pages and API routes. Every route checks the session and the pod.
 - `components/scene/`: the scene screens (builder, running, task, wrap-up).
 - `lib/crypto.ts`: all encryption (WebCrypto; runs in the browser and tests).
-- `lib/menu.ts`, `lib/plan.ts`, `lib/rules.ts`: the menu, plans → tasks and
+- `lib/menu.ts`, `lib/menu-text.ts`, `lib/ideas.ts`, `lib/plan.ts`,
+  `lib/rules.ts`: the menu, its text form, the idea pool, plans → tasks and
   proof, and who may do what. Pure, with unit tests.
 - `lib/server/`: database, sessions, storage, push, the scheduler.
 - `db/migrations/`: schema `som`; same rules as the family site (never edit
