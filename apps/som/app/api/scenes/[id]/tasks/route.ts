@@ -23,9 +23,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const [{ n }] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM som.tasks WHERE scene_id = ${id}`;
   if (n >= 300) return bad('That’s a lot of tasks already.', 409);
   const dueAt = minutes ? inMinutes(minutes) : null;
-  await sql`INSERT INTO som.tasks (id, scene_id, ord, body_enc, minutes, status, started_at, due_at)
+  // The same demand again (a retry after a dropped connection) is there once.
+  const [added] = await sql`INSERT INTO som.tasks (id, scene_id, ord, body_enc, minutes, status, started_at, due_at)
             VALUES (${b!.id as string}, ${id}, (SELECT coalesce(max(ord), -1) + 1 FROM som.tasks WHERE scene_id = ${id}),
-                    ${b!.bodyEnc as string}, ${minutes}, ${dueAt ? 'started' : 'todo'}, ${dueAt ? new Date() : null}, ${dueAt})`;
+                    ${b!.bodyEnc as string}, ${minutes}, ${dueAt ? 'started' : 'todo'}, ${dueAt ? new Date() : null}, ${dueAt})
+            ON CONFLICT (id) DO NOTHING RETURNING 1`;
+  if (!added) {
+    const [same] = await sql`SELECT 1 FROM som.tasks WHERE id = ${b!.id as string} AND scene_id = ${id}`;
+    return same ? json({ ok: true, dueAt }) : bad('That id is taken.', 409);
+  }
   if (dueAt) await scheduleTask(id, b!.id as string, dueAt);
   await sql`UPDATE som.scenes SET updated_at = now() WHERE id = ${id}`;
   notifySoon(await others(scene, me.id, 'follow'), {

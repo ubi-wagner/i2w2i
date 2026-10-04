@@ -9,12 +9,12 @@ import { usePod } from './Pod';
 import { Collapsible, ErrorText, Section, Sheet, Spinner } from './ui';
 
 interface Row { account_id: string; body_enc: string; rev: number; updated_at: string }
-export interface Loaded { profile: Profile; rev: number }
+export interface Loaded { profile: Profile; rev: number; /** Saved, but this phone couldn't open it: never overwrite it from here. */ broken?: boolean }
 
 /** Each member's profile, decrypted on this phone (bound to whose it is, so rows can't be swapped). */
 export function useProfiles(): {
   profiles: Record<string, Loaded> | null;
-  reload: () => Promise<void>;
+  reload: () => Promise<Record<string, Loaded> | null>;
   /** Changes your own profile and saves it (on top of a newer copy if another phone saved first). */
   update: (fn: (p: Profile) => void) => Promise<void>;
   error: string;
@@ -33,13 +33,16 @@ export function useProfiles(): {
       const r = await api<{ profiles: Row[] }>(`/api/pods/${podId}/profiles`);
       const out: Record<string, Loaded> = {};
       for (const row of r.profiles) {
-        out[row.account_id] = { rev: row.rev, profile: cleanProfile(await podRef.current.open(row.body_enc, `profile:${podId}:${row.account_id}`).catch(() => null)) };
+        const body = await podRef.current.open(row.body_enc, `profile:${podId}:${row.account_id}`).catch(() => null);
+        out[row.account_id] = { rev: row.rev, profile: cleanProfile(body), ...(body === null ? { broken: true } : {}) };
       }
       latest.current = out;
       setProfiles(out);
       setError('');
+      return out;
     } catch (err) {
       setError((err as Error).message);
+      return null;
     }
   }, [podId]);
   useEffect(() => { void reload(); }, [reload]);
@@ -50,6 +53,7 @@ export function useProfiles(): {
       const me = podRef.current.account.id;
       for (let attempt = 0; ; attempt++) {
         const cur = latest.current?.[me];
+        if (cur?.broken) throw new Error('Your saved profile couldn’t be opened on this phone, so it isn’t changed from here.');
         const next = structuredClone(cur?.profile ?? emptyProfile());
         fn(next);
         try {
@@ -90,10 +94,9 @@ export function Profiles() {
   const sections = useRateSections();
   const partner = pod.members.find((m) => m.account_id !== pod.account.id);
   const [tab, setTab] = useState<'me' | 'them' | 'us'>('me');
-  // Your own, as you edit it (saved a moment later); a new copy only after a clash with another phone.
+  // Your own, as you edit it (saved a moment later).
   const [live, setLive] = useState<Profile | null>(null);
-  const [gen, setGen] = useState(0);
-  const clash = useCallback(async () => { await reload(); setLive(null); setGen((g) => g + 1); }, [reload]);
+  const fetchMine = useCallback(async () => (await reload())?.[pod.account.id], [reload, pod.account.id]);
   if (!profiles || !sections) return error ? <ErrorText>{error}</ErrorText> : <Spinner />;
   const mine = profiles[pod.account.id];
   const theirs = partner ? profiles[partner.account_id] : undefined;
@@ -113,7 +116,7 @@ export function Profiles() {
       </div>
       {/* Kept mounted while another tab shows, so an edit is never cut off before it saves. */}
       <div hidden={tab !== 'me'}>
-        <MyProfile key={gen} initial={mine} sections={sections} onChange={setLive} onClash={clash} />
+        <MyProfile initial={mine} sections={sections} onChange={setLive} fetchMine={fetchMine} />
       </div>
       {tab === 'them' && (theirs ? <TheirProfile name={them} profile={theirs.profile} sections={sections} /> : <p className="card text-ink-soft">{them} hasn’t filled in their profile yet.</p>)}
       {tab === 'us' && <Together name={them} mine={live ?? mine?.profile} theirs={theirs?.profile} sections={sections} />}
@@ -121,7 +124,7 @@ export function Profiles() {
   );
 }
 
-function MyProfile({ initial, sections, onChange, onClash }: { initial?: Loaded; sections: RateSection[]; onChange: (p: Profile) => void; onClash: () => Promise<void> }) {
+function MyProfile({ initial, sections, onChange, fetchMine }: { initial?: Loaded; sections: RateSection[]; onChange: (p: Profile) => void; fetchMine: () => Promise<Loaded | undefined> }) {
   const pod = usePod();
   const [p, setP] = useState<Profile>(initial?.profile ?? emptyProfile());
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -129,6 +132,7 @@ function MyProfile({ initial, sections, onChange, onClash }: { initial?: Loaded;
   const [open, setOpen] = useState<string | null>(null);
   const [unrated, setUnrated] = useState(false);
   const rev = useRef(initial?.rev ?? 0);
+  const [retry, setRetry] = useState(0);
   const edits = useRef(0);
   const saving = useRef<Promise<void> | null>(null);
   const latest = useRef(p);
@@ -146,14 +150,25 @@ function MyProfile({ initial, sections, onChange, onClash }: { initial?: Loaded;
         if (edits.current === upTo) { edits.current = 0; setStatus('saved'); }
       } catch (err) {
         setStatus('error');
-        setError((err as Error).message);
-        if (err instanceof ApiError && err.status === 409) { edits.current = 0; await onClash(); }
+        if (err instanceof ApiError && err.status === 409) {
+          // Saved from elsewhere too (loves and dislikes, another phone): keep theirs, put your notes and ratings on top.
+          const fresh = await fetchMine().catch(() => undefined);
+          if (fresh && !fresh.broken) {
+            rev.current = fresh.rev;
+            setP((x) => ({ ...fresh.profile, about: x.about, ratings: x.ratings }));
+            edits.current += 1;
+            setError('');
+            return;
+          }
+        }
+        setError(`Not saved: ${(err as Error).message} Trying again…`);
+        setTimeout(() => setRetry((n) => n + 1), 4000);
       }
     })();
     saving.current = run;
     await run;
     saving.current = null;
-  }, [pod, onClash]);
+  }, [pod, fetchMine]);
 
   useEffect(() => { onChange(p); }, [p, onChange]);
 
@@ -161,9 +176,23 @@ function MyProfile({ initial, sections, onChange, onClash }: { initial?: Loaded;
     if (!edits.current) return;
     const t = setTimeout(() => void save(), 700);
     return () => clearTimeout(t);
-  }, [p, save]);
+  }, [p, save, retry]);
+
+  // Leaving the page or the app: save now rather than lose the last tap.
+  useEffect(() => {
+    const flush = () => { if (edits.current) void save(); };
+    const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [save]);
 
   const edit = (fn: (x: Profile) => void) => {
+    if (initial?.broken) return;
     setP((x) => { const c = structuredClone(x); fn(c); return c; });
     edits.current += 1;
     setStatus('idle');
@@ -180,6 +209,7 @@ function MyProfile({ initial, sections, onChange, onClash }: { initial?: Loaded;
 
   return (
     <div className="space-y-5">
+      {initial?.broken && <p className="card border-stop/40 text-sm text-stop">Your saved profile couldn’t be opened on this phone, so editing is off here (nothing is overwritten). Try your other phone, or unlock this one again.</p>}
       <p className="text-sm text-ink-soft" role="status">{status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved' : status === 'error' ? 'Not saved' : 'Changes save themselves'}</p>
       <ErrorText>{error}</ErrorText>
       <Section title="About me" eyebrow="In my words">
@@ -242,7 +272,7 @@ function OurList() {
   async function saveList(inventory: RateSection[], builtInInventory = pod.menu.builtInInventory, done = 'Saved.') {
     setError('');
     try {
-      await pod.saveMenu({ ...pod.menu, inventory, builtInInventory });
+      await pod.saveMenu((m) => ({ ...m, inventory, builtInInventory }));
       setMsg(done);
     } catch (err) {
       setError((err as Error).message);

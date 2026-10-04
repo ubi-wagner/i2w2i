@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { section, type MenuItem } from '@/lib/menu';
 import { withParam } from '@/lib/plan';
 import type { TaskStatus } from '@/lib/rules';
 import { usePod } from '../Pod';
+import { useDraft } from '../useDraft';
 import { clock, ErrorText, Section } from '../ui';
 import { MediaGrid } from './Media';
 import { RoleplayCard } from './Roleplay';
@@ -20,7 +21,12 @@ interface Scores {
   tasks?: { id: string; title: string; score: number; status: TaskStatus; demand?: boolean }[];
   note: string;
 }
-interface Outcomes { groups: { title: string; items: string[] }[]; service: string[] }
+interface Outcomes {
+  groups: { title: string; items: string[] }[];
+  service: string[];
+  /** What was picked (menu item ids and their blanks), so sharing again starts from it. */
+  picks?: Record<string, string>;
+}
 
 const latest = (entries: EntryView[], kind: EntryView['kind']) => [...entries].reverse().find((e) => e.kind === kind && e.body);
 
@@ -71,7 +77,13 @@ function Scorecard({ data, reload, onOpen }: { data: SceneData; reload: () => Pr
   const unscored = data.tasks.filter((t) => !taskScores[t.id]);
   const fillRest = (n: number) => setTaskScores((s) => ({ ...s, ...Object.fromEntries(unscored.map((t) => [t.id, n])) }));
   const [note, setNote] = useState(prevS?.note ?? '');
-  const [picks, setPicks] = useState<Record<string, string>>({});
+  // Sharing again starts from what was shared (older shares only kept the wording, so match on that).
+  const [picks, setPicks] = useState<Record<string, string>>(() => {
+    if (!prevO) return {};
+    if (prevO.picks) return prevO.picks;
+    const said = new Set([...prevO.groups.flatMap((g) => g.items), ...prevO.service]);
+    return Object.fromEntries([...outcomeGroups.flatMap((g) => g.items), ...service].filter((i) => said.has(i.label)).map((i) => [i.id, '']));
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(Boolean(prevS));
@@ -98,6 +110,7 @@ function Scorecard({ data, reload, onOpen }: { data: SceneData; reload: () => Pr
       const o: Outcomes = {
         groups: outcomeGroups.map((g) => ({ title: g.title, items: g.items.filter((i) => i.id in picks).map(label) })).filter((g) => g.items.length),
         service: service.filter((i) => i.id in picks).map(label),
+        picks,
       };
       for (const [kind, body] of [['scores', s], ['outcomes', o]] as const) {
         const id = crypto.randomUUID();
@@ -200,8 +213,9 @@ function Scorecard({ data, reload, onOpen }: { data: SceneData; reload: () => Pr
       <ErrorText>{error}</ErrorText>
       <div className="flex flex-wrap justify-end gap-2">
         <button type="button" className={sent ? 'btn-quiet' : 'btn'} disabled={busy} onClick={share}>{sent ? 'Share again' : `Share with ${pod.title('follow')}`}</button>
-        <button type="button" className={sent ? 'btn' : 'btn-quiet'} onClick={aftercare}>Time for aftercare</button>
+        <button type="button" className={sent ? 'btn' : 'btn-quiet'} disabled={Boolean(data.scene.paused_at)} onClick={aftercare}>Time for aftercare</button>
       </div>
+      {data.scene.paused_at && <p className="text-right text-sm text-ink-soft">Paused: aftercare waits until it’s resumed.</p>}
       {sent && <Results data={data} />}
     </div>
   );
@@ -271,7 +285,8 @@ export function Aftercare({ data, reload }: { data: SceneData; reload: () => Pro
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const isOn = (id: string) => pending[id] ?? Boolean(ticks.get(id)?.body.checked);
   const [error, setError] = useState('');
-  const others = data.members.filter((m) => m.account_id !== data.me);
+  // Everyone who has joined (an invite never opened doesn't hold it up).
+  const others = data.members.filter((m) => m.account_id !== data.me && m.has_key);
   const iVoted = scene.close_votes.includes(data.me);
 
   async function tick(item: MenuItem) {
@@ -353,7 +368,8 @@ const PROMPTS = [
 export function Reflections({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
   const pod = usePod();
   const list = data.entries.filter((e) => e.kind === 'reflection' && e.body);
-  const [form, setForm] = useState({ feel: '', loved: '', change: '', again: '' });
+  const [form, setForm, clearForm] = useDraft(`reflection:${data.scene.id}`, { feel: '', loved: '', change: '', again: '' });
+  const reflectionId = useRef(crypto.randomUUID());
   const [priv, setPriv] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -364,9 +380,10 @@ export function Reflections({ data, reload }: { data: SceneData; reload: () => P
     setBusy(true);
     setError('');
     try {
-      const id = crypto.randomUUID();
+      const id = reflectionId.current;
       await api(`/api/scenes/${data.scene.id}/entries`, { body: { id, kind: 'reflection', private: priv, bodyEnc: await pod.seal(form, `entry:${id}`) } });
-      setForm({ feel: '', loved: '', change: '', again: '' });
+      reflectionId.current = crypto.randomUUID();
+      clearForm();
       setWriting(false);
       await reload();
     } catch (err) {

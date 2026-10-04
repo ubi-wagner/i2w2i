@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { Roleplay } from '@/lib/menu';
 import { FEEL, FEELS, type Feel, type Profile, type RoleplayFeel } from '@/lib/profile';
 import { usePod } from './Pod';
+import { useDraft } from './useDraft';
 import { useProfiles, type Loaded } from './Profiles';
 import { ErrorText } from './ui';
 
@@ -42,14 +43,16 @@ export function RoleplayFeelings({ rp }: { rp: Roleplay }) {
   const { profiles, update } = useProfiles();
   const mine = profiles?.[pod.account.id]?.profile.roleplays[rp.id] ?? {};
   const others = pod.members.filter((m) => m.account_id !== pod.account.id);
-  const [loved, setLoved] = useState<string | null>(null);
-  const [disliked, setDisliked] = useState<string | null>(null);
+  const [words, setWords, clearWords] = useDraft<{ loved: string | null; disliked: string | null }>(`rpwords:${rp.id}`, { loved: null, disliked: null });
+  const { loved, disliked } = words;
+  const setLoved = (v: string) => setWords((w) => ({ ...w, loved: v }));
+  const setDisliked = (v: string) => setWords((w) => ({ ...w, disliked: v }));
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [error, setError] = useState('');
-  const words = { loved: loved ?? mine.loved ?? '', disliked: disliked ?? mine.disliked ?? '' };
+  const shown = { loved: loved ?? mine.loved ?? '', disliked: disliked ?? mine.disliked ?? '' };
   const changed = (loved !== null && loved.trim() !== (mine.loved ?? '')) || (disliked !== null && disliked.trim() !== (mine.disliked ?? ''));
 
-  async function save(patch: RoleplayFeel) {
+  async function save(patch: RoleplayFeel): Promise<boolean> {
     setError('');
     setState('saving');
     try {
@@ -59,9 +62,11 @@ export function RoleplayFeelings({ rp }: { rp: Roleplay }) {
         p.roleplays[rp.id] = next;
       });
       setState('saved');
+      return true;
     } catch (err) {
       setError((err as Error).message);
       setState('idle');
+      return false;
     }
   }
 
@@ -75,11 +80,11 @@ export function RoleplayFeelings({ rp }: { rp: Roleplay }) {
       <div className="space-y-2">
         <p className="text-sm font-medium">You</p>
         <FeelPicker value={mine.feel} label="How you feel about it" onPick={(f) => void save({ feel: f })} />
-        <input className="input" aria-label="What you loved" placeholder="Loved… (optional)" maxLength={500} value={words.loved} onChange={(e) => setLoved(e.target.value)} />
-        <input className="input" aria-label="What you didn’t love" placeholder="Didn’t love… (optional)" maxLength={500} value={words.disliked} onChange={(e) => setDisliked(e.target.value)} />
+        <input className="input" aria-label="What you loved" placeholder="Loved… (optional)" maxLength={500} value={shown.loved} onChange={(e) => setLoved(e.target.value)} />
+        <input className="input" aria-label="What you didn’t love" placeholder="Didn’t love… (optional)" maxLength={500} value={shown.disliked} onChange={(e) => setDisliked(e.target.value)} />
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm text-ink-soft" role="status">{state === 'saving' ? 'Saving…' : state === 'saved' && !changed ? 'Saved' : ''}</span>
-          {changed && <button type="button" className="btn-quiet" onClick={() => void save({ loved: words.loved.trim(), disliked: words.disliked.trim() })}>Save words</button>}
+          {changed && <button type="button" className="btn-quiet" onClick={() => void save({ loved: shown.loved.trim(), disliked: shown.disliked.trim() }).then((ok) => { if (ok) clearWords(); })}>Save words</button>}
         </div>
         <ErrorText>{error}</ErrorText>
       </div>

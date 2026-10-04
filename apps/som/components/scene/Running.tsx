@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { uploadMedia } from '@/lib/client/upload';
 import { proofText } from '@/lib/menu';
 import { arrivalChecklist, CHECKIN_CHOICES } from '@/lib/plan';
 import { usePod } from '../Pod';
+import { useDraft } from '../useDraft';
 import { clock, ErrorText, Section, Sheet } from '../ui';
 import { Composer } from './Composer';
 import { Checklist, done, KIND_ICON, LastCheckin, MOODS, ProgressBar, TaskChip, Timeline, useLocalTicks } from './parts';
@@ -104,8 +105,12 @@ function CheckinCard({ data, reload }: { data: SceneData; reload: () => Promise<
 function CheckinForm({ sceneId, onDone }: { sceneId: string; onDone: () => Promise<void> }) {
   const pod = usePod();
   const [mood, setMood] = useState<string>('');
-  const [text, setText] = useState('');
+  const [text, setText, clearText] = useDraft(`checkin:${sceneId}`, '');
   const [files, setFiles] = useState<File[]>([]);
+  // One check-in, however many tries: the note is posted once and each file sent once.
+  const checkinId = useRef(crypto.randomUUID());
+  const posted = useRef(false);
+  const sent = useRef(new Set<File>());
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -121,15 +126,21 @@ function CheckinForm({ sceneId, onDone }: { sceneId: string; onDone: () => Promi
     setBusy(true);
     setError('');
     try {
-      const id = crypto.randomUUID();
-      await api(`/api/scenes/${sceneId}/entries`, { body: { id, kind: 'checkin', bodyEnc: await pod.seal({ mood, text: text.trim() }, `entry:${id}`) } });
-      for (const [i, f] of files.entries()) {
-        setStatus(`Sending ${i + 1} of ${files.length}…`);
-        await uploadMedia(f, { sceneId, entryId: id, key: pod.key });
+      const id = checkinId.current;
+      if (!posted.current) {
+        await api(`/api/scenes/${sceneId}/entries`, { body: { id, kind: 'checkin', bodyEnc: await pod.seal({ mood, text: text.trim() }, `entry:${id}`) } });
+        posted.current = true;
       }
+      const left = files.filter((f) => !sent.current.has(f));
+      for (const [i, f] of left.entries()) {
+        setStatus(`Sending ${i + 1} of ${left.length}…`);
+        await uploadMedia(f, { sceneId, entryId: id, key: pod.key });
+        sent.current.add(f);
+      }
+      clearText();
       await onDone();
     } catch (err) {
-      setError((err as Error).message);
+      setError(`${(err as Error).message}${posted.current ? ' Your check-in went; tap again to send the rest.' : ''}`);
       setBusy(false);
     }
   }
@@ -238,9 +249,11 @@ function StartInspection({ data, reload }: { data: SceneData; reload: () => Prom
       setError((err as Error).message);
     }
   }
+  const paused = Boolean(data.scene.paused_at);
   return (
     <div className="space-y-2">
-      <button type="button" className="btn w-full" onClick={go}>Start the inspection</button>
+      <button type="button" className="btn w-full" disabled={paused} onClick={go}>Start the inspection</button>
+      {paused && <p className="text-center text-sm text-ink-soft">Paused: the inspection waits until it’s resumed.</p>}
       <ErrorText>{error}</ErrorText>
     </div>
   );

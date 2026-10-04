@@ -8,7 +8,7 @@ import { loadBuiltInIdeas } from '@/lib/client/ideas';
 import { IdeasPicker } from './Ideas';
 import { MenuTextEditor } from './MenuText';
 import { ProofEditor } from './ProofEditor';
-import { usePod } from './Pod';
+import { MenuClash, usePod } from './Pod';
 import { Collapsible, ErrorText, Sheet, Spinner } from './ui';
 import { RoleplaysEditor } from './RoleplayEditor';
 import { TemplatesEditor } from './TemplatesEditor';
@@ -70,12 +70,22 @@ export function MenuEditor() {
     setBusy(true);
     setError('');
     try {
-      await pod.saveMenu(menu);
+      try {
+        await pod.saveMenu(menu);
+      } catch (err) {
+        if (!(err instanceof MenuClash)) throw err;
+        // Your edits stay on screen either way; nothing is lost without asking.
+        if (!confirm('Your partner saved the menu since you opened it. Save yours over theirs?\n\nCancel keeps your changes here, unsaved, so you can look first.')) {
+          setMsg('Not saved yet: your changes are still here. Save again to replace theirs, or leave this page to see theirs.');
+          return;
+        }
+        await pod.saveMenu(menu, { overwrite: true });
+      }
       setDirty(false);
       setMsg('Saved.');
     } catch (err) {
-      setError((err as Error).message);
-      setDirty(false);
+      // Still unsaved: keep the edits on screen.
+      setError(`${(err as Error).message} Your changes are still here; try Save again.`);
     } finally {
       setBusy(false);
     }

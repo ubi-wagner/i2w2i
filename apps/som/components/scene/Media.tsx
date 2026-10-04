@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { fileUrl, forget, mediaMeta, saveToDevice, thumbUrl, type MediaRow } from '@/lib/client/media';
 import type { MediaMeta } from '@/lib/client/upload';
+import { useAnyUploading } from '@/lib/client/uploads';
 import { usePod } from '../Pod';
 import { ErrorText, Sheet } from '../ui';
 
@@ -28,7 +29,7 @@ export function MediaTile({ m, onDeleted }: { m: MediaRow; onDeleted?: () => voi
     return () => { live = false; };
   }, [m, pod.key]);
   const kind = meta?.kind ?? 'file';
-  if (m.status !== 'ready') return <div className="flex aspect-square items-center justify-center rounded-xl bg-paper-sunk text-xs text-ink-soft">Uploading…</div>;
+  if (m.status !== 'ready') return <Unfinished m={m} onDeleted={onDeleted} />;
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} aria-label={`Open ${kind}`} className="relative block aspect-square overflow-hidden rounded-xl border border-line bg-paper-sunk">
@@ -86,6 +87,34 @@ function Viewer({ m, meta, mine, onDeleted }: { m: MediaRow; meta: MediaMeta | n
         {mine && <button type="button" className="btn-quiet text-stop" onClick={remove}>Delete</button>}
       </div>
       <p className="text-xs text-ink-soft">From {pod.nameOf(m.uploader_id)}. Decrypted on this phone only.</p>
+    </div>
+  );
+}
+
+/**
+ * An upload that hasn't finished: still going on this phone, or stopped
+ * (the app was closed, the connection dropped). Whoever sent it can clear a
+ * stopped one and send it again.
+ */
+function Unfinished({ m, onDeleted }: { m: MediaRow; onDeleted?: () => void }) {
+  const pod = usePod();
+  const [error, setError] = useState('');
+  const mine = m.uploader_id === pod.account.id;
+  const sendingHere = useAnyUploading();
+  const stale = !sendingHere && Date.now() - new Date(m.created_at).getTime() > 2 * 60_000;
+  async function remove() {
+    try {
+      await api(`/api/media/${m.id}`, { method: 'DELETE' });
+      onDeleted?.();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+  return (
+    <div className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl bg-paper-sunk p-1 text-center text-xs text-ink-soft">
+      <span>{mine && stale ? 'Didn’t finish' : 'Uploading…'}</span>
+      {mine && stale && <button type="button" className="underline" onClick={remove}>Remove</button>}
+      {error && <span className="text-stop">{error}</span>}
     </div>
   );
 }

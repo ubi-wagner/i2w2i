@@ -1,7 +1,7 @@
 'use client';
 
 import { CHUNK_BYTES, chunkCount, encryptChunk, encryptedSize, encryptJson, newFileKey, newNonce, wrapFileKey } from '../crypto';
-import { api, ApiError } from './api';
+import { api } from './api';
 
 // Sending a photo, video or voice note: prepared on the phone (photos are
 // re-drawn, which drops location and camera details), a thumbnail made,
@@ -126,9 +126,30 @@ function videoThumb(file: Blob): Promise<{ blob: Blob; width: number; height: nu
   });
 }
 
+/** A piece that hasn't gone in two minutes has stalled: give up on it and try again. */
+const PART_TIMEOUT_MS = 120_000;
+
 async function put(url: string, data: ArrayBuffer | Blob, single: boolean): Promise<void> {
-  const res = await fetch(url, { method: 'PUT', body: data, headers: single ? { 'content-type': 'application/octet-stream' } : undefined });
-  if (!res.ok) throw Object.assign(new Error(`upload failed (${res.status})`), { status: res.status });
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), PART_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { method: 'PUT', body: data, headers: single ? { 'content-type': 'application/octet-stream' } : undefined, signal: stop.signal });
+    if (!res.ok) throw Object.assign(new Error(`upload failed (${res.status})`), { status: res.status });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Above this, a video or file is too big to open again on a phone (it's decrypted in memory). */
+export const MAX_SEND_BYTES = 250 * 1024 * 1024;
+
+/** Why a file can't be sent, or null. */
+export function cantSend(file: File): string | null {
+  if (!file.size) return 'That file is empty (a recording that didn’t start?). Try again.';
+  if (kindOf(file.type || '') !== 'photo' && file.size > MAX_SEND_BYTES) {
+    return `That’s ${Math.round(file.size / 1024 / 1024)} MB: too big to open again on a phone. Trim it or send a shorter one (up to 250 MB).`;
+  }
+  return null;
 }
 
 async function withRetries<T>(fn: (attempt: number) => Promise<T>, tries = 5): Promise<T> {
@@ -147,6 +168,8 @@ async function withRetries<T>(fn: (attempt: number) => Promise<T>, tries = 5): P
 /** Encrypts and uploads one file to a scene. Resolves with the media id once the server has all of it. */
 export async function uploadMedia(file: File, opts: { sceneId: string; taskId?: string | null; entryId?: string | null; key: CryptoKey; onProgress?: (p: Progress) => void }): Promise<string> {
   const report = opts.onProgress ?? (() => {});
+  const problem = cantSend(file);
+  if (problem) throw new Error(problem);
   report({ sent: 0, total: file.size, state: 'preparing' });
   const { blob, meta, thumb } = await prepare(file);
   const id = crypto.randomUUID();
@@ -187,14 +210,7 @@ export async function uploadMedia(file: File, opts: { sceneId: string; taskId?: 
     sent += plain.byteLength;
     report({ sent, total: blob.size, state: 'uploading' });
   }
-  await withRetries(async () => {
-    try {
-      await api(`/api/media/${id}/complete`, { body: {} });
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) throw err;
-      throw err;
-    }
-  }, 3);
+  await withRetries(() => api(`/api/media/${id}/complete`, { body: {} }), 3);
   report({ sent: blob.size, total: blob.size, state: 'done' });
   return id;
 }

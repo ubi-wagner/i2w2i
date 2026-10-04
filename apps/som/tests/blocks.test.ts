@@ -26,6 +26,8 @@ describe('the day in blocks', () => {
     expect(schedule(defaultBlocks(9), 540).find((b) => b.kind === 'free')).toMatchObject({ start: 240, end: 360 });
     expect(schedule(['home'], 180).map((b) => [b.kind, b.start, b.end, b.extra ?? false])).toEqual([['home', 0, 120, false], ['free', 120, 180, true]]);
     expect(schedule(['home'], 130)).toHaveLength(1);
+    expect(schedule(['home'], 60).map((b) => [b.start, b.end])).toEqual([[0, 60]]);
+    expect(schedule(['home', 'out'], 180).map((b) => [b.start, b.end])).toEqual([[0, 90], [90, 180]]);
     expect(schedule(['home', 'out']).map((b) => b.first)).toEqual([true, false]);
   });
 

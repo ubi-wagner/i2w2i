@@ -74,7 +74,10 @@ There are two ways in:
   **send** it. The follow sees the tasks block by block with their times
   and a countdown, gets a reminder when the window opens, and can
   **start** it from half an hour before until the window closes. The lead
-  can take a sent scene back to change it until then.
+  can take a sent scene back to change it until then. Once a scene is
+  agreed or sent, **either of you** can ask for a different time or **call
+  it off** (one tap and a confirm; it goes back to a draft and its time is
+  freed), and the lead can say **not now** to a proposal or give it a time.
 - **The follow drafts one**: pick how long, then tap to pick for each
   block; it saves as you go. **Send** it to the lead, who adjusts
   anything and **starts it now**.
@@ -157,8 +160,8 @@ Then:
    starts at once; **Ask for more** on a task makes one about that task),
    **✨ Praise**, and **🚗 On my way** (two taps; the follow gets a countdown,
    the arrival routine and reminders).
-3. **Pause**: either of you, any time. Everything stops. Only whoever paused
-   can resume.
+3. **Pause**: either of you, any time. Everything stops, the inspection and
+   aftercare included. Only whoever paused can resume.
 4. **Inspection** (the lead): every task that was set (demands too) with
    what was sent for it, scored 1–5 ("the rest: all 4s" for speed), then
    the overall 1–5 scorecard, notes, consequences, rewards and service,
@@ -277,7 +280,11 @@ loves and dislikes from both at the inspection, rewards as usual; a
 roleplay marked "not for me" can't be picked; and a request turned down),
 templates and novelty (the last offer remembered, a template applied, a
 fill that avoids the last scene's picks, never-played roleplays first), profiles (ratings, notes, the
-other's view, Together, limits in the builder) and deleting, with a stand-in push service, and
+other's view, Together, limits in the builder), deleting, and resilience (edits made offline
+save themselves once back online, the last tap before leaving a page is kept, two phones saving the
+menu never silently drop either, calling off and rescheduling from either side, nothing moving while
+paused, retried notes and demands arriving once, unfinished uploads removable, an invite nobody
+opened not holding up a close), with a stand-in push service, and
 check that the database and the bucket hold nothing readable. The layout suite walks every screen on a small
 phone (iPhone SE; `E2E_LAYOUT_DEVICE` for another) and checks nothing is
 wider than the screen, text boxes are 16px (so iPhones don't zoom) and

@@ -3,6 +3,7 @@ import { nextBlockCheckin } from '../blocks';
 import { sql } from './db';
 import { nameOf, sceneMembers } from './pods';
 import { notify } from './push';
+import { abortMultipart, deleteObject } from './storage';
 
 // Reminders for a running scene: check-ins, missed check-ins, countdowns and
 // arrivals. Kept in som.timers, so a restart never loses one, and claimed
@@ -86,7 +87,7 @@ export async function resumeTimers(sceneId: string, pausedAt: Date): Promise<voi
   await sql`UPDATE som.scenes SET checkin_base = checkin_base + make_interval(secs => ${shift / 1000}) WHERE id = ${sceneId} AND checkin_base IS NOT NULL`;
   const tasks = await sql<{ id: string; due_at: Date }[]>`
     UPDATE som.tasks SET due_at = due_at + make_interval(secs => ${shift / 1000})
-     WHERE scene_id = ${sceneId} AND due_at IS NOT NULL AND status IN ('started', 'returned')
+     WHERE scene_id = ${sceneId} AND due_at IS NOT NULL AND status = 'started'
     RETURNING id, due_at`;
   for (const t of tasks) await add(sceneId, 'task_due', t.due_at, t.id);
   await scheduleCheckin(sceneId);
@@ -113,13 +114,15 @@ async function fire(t: Fired): Promise<void> {
   switch (t.kind) {
     case 'checkin_due':
       if (!running) return;
-      await notify(follows, { title: 'S-O-M', body: 'Time to check in.', url: `${url}#checkin`, tag: `checkin-${t.scene_id}` });
+      // What comes next is set first, so a failed notification can't lose it:
+      // the missed-check-in alarm, and the next block end (they come round
+      // whether or not this one is answered).
       await add(t.scene_id, 'checkin_overdue', inMinutes(scene.checkin_grace));
-      // Block ends come round whether or not the last one was answered.
       if (!scene.checkin_minutes) {
         const next = nextAt(scene, false, new Date(t.fire_at.getTime() + 1));
         if (next) await add(t.scene_id, 'checkin_due', next);
       }
+      await notify(follows, { title: 'S-O-M', body: 'Time to check in.', url: `${url}#checkin`, tag: `checkin-${t.scene_id}` });
       return;
     case 'checkin_overdue': {
       if (!running) return;
@@ -161,10 +164,29 @@ export async function tick(): Promise<number> {
   return due.length;
 }
 
+/**
+ * Uploads that never finished (the app was closed mid-send, a phone lost
+ * its connection for good): after a day, their half-sent parts and rows go.
+ */
+export async function sweepUploads(): Promise<number> {
+  const stale = await sql<{ id: string; object_key: string; thumb_key: string | null; upload_id: string | null }[]>`
+    SELECT id, object_key, thumb_key, upload_id FROM som.media
+     WHERE status = 'uploading' AND created_at < now() - interval '24 hours' ORDER BY created_at LIMIT 50`;
+  for (const m of stale) {
+    if (m.upload_id) await abortMultipart(m.object_key, m.upload_id).catch(() => {});
+    await deleteObject(m.object_key).catch(() => {});
+    if (m.thumb_key) await deleteObject(m.thumb_key).catch(() => {});
+    await sql`DELETE FROM som.media WHERE id = ${m.id} AND status = 'uploading'`;
+  }
+  return stale.length;
+}
+
 let started = false;
 export function startScheduler(): void {
   if (started) return;
   started = true;
   const loop = setInterval(() => void tick().catch((err) => console.error('[timers]', (err as Error).message)), TICK_MS);
   loop.unref?.();
+  const sweep = setInterval(() => void sweepUploads().catch((err) => console.error('[uploads]', (err as Error).message)), 60 * 60_000);
+  sweep.unref?.();
 }

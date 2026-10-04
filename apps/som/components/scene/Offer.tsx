@@ -301,8 +301,7 @@ export function NewOffer({ open, onClose, last, history = {} }: {
           noteLabel={`A note for ${them} (optional)`}
           onSaveTemplate={async (name, v) => {
             const t = { id: newId(), name, ...v, leads: leaderRole, kind };
-            const rest = pod.menu.templates.filter((x) => x.name.toLowerCase() !== name.toLowerCase());
-            await pod.saveMenu({ ...pod.menu, templates: [...rest, t] });
+            await pod.saveMenu((m) => ({ ...m, templates: [...m.templates.filter((x) => x.name.toLowerCase() !== name.toLowerCase()), t] }));
           }}
           onSubmit={async ({ start, end, note }) => {
             if (kind === 'roleplay' && !rp) throw new Error('Pick a roleplay.');
@@ -530,19 +529,61 @@ function ChangeForm({ data, capacity, onSubmit }: {
 }
 
 /** Accepted, and the lead is building it: what the follow sees meanwhile. */
-export function BeingBuilt({ data }: { data: SceneData }) {
+export function BeingBuilt({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
   const pod = usePod();
-  const reply = useReply(data.scene);
+  const { scene } = data;
+  const reply = useReply(scene);
+  const [changing, setChanging] = useState(false);
+  const passed = scene.ends_at !== null && new Date(scene.ends_at).getTime() <= Date.now() + data.skew;
   return (
     <div className="space-y-5">
       <section className="card space-y-2 border-lead/40 bg-lead-light">
         <p className="eyebrow text-lead">Accepted</p>
-        <p className="font-display text-2xl text-lead-dark">{when(data.scene.starts_at, data.scene.ends_at)}</p>
+        <p className="font-display text-2xl text-lead-dark">{when(scene.starts_at, scene.ends_at)}</p>
         {reply && <CapacityLine reply={reply} />}
-        <p>{pod.title('lead')} is building your scene. You’ll hear when it’s sent.</p>
+        <p>{passed ? 'This time has passed. Ask for a new one, or call it off.' : `${pod.title('lead')} is building your scene. You’ll hear when it’s sent.`}</p>
       </section>
       {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} />}
+      <div className="grid gap-2">
+        <button type="button" className={passed ? 'btn' : 'btn-quiet'} onClick={() => setChanging(true)}>Ask for a different time</button>
+        <CallOff data={data} reload={reload} label="Can’t make it this time" />
+      </div>
+      <Sheet open={changing} onClose={() => setChanging(false)} title="A different time">
+        <OfferForm
+          initial={passed ? undefined : { startsAt: scene.starts_at, endsAt: scene.ends_at }}
+          submit="Send the new time"
+          noteLabel={`A note for ${pod.title('lead')} (optional)`}
+          onSubmit={async ({ start, end }) => {
+            await api(`/api/scenes/${scene.id}/action`, { body: { action: 'offer', startsAt: start.toISOString(), endsAt: end.toISOString() } });
+            setChanging(false);
+            await reload();
+          }}
+        />
+      </Sheet>
     </div>
+  );
+}
+
+/** Back out of an agreed or sent scene (it goes back to a draft): one tap and a confirm, no reason needed. */
+function CallOff({ data, reload, label }: { data: SceneData; reload: () => Promise<void>; label: string }) {
+  const pod = usePod();
+  const [error, setError] = useState('');
+  const other = data.members.find((m) => m.account_id !== data.me);
+  async function go() {
+    if (!confirm(`${label}? ${other ? pod.nameOf(other.account_id) : 'Your partner'} will be told, and it goes back to a draft.`)) return;
+    setError('');
+    try {
+      await api(`/api/scenes/${data.scene.id}/action`, { body: { action: 'cancel' } });
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+  return (
+    <>
+      <button type="button" className="btn-quiet" onClick={go}>{label}</button>
+      <ErrorText>{error}</ErrorText>
+    </>
   );
 }
 
@@ -608,9 +649,10 @@ export function ReadyView({ data, reload, onOpen }: { data: SceneData; reload: (
             {state === 'early' && <p className="text-center text-sm text-ink-soft">You can start from {opensAt}.</p>}
           </>
         )}
-        {role === 'follow' && state === 'over' && <p className="text-center text-sm text-ink-soft">{pod.title('lead')} can offer a new time.</p>}
+        {role === 'follow' && state === 'over' && <p className="text-center text-sm text-ink-soft">{pod.title('lead')} can take it back and offer a new time, or either of you can call it off.</p>}
         {role === 'lead' && state !== 'over' && !data.plan.roleplay && <p className="text-center text-sm text-ink-soft">{pod.title('follow')} starts it; you’ll hear when.</p>}
         {role === 'lead' && <button type="button" className={state === 'over' ? 'btn' : 'btn-quiet'} disabled={busy} onClick={() => act('unsend')}>{state === 'over' ? 'Take it back to offer a new time' : 'Take it back to change it'}</button>}
+        <CallOff data={data} reload={reload} label={role === 'follow' ? 'Can’t make it this time' : 'Call it off'} />
       </div>
     </div>
   );

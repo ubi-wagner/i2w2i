@@ -42,10 +42,13 @@ export function sceneTransition(status: SceneStatus, action: SceneAction, role: 
       return status === 'draft' || (lead && (status === 'proposed' || status === 'accepted')) ? status : null;
     case 'propose':
       return status === 'draft' && !lead ? 'proposed' : null;
-    case 'withdraw':
-      return status === 'proposed' && !lead ? 'draft' : null;
-    case 'offer': // a new offer by either of you, or the offerer's different window
-      return status === 'draft' || ((status === 'offered' || status === 'accepted') && offerer) ? 'offered' : null;
+    case 'withdraw': // the follow takes a proposal back, or the lead says "not now"
+      return status === 'proposed' ? 'draft' : null;
+    case 'offer':
+      // A new offer by either of you; the offerer's different window; once
+      // agreed, a new time from either of you; the lead giving a proposal a time.
+      if (status === 'draft' || status === 'accepted' || (status === 'offered' && offerer) || (status === 'proposed' && lead)) return 'offered';
+      return null;
     case 'accept':
       return status === 'offered' && !offerer ? 'accepted' : null;
     case 'accept_send': // the lead accepts a scene that needs no building (a roleplay)
@@ -56,8 +59,8 @@ export function sceneTransition(status: SceneStatus, action: SceneAction, role: 
       return status === 'offered' && !offerer ? 'draft' : null;
     case 'agree_change':
       return status === 'offered' && offerer ? 'accepted' : null;
-    case 'cancel':
-      return offerer && (status === 'offered' || status === 'accepted') ? 'draft' : null;
+    case 'cancel': // the offerer takes an offer back; once agreed or sent, either of you can call it off
+      return (status === 'offered' && offerer) || status === 'accepted' || status === 'ready' ? 'draft' : null;
     case 'send':
       return lead && status === 'accepted' ? 'ready' : null;
     case 'unsend':

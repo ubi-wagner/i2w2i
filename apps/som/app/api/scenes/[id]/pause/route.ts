@@ -22,7 +22,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const url = `/scene/${id}`;
   if (b?.paused === true) {
     if (scene.paused_at) return json({ paused: true });
-    await sql`UPDATE som.scenes SET paused_at = now(), paused_by = ${me.id}, updated_at = now() WHERE id = ${id}`;
+    // Two pauses at the same moment: the first one counts (and only its maker resumes).
+    const [won] = await sql`UPDATE som.scenes SET paused_at = now(), paused_by = ${me.id}, updated_at = now() WHERE id = ${id} AND paused_at IS NULL RETURNING 1`;
+    if (!won) return json({ paused: true });
     await pauseTimers(id);
     notifySoon(await others(scene, me.id), { title: 'S-O-M · Paused', body: `${name} paused the scene.`, url, tag: `pause-${id}` });
     return json({ paused: true });

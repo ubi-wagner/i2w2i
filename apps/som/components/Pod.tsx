@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PassphraseWrapped } from '@/lib/crypto';
 import { decryptJson, encryptJson } from '@/lib/crypto';
 import { api, ApiError } from '@/lib/client/api';
@@ -29,9 +29,19 @@ export interface PodCtx {
   /** A member's title in this pod (or their name). */
   nameOf: (accountId: string) => string;
   refresh: () => Promise<void>;
-  saveMenu: (menu: Menu) => Promise<void>;
+  /**
+   * Saves the menu. A function is applied to the latest menu (and again on
+   * top of your partner's, if they saved first). A whole menu that clashes
+   * throws MenuClash unless `overwrite`.
+   */
+  saveMenu: (menu: Menu | ((latest: Menu) => Menu), opts?: { overwrite?: boolean }) => Promise<void>;
   seal: (value: unknown, context: string) => Promise<string>;
   open: <T>(payload: string, context: string) => Promise<T>;
+}
+
+/** Your partner saved the menu since this phone loaded it. */
+export class MenuClash extends Error {
+  constructor() { super('Your partner saved the menu since you opened it.'); }
 }
 
 const Ctx = createContext<PodCtx | null>(null);
@@ -121,28 +131,43 @@ function Ready({ state, reload, children }: { state: Extract<State, { kind: 'rea
   const [menu, setMenu] = useState(state.menu);
   const key = state.key;
 
+  const latest = useRef({ menu, rev: pod.menu_rev });
+  latest.current = { menu, rev: pod.menu_rev };
+
+  /** The pod as the server has it now; returns its menu and rev. */
   const refresh = useCallback(async () => {
     const me = await api<{ pods: PodRow[] }>('/api/me');
     const p = me.pods.find((x) => x.id === pod.id);
-    if (!p) return reload();
+    if (!p) { await reload(); return null; }
+    const fresh = cleanMenu(await decryptJson(key, p.menu_enc, `menu:${p.id}`));
     setPod(p);
-    setMenu(cleanMenu(await decryptJson(key, p.menu_enc, `menu:${p.id}`)));
+    setMenu(fresh);
+    latest.current = { menu: fresh, rev: p.menu_rev };
+    return latest.current;
   }, [key, pod.id, reload]);
 
-  const saveMenu = useCallback(async (next: Menu) => {
-    const clean = cleanMenu(next);
-    try {
-      const r = await api<{ rev: number }>(`/api/pods/${pod.id}/menu`, { method: 'PUT', body: { menuEnc: await encryptJson(key, clean, `menu:${pod.id}`), rev: pod.menu_rev } });
-      setPod((p) => ({ ...p, menu_rev: r.rev }));
-      setMenu(clean);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        await refresh();
-        throw new Error('Your partner changed the menu at the same time. Theirs is showing now; make your change again.');
+  const saveMenu = useCallback(async (next: Menu | ((latest: Menu) => Menu), opts: { overwrite?: boolean } = {}) => {
+    let { menu: base, rev } = latest.current;
+    for (let tries = 0; ; tries++) {
+      const clean = cleanMenu(typeof next === 'function' ? next(structuredClone(base)) : next);
+      const menuEnc = await encryptJson(key, clean, `menu:${pod.id}`);
+      if (menuEnc.length > 1_000_000) throw new Error('The menu is too big to save. Take out some ideas or sections and try again.');
+      try {
+        const r = await api<{ rev: number }>(`/api/pods/${pod.id}/menu`, { method: 'PUT', body: { menuEnc, rev } });
+        setPod((p) => ({ ...p, menu_rev: r.rev }));
+        setMenu(clean);
+        latest.current = { menu: clean, rev: r.rev };
+        return;
+      } catch (err) {
+        if (!(err instanceof ApiError && err.status === 409) || tries >= 3) throw err;
+        // Someone saved first: start from theirs.
+        const fresh = await refresh();
+        if (!fresh) throw err;
+        if (typeof next !== 'function' && !opts.overwrite) throw new MenuClash();
+        ({ menu: base, rev } = fresh);
       }
-      throw err;
     }
-  }, [key, pod.id, pod.menu_rev, refresh]);
+  }, [key, pod.id, refresh]);
 
   const title = useCallback((role: Role) => menu.titles[role], [menu.titles]);
   const nameOf = useCallback((id: string) => {
@@ -162,7 +187,7 @@ function Ready({ state, reload, children }: { state: Extract<State, { kind: 'rea
     members: pod.members,
     title,
     nameOf,
-    refresh,
+    refresh: async () => { await refresh(); },
     saveMenu,
     seal: (v, c) => encryptJson(key, v, c),
     open: (p, c) => decryptJson(key, p, c),

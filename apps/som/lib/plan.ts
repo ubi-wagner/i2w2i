@@ -114,6 +114,27 @@ export function tidyPlan(menu: Menu, plan: Plan): Plan {
 }
 
 /**
+ * Puts picks that aren't in any block yet (a plan from before blocks) into
+ * the first block with room for them in a part of their kind. The arrival
+ * routine stays for the whole day; anything with no room is left out.
+ */
+export function placeLoose(menu: Menu, plan: Plan): Plan {
+  const next = cleanPlan(structuredClone(plan));
+  const items = planItems(menu, next);
+  const placed = new Set(next.blocks.flatMap((b) => b.items));
+  const timed = schedule(next.blocks.map((b) => b.kind));
+  for (const id of Object.keys(next.picks)) {
+    const kind = items.get(id)?.kind;
+    if (!kind || kind === 'arrival' || placed.has(id)) continue;
+    const at = next.blocks.findIndex((b, i) => slotsFor(b.kind, timed[i]?.first ?? false).some((s) => s.kind === kind && b.items.filter((x) => items.get(x)?.kind === kind).length < s.max));
+    if (at < 0) continue;
+    next.blocks[at]!.items.push(id);
+    placed.add(id);
+  }
+  return next;
+}
+
+/**
  * When the follow checks in: every so many minutes, or at the end of each
  * work block that has something in it (minutes from the start), or never.
  */

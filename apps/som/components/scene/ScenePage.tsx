@@ -41,7 +41,7 @@ export function ScenePage({ id }: { id: string }) {
   if (!data) {
     return error ? (
       <div className="card space-y-3 text-center">
-        <p>{error === 'Not found' ? 'This scene isn’t here any more.' : error}</p>
+        <p>{error === 'Not found' ? 'This scene isn’t here any more.' : error === 'offline' ? 'No connection. Check your signal and try again.' : error}</p>
         <Link href="/" className="btn">Back to scenes</Link>
       </div>
     ) : <Spinner />;
@@ -59,12 +59,18 @@ export function ScenePage({ id }: { id: string }) {
     <div className="space-y-5">
       <SceneHeader data={data} />
 
-      {error && <p className="text-sm text-warn" role="status">Offline? Showing what was last loaded.</p>}
+      {error === 'Not found' ? (
+        <div className="card space-y-3 text-center" role="status">
+          <p>This scene isn’t here any more (it was deleted).</p>
+          <Link href="/" className="btn">Back to scenes</Link>
+        </div>
+      ) : error && <p className="text-sm text-warn" role="status">{error === 'offline' ? 'Offline? Showing what was last loaded.' : `Couldn’t refresh: ${error}`}</p>}
+      {data.planBroken && <p className="card border-stop/40 text-sm text-stop">This scene’s plan couldn’t be opened on this phone, so it can’t be changed from here. Try your other phone, or unlock this one again.</p>}
       <PausedBanner data={data} reload={reload} />
       <DeleteRequest data={data} reload={reload} />
 
       {scene.status === 'offered' && <OfferView data={data} reload={reload} />}
-      {scene.status === 'accepted' && (data.role === 'lead' ? <Builder data={data} reload={reload} /> : <BeingBuilt data={data} />)}
+      {scene.status === 'accepted' && (data.role === 'lead' ? <Builder data={data} reload={reload} /> : <BeingBuilt data={data} reload={reload} />)}
       {scene.status === 'ready' && <ReadyView data={data} reload={reload} onOpen={setTaskId} />}
       {(scene.status === 'draft' || scene.status === 'proposed') && <Builder data={data} reload={reload} />}
       {scene.status === 'active' && <Running data={data} reload={reload} onOpen={setTaskId} />}
@@ -202,7 +208,7 @@ function DeleteScene({ data, reload }: { data: SceneData; reload: () => Promise<
   const [error, setError] = useState('');
   const solo = scene.status === 'draft' && scene.created_by === data.me;
   const voted = scene.delete_votes.includes(data.me);
-  const waitingOn = data.members.filter((m) => !scene.delete_votes.includes(m.account_id) && m.account_id !== data.me);
+  const waitingOn = data.members.filter((m) => !scene.delete_votes.includes(m.account_id) && m.account_id !== data.me && m.has_key);
 
   async function vote(agree: boolean) {
     setError('');

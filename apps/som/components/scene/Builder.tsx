@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
 import { blocksForWindow, BLOCK_NAME, isWork, slotLabel, slotsFor, type BlockKind, type SlotSpec } from '@/lib/blocks';
 import { newId, proofText, section, type MenuItem, type Proof } from '@/lib/menu';
-import { autoFill, blocksFor, cleanPlan, CHECKIN_CHOICES, pacingFor, pacingOf, picked, planCheckins, planItems, planToTasks, recentlyUsed, tidyPlan, withParam, type Plan, type PlanItem } from '@/lib/plan';
+import { autoFill, blocksFor, cleanPlan, CHECKIN_CHOICES, pacingFor, pacingOf, picked, placeLoose, planCheckins, planItems, planToTasks, recentlyUsed, tidyPlan, withParam, type Plan, type PlanItem } from '@/lib/plan';
 import { sceneTransition } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ProofEditor } from '../ProofEditor';
@@ -31,8 +31,10 @@ const placedAny = (p: Plan) => p.blocks.some((b) => b.items.length);
 export function Builder({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
   const pod = usePod();
   const { scene, role } = data;
-  const editable = Boolean(sceneTransition(scene.status, 'edit', role));
-  const [plan, setPlan] = useState<Plan>(data.plan);
+  const editable = Boolean(sceneTransition(scene.status, 'edit', role)) && !data.planBroken;
+  const [stored, setPlan] = useState<Plan>(data.plan);
+  // A plan from before blocks, seen by someone who can't edit it: shown in blocks.
+  const plan = stored.blocks.length || editable ? stored : placeLoose(pod.menu, { ...stored, blocks: blocksFor(pacingOf(pod.menu, stored)?.hours ?? 2) });
   const [rev, setRev] = useState(scene.plan_rev);
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState('');
@@ -41,8 +43,8 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
   const [picking, setPicking] = useState<{ block: number; slot: SlotSpec } | null>(null);
   // Edits are numbered; a save covers the edits made before it began. One
   // save at a time, so a quick second edit never races the first.
-  const planRef = useRef(plan);
-  planRef.current = plan;
+  const planRef = useRef(stored);
+  planRef.current = stored;
   const revRef = useRef(rev);
   const edits = useRef(0);
   const savedUpTo = useRef(0);
@@ -59,10 +61,13 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
     }
   }, [data]);
 
-  const save = useCallback(async () => {
+  // A failed save stays unsaved and is tried again; true once everything is saved.
+  const [retry, setRetry] = useState(0);
+  const save = useCallback(async (): Promise<boolean> => {
     while (inFlight.current) await inFlight.current;
-    if (!dirty() || !editable) return;
+    if (!dirty() || !editable) return true;
     const upTo = edits.current;
+    let ok = false;
     const run = (async () => {
       setSaving('saving');
       try {
@@ -71,24 +76,45 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
         revRef.current = r.rev;
         setRev(r.rev);
         setSaving(dirty() ? 'idle' : 'saved');
+        setError('');
+        ok = !dirty();
       } catch (err) {
-        savedUpTo.current = edits.current;
         setSaving('error');
-        setError(err instanceof ApiError && err.status === 409 ? 'Your partner changed this at the same time; showing their version.' : (err as Error).message);
-        inFlight.current = null;
-        await reload();
+        if (err instanceof ApiError && err.status === 409) {
+          savedUpTo.current = edits.current;
+          setError('Your partner changed this at the same time; showing their version.');
+          inFlight.current = null;
+          await reload();
+        } else {
+          setError(`Not saved: ${(err as Error).message} Trying again…`);
+          setTimeout(() => setRetry((n) => n + 1), 4000);
+        }
       }
     })();
     inFlight.current = run;
     await run;
     inFlight.current = null;
+    return ok;
   }, [editable, pod, scene.id, reload]);
 
   useEffect(() => {
     if (!dirty()) return;
     const t = setTimeout(() => void save(), 700);
     return () => clearTimeout(t);
-  }, [plan, save]);
+  }, [plan, save, retry]);
+
+  // Leaving the page or the app: save now rather than lose the last tap.
+  useEffect(() => {
+    const flush = () => { if (dirty()) void save(); };
+    const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [save]);
 
   const edit: Edit = (fn) => {
     if (!editable) return;
@@ -116,14 +142,17 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
   useEffect(() => {
     const p = planRef.current;
     const want = fitted && scene.status === 'accepted' && !placedAny(p) ? fitted : !p.blocks.length ? blocksFor(pacingOf(pod.menu, p)?.hours ?? 2).map((b) => b.kind) : null;
-    if (want && want.join(',') !== p.blocks.map((b) => b.kind).join(',')) edit((x) => reshape(x, want));
+    // Picks from before blocks go into the new blocks rather than being lost.
+    if (want && want.join(',') !== p.blocks.map((b) => b.kind).join(',')) edit((x) => { reshape(x, want); Object.assign(x, placeLoose(pod.menu, x)); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitKey, scene.status]);
 
-  async function act(action: 'propose' | 'withdraw') {
+  async function act(action: 'propose' | 'withdraw' | 'cancel') {
+    if (action === 'cancel' && !confirm(`Call it off this time? ${follow} will be told, and it goes back to a draft.`)) return;
+    if (action === 'withdraw' && role === 'lead' && !confirm(`Not now? ${pod.nameOf(scene.created_by)} will be told, and it goes back to their drafts.`)) return;
     setError('');
     try {
-      await save();
+      if (!(await save())) return;
       await api(`/api/scenes/${scene.id}/action`, { body: { action } });
       await reload();
     } catch (err) {
@@ -164,9 +193,10 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
   const canWithdraw = sceneTransition(scene.status, 'withdraw', role);
   const canStart = sceneTransition(scene.status, 'start', role);
   const canSend = sceneTransition(scene.status, 'send', role);
-  const canOffer = (scene.status === 'draft' || scene.status === 'accepted') && sceneTransition(scene.status, 'offer', role, scene.offered_by === pod.account.id);
+  const canOffer = (scene.status === 'draft' || scene.status === 'accepted' || scene.status === 'proposed') && sceneTransition(scene.status, 'offer', role, scene.offered_by === pod.account.id);
+  const canCallOff = scene.status === 'accepted';
   // A roleplay can go with no tasks at all.
-  const sendable = tasks.length > 0 || Boolean(plan.roleplay);
+  const sendable = (tasks.length > 0 || Boolean(plan.roleplay)) && !data.planBroken;
   const checkins = planCheckins(plan, windowMinutes(scene));
   const checkinText = checkins.every ? `a check-in every ${checkins.every} minutes` : checkins.at.length ? 'a check-in at the end of each block' : '';
 
@@ -263,10 +293,11 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
           {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'} · {saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : saving === 'error' ? 'Not saved' : editable ? 'Changes save themselves' : 'View only'}
         </span>
         <span className="flex gap-2">
-          {canWithdraw && <button type="button" className="btn-quiet" onClick={() => act('withdraw')}>Take it back</button>}
-          {canPropose && <button type="button" className="btn-follow" disabled={!tasks.length} onClick={() => act('propose')}>Send to {lead}</button>}
+          {canWithdraw && <button type="button" className="btn-quiet" onClick={() => act('withdraw')}>{role === 'lead' ? 'Not now' : 'Take it back'}</button>}
+          {canCallOff && <button type="button" className="btn-quiet" onClick={() => act('cancel')}>Call it off</button>}
+          {canPropose && <button type="button" className="btn-follow" disabled={!sendable} onClick={() => act('propose')}>Send to {lead}</button>}
           {canOffer && <button type="button" className="btn-quiet" onClick={() => setOffering(true)}>{scene.status === 'accepted' ? 'Change the time' : 'Offer a time'}</button>}
-          {canStart && <button type="button" className="btn" disabled={!tasks.length} onClick={() => setConfirm('start')}>Start now</button>}
+          {canStart && <button type="button" className="btn" disabled={!sendable} onClick={() => setConfirm('start')}>Start now</button>}
           {canSend && <button type="button" className="btn" disabled={!sendable} onClick={() => setConfirm('send')}>Send to {follow}</button>}
         </span>
       </div>
@@ -282,6 +313,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
             {confirming === 'send' && scene.starts_at ? `, to start ${when(scene.starts_at, null)}` : ''}:
           </p>
           {short.length > 0 && <p className="text-sm text-warn">Not filled yet: {short.join(', ')}.</p>}
+          {plan.checkinMinutes === null && !checkins.at.length && tasks.length > 0 && <p className="text-sm text-ink-soft">No check-ins: none of the work blocks has anything in it.</p>}
           {plan.blocks.map((b, i) => {
             const these = tasks.filter((t) => t.block === i);
             if (!these.length) return null;

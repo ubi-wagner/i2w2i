@@ -103,6 +103,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
   const clashed = () => bad('That time overlaps another scene you’ve planned.', 409);
   const passed = scene.ends_at !== null && scene.ends_at.getTime() <= Date.now();
+  // Going back to a draft: no window, no answer, no offer on the table.
+  const offFields = sql`starts_at = NULL, ends_at = NULL, change_request = NULL, reply_enc = NULL, offered_by = NULL`;
+  // Nothing moves while paused: the one who paused resumes first.
+  if (scene.paused_at && (action === 'inspect' || action === 'aftercare' || action === 'close')) {
+    const who = scene.paused_by === me.id ? 'you' : scene.paused_by ? await nameOf(scene.paused_by) : 'whoever paused';
+    return bad(`It’s paused: ${who === 'you' ? 'resume it first' : `${who} resumes it first`}.`, 409);
+  }
 
   switch (action) {
     case 'offer': {
@@ -144,7 +151,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return json({ status: next });
     }
     case 'decline': {
-      if (!(await move(sql`change_request = NULL, reply_enc = NULL`))) return raced();
+      if (!(await move(sql`${offFields}`))) return raced();
       tellOfferer(`${name} can’t this time.`);
       return json({ status: next });
     }
@@ -171,9 +178,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return json({ status: next });
     }
     case 'cancel': {
-      if (!(await move(sql`change_request = NULL`))) return raced();
+      // Back to a draft: the window, the answer and any sent tasks go.
+      const ok = await sql.begin(async (tx) => {
+        const [s] = await tx`UPDATE som.scenes SET status = 'draft', updated_at = now(), ${offFields} WHERE id = ${id} AND status = ${scene.status} RETURNING 1`;
+        if (!s) return false;
+        if (scene.status === 'ready') await tx`DELETE FROM som.tasks WHERE scene_id = ${id}`;
+        return true;
+      });
+      if (!ok) return raced();
       await cancelTimers(id);
-      await tell(`${name} took back the offer.`);
+      await tell(scene.status === 'offered' ? `${name} took back the offer.` : `${name} called it off this time.`);
       return json({ status: next });
     }
     case 'send': {
@@ -220,7 +234,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         await tell(`${name} started the scene.`);
         return json({ status: 'active' });
       }
-      const tasks = taskList(b?.tasks);
+      // A roleplay can start with no tasks (the phone only sends none for one).
+      const tasks = taskList(b?.tasks, true);
       if (!tasks) return bad('That doesn’t look like a task list.');
       const ok = await sql.begin(async (tx) => {
         const [s] = await tx`UPDATE som.scenes SET status = 'active', started_at = now(), updated_at = now(), checkin_base = now(), ${checkins},
@@ -243,7 +258,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         UPDATE som.scenes SET close_votes = array_append(array_remove(close_votes, ${me.id}::uuid), ${me.id}::uuid), updated_at = now()
          WHERE id = ${id} AND status = 'aftercare' RETURNING close_votes`;
       if (!row) return raced();
-      const members = (await podMembers(scene.pod_id)).map((m) => m.account_id);
+      // Everyone who has joined the pod (an invite never opened doesn't hold it up).
+      const members = (await podMembers(scene.pod_id)).filter((m) => m.has_key).map((m) => m.account_id);
       if (!allAgreed(row.close_votes, members)) {
         await tell(`${name} is back to “us”.`);
         return json({ status: scene.status, votes: row.close_votes });
@@ -260,7 +276,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (next === 'inspection' || next === 'aftercare') await cancelTimers(id, ['checkin_due', 'checkin_overdue', 'task_due']);
       const message = {
         propose: `${name} sent you a scene to look at.`,
-        withdraw: `${name} took their scene back to work on it.`,
+        withdraw: role === 'lead' ? `${name} says not now.` : `${name} took their scene back to work on it.`,
         inspect: 'Inspection time.',
         aftercare: 'Time for aftercare.',
       }[action as 'propose' | 'withdraw' | 'inspect' | 'aftercare'];

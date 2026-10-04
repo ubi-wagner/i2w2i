@@ -99,7 +99,7 @@ function Partner() {
               {m.account_id !== pod.account.id && (
                 <span className="flex gap-3 text-sm">
                   <button type="button" className="text-lead underline" onClick={() => again(m.account_id, false)}>New key link</button>
-                  <button type="button" className="text-lead underline" onClick={() => again(m.account_id, true)}>Reset password</button>
+                  <button type="button" className="text-lead underline" onClick={() => { if (confirm(`Reset ${m.display_name}’s password? They’re signed out everywhere until you pass on the new one.`)) void again(m.account_id, true); }}>Reset password</button>
                 </span>
               )}
             </li>

@@ -27,7 +27,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!row) return bad('Not found', 404);
   const votes = row.delete_votes;
   const solo = scene.status === 'draft' && scene.created_by === me.id;
-  const members = solo ? [me.id] : (await podMembers(scene.pod_id)).map((m) => m.account_id);
+  // Everyone who has joined the pod (an invite never opened doesn't hold it up).
+  const members = solo ? [me.id] : (await podMembers(scene.pod_id)).filter((m) => m.has_key).map((m) => m.account_id);
   const name = await nameOf(me.id);
   if (!agree || !allAgreed(votes, members)) {
     if (agree) notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} would like to delete a scene. It goes once you agree too.`, url: `/scene/${id}`, tag: `delete-${id}` });

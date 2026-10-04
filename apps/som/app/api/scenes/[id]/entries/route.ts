@@ -42,8 +42,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!t) return bad('Unknown task.');
   }
   const priv = kind === 'reflection' && b?.private === true;
-  await sql`INSERT INTO som.entries (id, scene_id, task_id, author_id, kind, body_enc, private)
-            VALUES (${b!.id as string}, ${id}, ${taskId}, ${me.id}, ${kind}, ${b!.bodyEnc as string}, ${priv})`;
+  // Sending the same note again (a retry after a dropped connection) is fine: it's there once.
+  const [added] = await sql`INSERT INTO som.entries (id, scene_id, task_id, author_id, kind, body_enc, private)
+            VALUES (${b!.id as string}, ${id}, ${taskId}, ${me.id}, ${kind}, ${b!.bodyEnc as string}, ${priv})
+            ON CONFLICT (id) DO NOTHING RETURNING 1`;
+  if (!added) {
+    const [same] = await sql`SELECT 1 FROM som.entries WHERE id = ${b!.id as string} AND scene_id = ${id} AND author_id = ${me.id}`;
+    return same ? json({ ok: true }) : bad('That id is taken.', 409);
+  }
   await sql`UPDATE som.scenes SET updated_at = now() WHERE id = ${id}`;
 
   const name = await nameOf(me.id);

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { api } from '@/lib/client/api';
 import { proofText } from '@/lib/menu';
 import { proofProgress } from '@/lib/plan';
+import { usePendingUploads } from '@/lib/client/uploads';
 import { taskTransition, type TaskAction } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ErrorText, Sheet } from '../ui';
@@ -37,8 +38,11 @@ export function TaskSheet({ task, data, reload }: { task: TaskView; data: SceneD
   const textProof = t.needs.filter((n) => n.kind === 'text');
   const textWant = textProof.reduce((a, n) => a + n.count, 0);
   const missing = proofProgress(t.needs, counts).filter((p) => p.have < p.want);
+  // Proof still on its way: sending for review waits for it.
+  const sending = usePendingUploads(scene.id, task.id).filter((u) => u.p.state !== 'error');
 
   async function act(action: TaskAction) {
+    if (action === 'submit' && sending.length) return;
     if (action === 'submit' && missing.length) {
       const list = missing.map((p) => proofText({ kind: p.kind, count: p.want - p.have })).join(', ');
       if (!confirm(`Still to send: ${list}. Send for review anyway?`)) return;
@@ -126,7 +130,7 @@ export function TaskSheet({ task, data, reload }: { task: TaskView; data: SceneD
           {can('start') && (task.status !== 'returned' || Boolean(t.minutes)) && (
             <button type="button" className="btn-quiet" disabled={busy} onClick={() => act('start')}>{t.minutes ? `${task.status === 'returned' ? 'Restart' : 'Start'} the ${t.minutes}-minute timer` : 'Start'}</button>
           )}
-          {can('submit') && <button type="button" className="btn-follow" disabled={busy} onClick={() => act('submit')}>Send for review</button>}
+          {can('submit') && <button type="button" className="btn-follow" disabled={busy || sending.length > 0} onClick={() => act('submit')}>{sending.length ? `Sending ${sending.length} ${sending.length === 1 ? 'file' : 'files'}…` : 'Send for review'}</button>}
         </div>
       )}
       {role === 'follow' && task.status === 'submitted' && <p className="text-right text-sm text-ink-soft">With {pod.title('lead')} for review.</p>}

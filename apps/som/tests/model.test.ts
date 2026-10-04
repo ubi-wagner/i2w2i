@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cleanMenu, itemsById, proofText, section, SECTION_KINDS, starterMenu, type Menu } from '@/lib/menu';
-import { arrivalChecklist, autoFill, cleanPlan, emptyPlan, noProof, picked, pacingForHours, planCheckins, planToTasks, proofComplete, proofProgress, recentlyUsed, roleplayHistory, tidyPlan, withParam, type Plan } from '@/lib/plan';
+import { arrivalChecklist, autoFill, cleanPlan, emptyPlan, noProof, picked, pacingForHours, placeLoose, planCheckins, planToTasks, proofComplete, proofProgress, recentlyUsed, roleplayHistory, tidyPlan, withParam, type Plan } from '@/lib/plan';
 import { allAgreed, canDelete, overlaps, sceneRole, sceneTransition, startState, taskTransition, windowProblem } from '@/lib/rules';
 
 const find = (menu: Menu, label: string) => [...itemsById(menu).values()].find((x) => x.item.label === label)!.item;
@@ -107,6 +107,19 @@ describe('plan → tasks', () => {
     const p = tidyPlan(menu, plan({ picks: { [door.id]: {}, [fridge.id]: {}, x: {} }, customs: [{ id: 'own', kind: 'domain', label: 'Mow', details: '', needs: [] }], blocks: [{ kind: 'home', items: [] }] }));
     expect(Object.keys(p.picks)).toEqual([door.id]);
     expect(p.customs).toEqual([]);
+  });
+
+  it('picks from before blocks go into the blocks (a plan made before they existed)', () => {
+    const shower = find(menu, 'Shower');
+    const note = find(menu, 'Write a love note');
+    const fridge = find(menu, 'Clean the refrigerator, inside and out');
+    const door = find(menu, 'Meet at the door with a drink');
+    const old = cleanPlan({ picks: { [shower.id]: {}, [note.id]: {}, [fridge.id]: {}, [door.id]: {} } });
+    expect(old.blocks).toEqual([]);
+    const p = placeLoose(menu, { ...old, blocks: [{ kind: 'home', items: [] }] });
+    expect(p.blocks[0]!.items.sort()).toEqual([shower.id, note.id, fridge.id].sort());
+    expect(Object.keys(p.picks)).toContain(door.id);
+    expect(planToTasks(menu, p).map((t) => t.title)).toEqual(['Getting ready', 'Clean the refrigerator, inside and out', 'Write a love note']);
   });
 
   it('check-ins: at the end of each block with something in it, every so often, or none', () => {
@@ -220,7 +233,6 @@ describe('offering a scene', () => {
     expect(sceneTransition('ready', 'edit', 'lead')).toBeNull();
     expect(sceneTransition('offered', 'cancel', 'lead', true)).toBe('draft');
     expect(sceneTransition('offered', 'cancel', 'follow')).toBeNull();
-    expect(sceneTransition('ready', 'cancel', 'lead', true)).toBeNull();
     expect(sceneTransition('accepted', 'start', 'follow')).toBeNull();
   });
 
@@ -232,6 +244,19 @@ describe('offering a scene', () => {
     expect(sceneTransition('offered', 'decline', 'follow')).toBe('draft');
     expect(sceneTransition('offered', 'decline', 'follow', true)).toBeNull();
     expect(sceneTransition('offered', 'agree_change', 'follow', true)).toBe('accepted');
+  });
+
+  it('nobody is stuck: once agreed or sent either of you can change the time or call it off; a proposal can be given a time or a “not now”', () => {
+    for (const role of ['lead', 'follow'] as const) {
+      expect(sceneTransition('accepted', 'offer', role)).toBe('offered');
+      expect(sceneTransition('accepted', 'cancel', role)).toBe('draft');
+      expect(sceneTransition('ready', 'cancel', role)).toBe('draft');
+      expect(sceneTransition('proposed', 'withdraw', role)).toBe('draft');
+    }
+    expect(sceneTransition('offered', 'cancel', 'follow')).toBeNull();
+    expect(sceneTransition('proposed', 'offer', 'lead')).toBe('offered');
+    expect(sceneTransition('proposed', 'offer', 'follow')).toBeNull();
+    expect(sceneTransition('active', 'cancel', 'lead')).toBeNull();
   });
 
   it('a lead accepting a scene that needs no building sends it as they accept', () => {

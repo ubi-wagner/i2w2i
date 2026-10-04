@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { loadIdeas, putTitles, type DemandIdea } from '@/lib/client/ideas';
 import { NEEDS, proofText, type Need, type Proof } from '@/lib/menu';
@@ -78,14 +78,20 @@ export function PraiseForm({ data, taskId, approve, onDone }: { data: SceneData;
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // A retry after a dropped connection sends the praise once and approves once.
+  const praiseId = useRef(crypto.randomUUID());
+  const praised = useRef(false);
   async function send(words: string) {
     const t = words.trim();
     if (!t) return;
     setBusy(true);
     setError('');
     try {
-      const id = crypto.randomUUID();
-      await api(`/api/scenes/${data.scene.id}/entries`, { body: { id, kind: 'praise', taskId: taskId ?? null, bodyEnc: await pod.seal({ text: t }, `entry:${id}`) } });
+      const id = praiseId.current;
+      if (!praised.current) {
+        await api(`/api/scenes/${data.scene.id}/entries`, { body: { id, kind: 'praise', taskId: taskId ?? null, bodyEnc: await pod.seal({ text: t }, `entry:${id}`) } });
+        praised.current = true;
+      }
       if (approve && taskId) await api(`/api/scenes/${data.scene.id}/tasks/${taskId}`, { body: { action: 'approve' } });
       await onDone();
     } catch (err) {
@@ -129,6 +135,8 @@ export function DemandForm({ data, onDone, about }: { data: SceneData; onDone: (
     ? { label: putTitles(d.label, pod.menu.titles), param: d.param, value: '', needs: d.needs.map((n) => ({ ...n })), minutes: d.minutes ?? 0, details: about ? `About: ${about}` : '' }
     : { label: '', value: '', needs: [{ kind: 'photo', count: 1 }], minutes: 10, details: about ? `About: ${about}` : '' });
 
+  // One demand however many tries: a retry never sends it twice.
+  const demandId = useRef(crypto.randomUUID());
   async function send() {
     if (!draft) return;
     const title = withParam(draft.label.trim(), draft.value.trim() || undefined, draft.param);
@@ -136,7 +144,7 @@ export function DemandForm({ data, onDone, about }: { data: SceneData; onDone: (
     setBusy(true);
     setError('');
     try {
-      const id = crypto.randomUUID();
+      const id = demandId.current;
       const body: TaskDraft = { kind: 'demand', title, details: draft.details.trim(), checklist: [], needs: draft.needs, ...(draft.minutes ? { minutes: draft.minutes } : {}) };
       await api(`/api/scenes/${data.scene.id}/tasks`, { body: { id, bodyEnc: await pod.seal(body, `task:${id}`), minutes: draft.minutes || null } });
       await onDone();

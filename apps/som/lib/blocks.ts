@@ -91,6 +91,16 @@ export function schedule(blocks: BlockKind[], total?: number): Timed[] {
     return { kind, first, len: blockMinutes(kind, first) };
   });
   const used = lens.reduce((n, b) => n + b.len, 0);
+  // A window shorter than the blocks: each block shrinks to fit (a 1-hour scene is a 1-hour block).
+  if (total && total < used) {
+    let t = 0;
+    return lens.map((b, i) => {
+      const end = i === lens.length - 1 ? total : Math.round(t + (b.len * total) / used);
+      const out = { kind: b.kind, first: b.first, start: t, end };
+      t = end;
+      return out;
+    });
+  }
   const spare = total && total > used ? total - used : 0;
   const freeAt = lens.findIndex((b) => b.kind === 'free');
   if (freeAt >= 0) lens[freeAt]!.len += spare;
