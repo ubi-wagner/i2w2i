@@ -2,7 +2,7 @@
 // The follow usually drafts it, the lead adjusts and starts it; starting
 // turns it into the follow's tasks (planToTasks). Pure.
 
-import { cleanProofs, itemsById, NEEDS, section, type Menu, type MenuItem, type Need, type Pacing, type Proof, type SectionKind } from './menu';
+import { cleanProofs, cleanRoleplay, itemsById, NEEDS, section, type Menu, type MenuItem, type Need, type Pacing, type Proof, type Roleplay, type SectionKind } from './menu';
 import type { Capacity } from './rules';
 
 export interface Plan {
@@ -19,6 +19,8 @@ export interface Plan {
   note: string;
   /** Minutes between check-ins while the scene runs; null for none. */
   checkinMinutes: number | null;
+  /** The roleplay this scene is, copied from the menu when it was picked. */
+  roleplay: Roleplay | null;
 }
 
 export const CHECKIN_CHOICES = [15, 30, 45, 60, 90, 120];
@@ -39,6 +41,7 @@ export function emptyPlan(menu: Menu): Plan {
     customTask: { title: '', details: '', needs: [] },
     note: '',
     checkinMinutes: null,
+    roleplay: null,
   };
 }
 
@@ -67,6 +70,7 @@ export function cleanPlan(raw: unknown): Plan {
     customTask: { title: str(ct.title, 120), details: str(ct.details, 1000), needs: cleanProofs(ct.needs) },
     note: str(r.note, 2000),
     checkinMinutes: every,
+    roleplay: cleanRoleplay(r.roleplay),
   };
 }
 

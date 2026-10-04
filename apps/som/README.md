@@ -19,6 +19,7 @@ leaves them. The server stores ciphertext and can't read it.
 | The menu, the pod's name and titles | Usernames and account names (needed to sign in) |
 | Scene plans, tasks, notes, writing, check-ins | Who is in a pod and which role they have |
 | Offer notes; the follow's capacity and note when answering; demands and praise | An offered scene's window: day, from and until (for reminders and so offers don't overlap) |
+| Roleplays, switch titles, profiles (ratings and notes) | Whether a scene is switched and who offered it (it decides who may do what) |
 | Scorecards (overall and per task), consequences, rewards, aftercare, reflections | A scene's stage, and when things happened |
 | Photos, videos, voice notes, files (and their thumbnails, names, sizes in the file) | Encrypted file sizes, check-in times, countdown times |
 
@@ -55,9 +56,12 @@ leaves them. The server stores ciphertext and can't read it.
 
 There are two ways in:
 
-- **The lead offers a window of their time** (say, their workday).
-  **Offer {follow} a scene** on the home screen: today, tomorrow or another
-  day, from and until (2, 4 or 8 hours in one tap), and a note. Windows
+- **Either of you offers (or asks for) a window of time**: the lead's
+  workday, say, or the follow asking for a scene. **Offer {follow} a
+  scene** / **Ask {lead} for a scene** on the home screen: who leads, what
+  kind (tasks, or one of your roleplays), today, tomorrow or another day,
+  from and until (2, 4 or 8 hours in one tap), and a note. The other one
+  answers: accept, ask for a change, or **not this time**. Windows
   don't overlap another offered or planned scene, and an offer whose time
   has passed can't be accepted. The follow answers by their schedule and
   their **capacity** (Light, Normal or Full: how much they can take on that
@@ -73,6 +77,32 @@ There are two ways in:
 - **The follow drafts one**: tap to pick from the menu, pick rooms, pacing,
   check-ins; it saves as you go. **Send** it to the lead, who adjusts
   anything and **starts it now**.
+
+**Switching.** Any scene can be led by whoever usually follows: choose who
+leads when you offer or ask. In a switched scene everything follows the
+switch (the lead's controls, demands, praise, who's notified of what), and
+it uses the **switch titles** from the menu (or your names). A roleplay
+says who leads it, so picking one led by the usual follow switches the
+scene. A roleplay accepted by the one who'll lead it needs no building:
+it's on.
+
+**Roleplays** live on the Menu page: a title, who leads, where, intensity,
+what to wear, the setup, the action and the aftercare. Add them one by
+one, import a text file, or edit them all as text. In a roleplay scene the
+card is at the top while it runs (tasks and demands are optional), the
+lead can go **straight to aftercare** (no scorecard), and aftercare starts
+with the roleplay's own.
+
+**Us (profiles).** Each of you fills in your own: notes in your own words
+(what you like to be called, hard and soft limits, safeword and signals,
+aftercare, body notes, turn-ons and mood killers, fantasies, sizes,
+favourites) and how much you like each thing, **giving and getting**, 0–5
+(Never, Not my thing, Maybe, Like it, Love it, Can't wait). There's a
+built-in list (for pod members only, like Ideas) and your own list, which
+you can add to or import. You can read each other's; **Together** shows
+where you meet (both 3 or more), what's worth talking about, and what's off
+the table (a 0 from either). The lead sees the follow's limits while
+building a scene.
 
 Then:
 
@@ -197,7 +227,10 @@ npm run e2e     # against a running build; see e2e/run.mjs for the settings it n
 The end-to-end suites run two phones through pairing, a whole scene, a
 workday (offer a window, ask for a change of time and capacity, agree, no
 overlaps, expiry, fill, send, start in the window, demands, praise, redo, on
-my way, per-task scores) and deleting, with a stand-in push service, and
+my way, per-task scores), a switched roleplay (asked for by the usual lead,
+accepted by the usual follow, run with the roles swapped, straight to
+aftercare; and a request turned down), profiles (ratings, notes, the
+other's view, Together, limits in the builder) and deleting, with a stand-in push service, and
 check that the database and the bucket hold nothing readable. The layout suite walks every screen on a small
 phone (iPhone SE; `E2E_LAYOUT_DEVICE` for another) and checks nothing is
 wider than the screen, text boxes are 16px (so iPhones don't zoom) and

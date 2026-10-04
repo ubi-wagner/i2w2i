@@ -3,18 +3,18 @@ import { sql } from '@/lib/server/db';
 import { nameOf, others, podMembers, sceneFor } from '@/lib/server/pods';
 import { notifySoon } from '@/lib/server/push';
 import { cancelTimers, scheduleCheckin, scheduleSceneStart } from '@/lib/server/scheduler';
-import { allAgreed, sceneTransition, startState, windowProblem, type SceneAction } from '@/lib/rules';
+import { allAgreed, sceneRole, sceneTransition, startState, windowProblem, type SceneAction } from '@/lib/rules';
 import { CHECKIN_CHOICES } from '@/lib/plan';
 
 export const dynamic = 'force-dynamic';
 const ACTIONS: SceneAction[] = [
   'propose', 'withdraw', 'start', 'inspect', 'aftercare', 'close',
-  'offer', 'accept', 'request_change', 'agree_change', 'cancel', 'send', 'unsend',
+  'offer', 'accept', 'accept_send', 'request_change', 'decline', 'agree_change', 'cancel', 'send', 'unsend',
 ];
 
 type Body = {
   action?: unknown; tasks?: unknown; planEnc?: unknown; checkinMinutes?: unknown;
-  startsAt?: unknown; endsAt?: unknown; replyEnc?: unknown;
+  startsAt?: unknown; endsAt?: unknown; replyEnc?: unknown; switched?: unknown;
 };
 type TaskIn = { id?: unknown; ord?: unknown; bodyEnc?: unknown; minutes?: unknown };
 type Window = { start: Date; end: Date };
@@ -26,21 +26,24 @@ function windowOf(s: unknown, e: unknown): Window | string {
   return windowProblem(w.start, w.end, new Date()) ?? w;
 }
 
-function taskList(v: unknown): TaskIn[] | null {
+/** Tasks from a phone; a sent scene may have none (a roleplay). */
+function taskList(v: unknown, mayBeEmpty = false): TaskIn[] | null {
   const tasks = Array.isArray(v) ? (v as TaskIn[]) : null;
-  if (!tasks || !tasks.length || tasks.length > 150) return null;
+  if (!tasks || (!tasks.length && !mayBeEmpty) || tasks.length > 150) return null;
   const ok = tasks.every((t) => isUuid(t.id) && Number.isInteger(t.ord) && isCipher(t.bodyEnc, 'j1', 50_000)
     && (t.minutes == null || (Number.isInteger(t.minutes) && (t.minutes as number) >= 1 && (t.minutes as number) <= 1440)));
   return ok ? tasks : null;
 }
 
 // Moving a scene along. The follow drafts and proposes and the lead starts
-// it now; or the lead offers a window of their time, the follow accepts or
-// asks for a change (another window, or how much they can take on), the
-// lead builds it to fit and sends it, and the follow starts it in the
-// window. Then inspection, aftercare, and it closes once everyone is back to
-// "us". Tasks are made on the phone (encrypted) and arrive with "start" or
-// "send". Windows in a pod never overlap.
+// it now; or either of you offers a window of time (and says who leads: a
+// switched scene swaps the usual roles), the other accepts, asks for a
+// change (another window, or how much they can take on) or declines, the
+// lead builds it to fit and sends it, and it's started in its window. Then
+// inspection (or straight to aftercare), and it closes once everyone is
+// back to "us". Tasks are made on the phone (encrypted) and arrive with
+// "start" or "send". Windows in a pod never overlap. Roles here are roles
+// in the scene.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const me = await guard(req);
   if (me instanceof Response) return me;
@@ -51,12 +54,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const b = await body<Body>(req);
   const action = b?.action as SceneAction;
   if (!ACTIONS.includes(action)) return bad('Unknown action.');
-  const next = sceneTransition(scene.status, action, role);
+  const offerer = scene.offered_by === me.id;
+  const next = sceneTransition(scene.status, action, role, offerer);
   if (!next) return bad('That can’t be done now.', 409);
   const name = await nameOf(me.id);
   const url = `/scene/${id}`;
   const tell = async (body: string, onlyRole?: 'lead' | 'follow') =>
-    notifySoon(await others(scene.pod_id, me.id, onlyRole), { title: 'S-O-M', body, url, tag: `scene-${id}` });
+    notifySoon(await others(scene, me.id, onlyRole), { title: 'S-O-M', body, url, tag: `scene-${id}` });
+  // Answers go to whoever made the offer.
+  const tellOfferer = (body: string) => notifySoon(scene.offered_by ? [scene.offered_by] : [], { title: 'S-O-M', body, url, tag: `scene-${id}` });
   if (b?.planEnc != null && !isCipher(b.planEnc, 'j1', 200_000)) return bad('That doesn’t look like a plan.');
   const planEnc = (b?.planEnc as string | undefined) ?? null;
   if (b?.replyEnc != null && !isCipher(b.replyEnc, 'j1', 8_000)) return bad('That doesn’t look like an answer.');
@@ -92,17 +98,44 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     case 'offer': {
       const w = windowOf(b?.startsAt, b?.endsAt);
       if (typeof w === 'string') return bad(w);
-      // A new offer wants a new answer.
-      const r = await takeWindow(w, (tx) => tx`change_request = NULL, reply_enc = NULL,
+      if (b?.switched != null && typeof b.switched !== 'boolean') return bad('Say who leads.');
+      const switched = typeof b?.switched === 'boolean' ? b.switched : scene.switched;
+      // A new offer wants a new answer. Asking for a scene you'll follow in is a request.
+      const r = await takeWindow(w, (tx) => tx`change_request = NULL, reply_enc = NULL, offered_by = ${me.id}, switched = ${switched},
                                                plan_enc = coalesce(${planEnc}, plan_enc), plan_rev = plan_rev + ${planEnc ? 1 : 0}`);
       if (r !== 'ok') return r === 'clash' ? clashed() : raced();
-      await tell(`${name} offered you a scene.`, 'follow');
+      const asking = sceneRole(sceneRole(role, scene.switched), switched) === 'follow';
+      await tell(asking ? `${name} asked you for a scene.` : `${name} offered you a scene.`);
       return json({ status: next });
     }
     case 'accept': {
       if (passed) return bad('This offer’s time has passed.', 409);
       if (!(await move(sql`change_request = NULL, reply_enc = coalesce(${replyEnc}, reply_enc)`))) return raced();
-      await tell(`${name} accepted your offer.`, 'lead');
+      tellOfferer(`${name} accepted.`);
+      return json({ status: next });
+    }
+    case 'accept_send': {
+      // The lead accepts a scene that needs no building (a roleplay): it's sent as they accept.
+      if (passed) return bad('This offer’s time has passed.', 409);
+      const tasks = taskList(b?.tasks ?? [], true);
+      if (!tasks) return bad('That doesn’t look like a task list.');
+      const ok = await sql.begin(async (tx) => {
+        const [s] = await tx`UPDATE som.scenes SET status = 'ready', updated_at = now(), change_request = NULL, checkin_minutes = ${every}
+                              WHERE id = ${id} AND status = ${scene.status} RETURNING 1`;
+        if (!s) return false;
+        for (const t of tasks) {
+          await tx`INSERT INTO som.tasks (id, scene_id, ord, body_enc, minutes) VALUES (${t.id as string}, ${id}, ${t.ord as number}, ${t.bodyEnc as string}, ${(t.minutes as number) ?? null})`;
+        }
+        return true;
+      });
+      if (!ok) return raced();
+      if (scene.starts_at && scene.starts_at.getTime() > Date.now()) await scheduleSceneStart(id, scene.starts_at);
+      tellOfferer(`${name} accepted. It’s on.`);
+      return json({ status: next });
+    }
+    case 'decline': {
+      if (!(await move(sql`change_request = NULL, reply_enc = NULL`))) return raced();
+      tellOfferer(`${name} can’t this time.`);
       return json({ status: next });
     }
     case 'request_change': {
@@ -113,7 +146,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!w && !replyEnc) return bad('Say what you’d like changed.');
       const request = { by: me.id, startsAt: w?.start.toISOString() ?? null, endsAt: w?.end.toISOString() ?? null };
       if (!(await move(sql`change_request = ${sql.json(request)}, reply_enc = coalesce(${replyEnc}, reply_enc)`))) return raced();
-      await tell(`${name} asked for a change.`, 'lead');
+      tellOfferer(`${name} asked for a change.`);
       return json({ status: next });
     }
     case 'agree_change': {
@@ -124,18 +157,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (typeof w === 'string') return bad(w, 409);
       const r = await takeWindow(w, (tx) => tx`change_request = NULL`);
       if (r !== 'ok') return r === 'clash' ? clashed() : raced();
-      await tell(`${name} agreed to your change.`, 'follow');
+      await tell(`${name} agreed to your change.`);
       return json({ status: next });
     }
     case 'cancel': {
       if (!(await move(sql`change_request = NULL`))) return raced();
       await cancelTimers(id);
-      await tell(`${name} took back the offer.`, 'follow');
+      await tell(`${name} took back the offer.`);
       return json({ status: next });
     }
     case 'send': {
       if (passed) return bad('This scene’s time has passed; offer a new one.', 409);
-      const tasks = taskList(b?.tasks);
+      const tasks = taskList(b?.tasks, true);
       if (!tasks) return bad('That doesn’t look like a task list.');
       const ok = await sql.begin(async (tx) => {
         const [s] = await tx`UPDATE som.scenes SET status = 'ready', updated_at = now(), checkin_minutes = ${every},

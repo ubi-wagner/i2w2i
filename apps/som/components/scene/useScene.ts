@@ -26,6 +26,8 @@ export interface SceneRow {
   ends_at: string | null;
   change_request: { by: string; startsAt: string | null; endsAt: string | null } | null;
   reply_enc: string | null;
+  switched: boolean;
+  offered_by: string | null;
   close_votes: string[];
   delete_votes: string[];
   created_at: string;

@@ -18,6 +18,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const minutes = typeof b?.minutes === 'number' && CHOICES.includes(b.minutes) ? b.minutes : null;
   if (!minutes) return bad('Pick how long.');
   const at = await scheduleArrival(id, minutes);
-  notifySoon(await others(found.scene.pod_id, me.id), { title: 'S-O-M', body: `${await nameOf(me.id)} is on the way: about ${minutes} minutes.`, url: `/scene/${id}#arrival`, tag: `arrival-${id}` });
+  notifySoon(await others(found.scene, me.id), { title: 'S-O-M', body: `${await nameOf(me.id)} is on the way: about ${minutes} minutes.`, url: `/scene/${id}#arrival`, tag: `arrival-${id}` });
   return json({ arrivalAt: at });
 }

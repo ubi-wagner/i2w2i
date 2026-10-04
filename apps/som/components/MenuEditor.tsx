@@ -9,7 +9,8 @@ import { IdeasPicker } from './Ideas';
 import { MenuTextEditor } from './MenuText';
 import { ProofEditor } from './ProofEditor';
 import { usePod } from './Pod';
-import { ErrorText, Sheet, Spinner } from './ui';
+import { Collapsible, ErrorText, Sheet, Spinner } from './ui';
+import { RoleplaysEditor } from './RoleplayEditor';
 
 
 /** The menu: what scenes are built from. Mostly the follow's to fill, so the lead only chooses. */
@@ -140,6 +141,16 @@ export function MenuEditor() {
             <label className="label" htmlFor="m-follow">The one who follows</label>
             <input id="m-follow" className="input" value={menu.titles.follow} maxLength={40} onChange={(e) => change((m) => { m.titles.follow = e.target.value; })} />
           </div>
+          <div>
+            <label className="label" htmlFor="m-switch-lead">When you switch, the one who leads</label>
+            <input id="m-switch-lead" className="input" value={menu.switchTitles.lead} maxLength={40} placeholder={pod.members.find((x) => x.role === 'follow')?.display_name ?? ''}
+              onChange={(e) => change((m) => { m.switchTitles.lead = e.target.value; })} />
+          </div>
+          <div>
+            <label className="label" htmlFor="m-switch-follow">…and the one who follows</label>
+            <input id="m-switch-follow" className="input" value={menu.switchTitles.follow} maxLength={40} placeholder={pod.members.find((x) => x.role === 'lead')?.display_name ?? ''}
+              onChange={(e) => change((m) => { m.switchTitles.follow = e.target.value; })} />
+          </div>
         </div>
         <div>
           <label className="label" htmlFor="m-name">Menu name</label>
@@ -216,6 +227,8 @@ export function MenuEditor() {
         );
       })}
 
+      <RoleplaysEditor menu={menu} change={change} open={open} setOpen={setOpen} />
+
       <ErrorText>{error}</ErrorText>
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-paper-raised/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
@@ -278,19 +291,6 @@ export function MenuEditor() {
         )}
       </Sheet>
     </div>
-  );
-}
-
-function Collapsible({ id, title, summary, open, setOpen, children }: { id: string; title: string; summary: string; open: string | null; setOpen: (v: string | null) => void; children: React.ReactNode }) {
-  const isOpen = open === id;
-  return (
-    <section className="card p-0">
-      <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : id)}>
-        <span className="font-display text-lg text-lead-dark">{title}</span>
-        <span className="text-sm text-ink-soft">{summary} {isOpen ? '▴' : '▾'}</span>
-      </button>
-      {isOpen && <div className="space-y-3 border-t border-line px-4 py-4">{children}</div>}
-    </section>
   );
 }
 

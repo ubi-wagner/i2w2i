@@ -28,7 +28,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                     ${b!.bodyEnc as string}, ${minutes}, ${dueAt ? 'started' : 'todo'}, ${dueAt ? new Date() : null}, ${dueAt})`;
   if (dueAt) await scheduleTask(id, b!.id as string, dueAt);
   await sql`UPDATE som.scenes SET updated_at = now() WHERE id = ${id}`;
-  notifySoon(await others(scene.pod_id, me.id, 'follow'), {
+  notifySoon(await others(scene, me.id, 'follow'), {
     title: 'S-O-M', body: `${await nameOf(me.id)} sent you a demand. ⚡`, url: `/scene/${id}#task-${b!.id}`, tag: `task-${b!.id}`,
   });
   return json({ ok: true, dueAt });

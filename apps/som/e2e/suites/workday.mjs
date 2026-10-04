@@ -33,7 +33,7 @@ await sheet(r).getByRole('button', { name: 'Send the offer' }).click();
 await r.waitForURL(/\/scene\//);
 const id = r.url().split('/').pop();
 await r.getByText('Your offer').waitFor();
-await r.getByText(`Waiting for ${TITLES.follow} to accept`).waitFor();
+await r.getByText(`Waiting for ${TITLES.follow} to answer.`).waitFor();
 check(!!await pushTo('sunny', /offered you a scene/), 'Sunny hears she’s been offered a scene');
 let [scene] = await db`SELECT status, starts_at, ends_at FROM som.scenes WHERE id = ${id}`;
 check(scene.status === 'offered' && hours(scene) === 8 && scene.starts_at > new Date(), 'the offer is a window of 8 hours, in the future');

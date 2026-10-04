@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { PassphraseWrapped } from '@/lib/crypto';
 import { decryptJson, encryptJson } from '@/lib/crypto';
 import { api, ApiError } from '@/lib/client/api';
@@ -39,6 +39,28 @@ export function usePod(): PodCtx {
   const c = useContext(Ctx);
   if (!c) throw new Error('usePod outside PodGate');
   return c;
+}
+
+/**
+ * Inside a switched scene the roles are the other way round: everything in
+ * here sees your role in the scene, and the titles for switching (the
+ * menu's switch titles, or your names).
+ */
+export function SceneRoles({ switched, children }: { switched: boolean; children: React.ReactNode }) {
+  const pod = usePod();
+  const value = useMemo<PodCtx>(() => {
+    if (!switched) return pod;
+    const flip = (r: Role): Role => (r === 'lead' ? 'follow' : 'lead');
+    const holder = (r: Role) => pod.members.filter((m) => flip(m.role) === r);
+    const title = (r: Role) => pod.menu.switchTitles[r] || holder(r).map((m) => m.display_name).join(' & ') || pod.menu.titles[flip(r)];
+    const nameOf = (id: string) => {
+      const m = pod.members.find((x) => x.account_id === id);
+      if (!m) return 'Someone';
+      return holder(flip(m.role)).length === 1 ? title(flip(m.role)) : m.display_name;
+    };
+    return { ...pod, role: flip(pod.role), title, nameOf };
+  }, [pod, switched]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 type State =

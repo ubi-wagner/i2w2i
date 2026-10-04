@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cleanMenu, itemsById, proofText, section, SECTION_KINDS, starterMenu, type Menu } from '@/lib/menu';
 import { arrivalChecklist, autoFill, cleanPlan, emptyPlan, noProof, pacingCheck, pacingFor, pacingForHours, planToTasks, proofComplete, proofProgress, withParam, type Plan } from '@/lib/plan';
-import { allAgreed, canDelete, overlaps, sceneTransition, startState, taskTransition, windowProblem } from '@/lib/rules';
+import { allAgreed, canDelete, overlaps, sceneRole, sceneTransition, startState, taskTransition, windowProblem } from '@/lib/rules';
 
 const find = (menu: Menu, label: string) => [...itemsById(menu).values()].find((x) => x.item.label === label)!.item;
 
@@ -187,16 +187,18 @@ describe('proof: any number of each kind', () => {
   });
 });
 
-describe('offering a day', () => {
+describe('offering a scene', () => {
   it('the lead offers; the follow accepts or asks for a change; the lead agrees, builds, sends; either starts', () => {
     expect(sceneTransition('draft', 'offer', 'lead')).toBe('offered');
-    expect(sceneTransition('draft', 'offer', 'follow')).toBeNull();
     expect(sceneTransition('offered', 'accept', 'follow')).toBe('accepted');
-    expect(sceneTransition('offered', 'accept', 'lead')).toBeNull();
+    expect(sceneTransition('offered', 'accept', 'lead', true)).toBeNull();
     expect(sceneTransition('offered', 'request_change', 'follow')).toBe('offered');
-    expect(sceneTransition('offered', 'agree_change', 'lead')).toBe('accepted');
+    expect(sceneTransition('offered', 'request_change', 'lead', true)).toBeNull();
+    expect(sceneTransition('offered', 'agree_change', 'lead', true)).toBe('accepted');
     expect(sceneTransition('offered', 'agree_change', 'follow')).toBeNull();
-    expect(sceneTransition('offered', 'offer', 'lead')).toBe('offered');
+    expect(sceneTransition('offered', 'offer', 'lead', true)).toBe('offered');
+    expect(sceneTransition('offered', 'offer', 'follow')).toBeNull();
+    expect(sceneTransition('accepted', 'offer', 'lead', true)).toBe('offered');
     expect(sceneTransition('accepted', 'edit', 'lead')).toBe('accepted');
     expect(sceneTransition('accepted', 'edit', 'follow')).toBeNull();
     expect(sceneTransition('accepted', 'send', 'lead')).toBe('ready');
@@ -205,9 +207,37 @@ describe('offering a day', () => {
     expect(sceneTransition('ready', 'start', 'follow')).toBe('active');
     expect(sceneTransition('ready', 'start', 'lead')).toBe('active');
     expect(sceneTransition('ready', 'edit', 'lead')).toBeNull();
-    expect(sceneTransition('offered', 'cancel', 'lead')).toBe('draft');
-    expect(sceneTransition('ready', 'cancel', 'lead')).toBeNull();
+    expect(sceneTransition('offered', 'cancel', 'lead', true)).toBe('draft');
+    expect(sceneTransition('offered', 'cancel', 'follow')).toBeNull();
+    expect(sceneTransition('ready', 'cancel', 'lead', true)).toBeNull();
     expect(sceneTransition('accepted', 'start', 'follow')).toBeNull();
+  });
+
+  it('either of you can offer; the other answers, and can say not this time', () => {
+    expect(sceneTransition('draft', 'offer', 'follow')).toBe('offered');
+    expect(sceneTransition('offered', 'accept', 'lead')).toBe('accepted');
+    expect(sceneTransition('offered', 'accept', 'follow', true)).toBeNull();
+    expect(sceneTransition('offered', 'decline', 'lead')).toBe('draft');
+    expect(sceneTransition('offered', 'decline', 'follow')).toBe('draft');
+    expect(sceneTransition('offered', 'decline', 'follow', true)).toBeNull();
+    expect(sceneTransition('offered', 'agree_change', 'follow', true)).toBe('accepted');
+  });
+
+  it('a lead accepting a scene that needs no building sends it as they accept', () => {
+    expect(sceneTransition('offered', 'accept_send', 'lead')).toBe('ready');
+    expect(sceneTransition('offered', 'accept_send', 'follow')).toBeNull();
+    expect(sceneTransition('offered', 'accept_send', 'lead', true)).toBeNull();
+  });
+
+  it('the lead can go straight to aftercare, without a scorecard', () => {
+    expect(sceneTransition('active', 'aftercare', 'lead')).toBe('aftercare');
+    expect(sceneTransition('active', 'aftercare', 'follow')).toBeNull();
+  });
+
+  it('switching swaps who leads in that scene', () => {
+    expect(sceneRole('lead', false)).toBe('lead');
+    expect(sceneRole('lead', true)).toBe('follow');
+    expect(sceneRole('follow', true)).toBe('lead');
   });
 });
 

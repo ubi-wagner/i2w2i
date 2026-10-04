@@ -24,7 +24,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (scene.paused_at) return json({ paused: true });
     await sql`UPDATE som.scenes SET paused_at = now(), paused_by = ${me.id}, updated_at = now() WHERE id = ${id}`;
     await pauseTimers(id);
-    notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M · Paused', body: `${name} paused the scene.`, url, tag: `pause-${id}` });
+    notifySoon(await others(scene, me.id), { title: 'S-O-M · Paused', body: `${name} paused the scene.`, url, tag: `pause-${id}` });
     return json({ paused: true });
   }
   if (!scene.paused_at) return json({ paused: false });
@@ -32,6 +32,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   await sql`UPDATE som.scenes SET paused_at = NULL, paused_by = NULL, updated_at = now() WHERE id = ${id}`;
   if (scene.status === 'active') await resumeTimers(id, scene.paused_at, scene.checkin_minutes);
   await restoreArrival(id);
-  notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M', body: `${name} resumed the scene.`, url, tag: `pause-${id}` });
+  notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} resumed the scene.`, url, tag: `pause-${id}` });
   return json({ paused: false });
 }

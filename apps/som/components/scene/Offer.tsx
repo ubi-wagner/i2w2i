@@ -5,10 +5,11 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { proofText } from '@/lib/menu';
 import { cleanPlan, emptyPlan, pacingFor, type Plan } from '@/lib/plan';
-import { CAPACITIES, startState, type Capacity } from '@/lib/rules';
+import { CAPACITIES, startState, type Capacity, type Role } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ErrorText, Sheet } from '../ui';
 import { KIND_ICON } from './parts';
+import { RoleplayCard } from './Roleplay';
 import { mmss, useCountdown, type SceneData, type SceneRow } from './useScene';
 
 // An offered scene is a window of the lead's time: a day, from, until. The
@@ -49,8 +50,8 @@ export const CAPACITY: Record<Capacity, { label: string; hint: string }> = {
   full: { label: 'Full', hint: 'as much as you like' },
 };
 
-/** The follow's answer: how much they can take on, and a note. */
-export interface Reply { capacity: Capacity; note: string }
+/** An answer to an offer: how much the follow can take on (the follow's answer only), and a note. */
+export interface Reply { capacity: Capacity | null; note: string }
 
 /** The follow's answer to this offer, decrypted (null if there isn't one). */
 export function useReply(scene: SceneRow): Reply | null {
@@ -59,13 +60,14 @@ export function useReply(scene: SceneRow): Reply | null {
   useEffect(() => {
     if (!scene.reply_enc) return setReply(null);
     void pod.open<Reply>(scene.reply_enc, `reply:${scene.id}`)
-      .then((r) => setReply({ capacity: CAPACITIES.includes(r.capacity) ? r.capacity : 'normal', note: typeof r.note === 'string' ? r.note : '' }))
+      .then((r) => setReply({ capacity: r.capacity && CAPACITIES.includes(r.capacity) ? r.capacity : null, note: typeof r.note === 'string' ? r.note : '' }))
       .catch(() => setReply(null));
   }, [scene.reply_enc, scene.id, pod]);
   return reply;
 }
 
 export function CapacityLine({ reply }: { reply: Reply }) {
+  if (!reply.capacity) return null;
   return <p><span className="font-medium">Capacity: {CAPACITY[reply.capacity].label}</span> <span className="text-ink-soft">({CAPACITY[reply.capacity].hint})</span></p>;
 }
 
@@ -190,39 +192,90 @@ export function OfferForm({ initial, submit, onSubmit, noteLabel = 'A note (opti
   );
 }
 
-/** The lead offers a window: a new scene, sent to the follow to answer. */
+/**
+ * Offering (or asking for) a scene: who leads (choosing your partner when
+ * you usually lead, or yourself when you usually follow, is a switch), what
+ * kind (tasks to build, or one of your roleplays), and when. The other one
+ * answers it.
+ */
 export function NewOffer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pod = usePod();
   const router = useRouter();
+  const partner = pod.members.find((m) => m.account_id !== pod.account.id);
+  const them = partner?.display_name ?? 'Them';
+  const [leader, setLeader] = useState<'me' | 'them'>(pod.role === 'lead' ? 'me' : 'them');
+  const [kind, setKind] = useState<'tasks' | 'roleplay'>('tasks');
+  const [rpId, setRpId] = useState<string | null>(null);
+  const leaderRole: Role = leader === 'me' ? pod.role : (partner?.role ?? (pod.role === 'lead' ? 'follow' : 'lead'));
+  const switched = leaderRole === 'follow';
+  const choices = pod.menu.roleplays.filter((r) => r.leads === leaderRole);
+  const groups = [...new Set(choices.map((r) => r.group))];
+  const rp = kind === 'roleplay' ? choices.find((r) => r.id === rpId) ?? null : null;
   return (
-    <Sheet open={open} onClose={onClose} title={`Offer ${pod.title('follow')} a scene`}>
-      <p className="mb-4 text-sm text-ink-soft">When you’re {pod.title('follow')}’s. They accept, or ask for another time or a lighter load.</p>
-      <OfferForm
-        submit="Send the offer"
-        noteLabel={`A note for ${pod.title('follow')} (optional)`}
-        onSubmit={async ({ start, end, note }) => {
-          const id = crypto.randomUUID();
-          const plan: Plan = cleanPlan({ ...emptyPlan(pod.menu), pacing: pacingFor(pod.menu, hoursOf(start, end))?.id ?? null, note });
-          await api(`/api/pods/${pod.pod.id}/scenes`, { body: { id, planEnc: await pod.seal(plan, `plan:${id}`) } });
-          try {
-            await api(`/api/scenes/${id}/action`, { body: { action: 'offer', startsAt: start.toISOString(), endsAt: end.toISOString() } });
-          } catch (err) {
-            // Not offered (that time is taken, say): don't leave a stray draft.
-            await api(`/api/scenes/${id}/delete`, { body: { agree: true } }).catch(() => {});
-            throw err;
-          }
-          router.push(`/scene/${id}`);
-        }}
-      />
+    <Sheet open={open} onClose={onClose} title={`Plan a scene with ${them}`}>
+      <div className="space-y-5">
+        <section className="space-y-2">
+          <span className="label">Who leads?</span>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" className="chip justify-center" aria-pressed={leader === 'me'} onClick={() => setLeader('me')}>I lead</button>
+            <button type="button" className="chip justify-center" aria-pressed={leader === 'them'} onClick={() => setLeader('them')}>{them} leads</button>
+          </div>
+          {switched && <p className="text-sm font-medium text-follow-dark">⇄ A switch: {leader === 'me' ? 'you lead' : `${them} leads`} this one.</p>}
+        </section>
+        <section className="space-y-2">
+          <span className="label">What kind?</span>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" className="chip justify-center" aria-pressed={kind === 'tasks'} onClick={() => setKind('tasks')}>Tasks</button>
+            <button type="button" className="chip justify-center" aria-pressed={kind === 'roleplay'} onClick={() => setKind('roleplay')}>🎭 A roleplay</button>
+          </div>
+          {kind === 'tasks' && <p className="text-sm text-ink-soft">{leader === 'me' ? 'You build it once it’s agreed.' : `${them} builds it once it’s agreed.`}</p>}
+          {kind === 'roleplay' && !choices.length && (
+            <p className="text-sm text-ink-soft">No roleplays where {leader === 'me' ? 'you lead' : `${them} leads`} yet. Add some on the Menu page.</p>
+          )}
+          {kind === 'roleplay' && groups.map((g) => (
+            <div key={g} className="space-y-2" role="radiogroup" aria-label={g || 'Roleplays'}>
+              {g && <p className="eyebrow text-follow">{g}</p>}
+              {choices.filter((r) => r.group === g).map((r) => (
+                <button key={r.id} type="button" role="radio" aria-checked={rpId === r.id} aria-pressed={rpId === r.id} className="chip w-full flex-col items-start gap-0.5 text-left" onClick={() => setRpId(r.id)}>
+                  <span className="font-medium">{r.title}</span>
+                  {(r.location || r.intensity) && <span className="text-xs font-normal text-ink-soft">{[r.location, r.intensity].filter(Boolean).join(' · ')}</span>}
+                </button>
+              ))}
+            </div>
+          ))}
+        </section>
+        <OfferForm
+          submit={leader === 'me' ? 'Send the offer' : 'Send the request'}
+          noteLabel={`A note for ${them} (optional)`}
+          onSubmit={async ({ start, end, note }) => {
+            if (kind === 'roleplay' && !rp) throw new Error('Pick a roleplay.');
+            const id = crypto.randomUUID();
+            const plan: Plan = cleanPlan({ ...emptyPlan(pod.menu), pacing: pacingFor(pod.menu, hoursOf(start, end))?.id ?? null, note, roleplay: rp });
+            await api(`/api/pods/${pod.pod.id}/scenes`, { body: { id, planEnc: await pod.seal(plan, `plan:${id}`) } });
+            try {
+              await api(`/api/scenes/${id}/action`, { body: { action: 'offer', startsAt: start.toISOString(), endsAt: end.toISOString(), switched } });
+            } catch (err) {
+              // Not offered (that time is taken, say): don't leave a stray draft.
+              await api(`/api/scenes/${id}/delete`, { body: { agree: true } }).catch(() => {});
+              throw err;
+            }
+            router.push(`/scene/${id}`);
+          }}
+        />
+      </div>
     </Sheet>
   );
 }
 
-/** An offer on the table: the follow accepts or asks for a change; the lead agrees, re-offers or takes it back. */
+/** An offer (or request) on the table: the other one accepts, asks for a change or says no; whoever made it agrees, changes it or takes it back. */
 export function OfferView({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
   const pod = usePod();
   const { scene, role, plan } = data;
-  const lead = role === 'lead';
+  const mine = scene.offered_by === pod.account.id;
+  const other = pod.members.find((m) => m.account_id !== pod.account.id);
+  const otherName = other ? pod.nameOf(other.account_id) : 'your partner';
+  const offererRole: Role = mine ? role : role === 'lead' ? 'follow' : 'lead';
+  const request = offererRole === 'follow';
   const cr = scene.change_request;
   const reply = useReply(scene);
   const ends = useCountdown(scene.ends_at, data.skew);
@@ -230,7 +283,11 @@ export function OfferView({ data, reload }: { data: SceneData; reload: () => Pro
   const [capacity, setCapacity] = useState<Capacity | null>(null);
   const [sheet, setSheet] = useState<'change' | 'reoffer' | null>(null);
   const [error, setError] = useState('');
+  // Only the one who follows says how much they can take on.
+  const askCapacity = !mine && role === 'follow';
   const cap = capacity ?? reply?.capacity ?? 'normal';
+  // A roleplay accepted by its lead needs no building: it's on.
+  const acceptSends = !mine && role === 'lead' && Boolean(plan.roleplay);
   const seal = async (r: Reply) => pod.seal(r, `reply:${scene.id}`);
 
   async function act(action: string, extra: Record<string, unknown> = {}) {
@@ -243,21 +300,28 @@ export function OfferView({ data, reload }: { data: SceneData; reload: () => Pro
       setError((err as Error).message);
     }
   }
+  async function accept() {
+    if (acceptSends) return act('accept_send', { tasks: [], checkinMinutes: null });
+    return act('accept', askCapacity ? { replyEnc: await seal({ capacity: cap, note: '' }) } : {});
+  }
 
   return (
     <div className="space-y-5">
       <section className="card space-y-2 border-lead/40 bg-lead-light">
-        <p className="eyebrow text-lead">{lead ? 'Your offer' : `${pod.title('lead')} offers you a scene`}</p>
+        <p className="eyebrow text-lead">
+          {mine ? (request ? 'Your request' : 'Your offer') : `${scene.offered_by ? pod.nameOf(scene.offered_by) : otherName} ${request ? 'asks you for a scene' : 'offers you a scene'}`}
+        </p>
         <p className="font-display text-2xl text-lead-dark">{when(scene.starts_at, scene.ends_at)}</p>
-        <p className="text-sm text-lead-dark">{lengthText(scene.starts_at, scene.ends_at)}</p>
+        <p className="text-sm text-lead-dark">{lengthText(scene.starts_at, scene.ends_at)} · {role === 'lead' ? 'you lead' : `${pod.title('lead')} leads`}</p>
         {plan.note && <p className="whitespace-pre-wrap">“{plan.note}”</p>}
       </section>
+      {plan.roleplay && <RoleplayCard rp={plan.roleplay} />}
 
-      {passed && <p className="card border-warn/40 bg-warn-light">This time has passed.{lead ? ' Offer a new one, or take it back.' : ` ${pod.title('lead')} can offer a new one.`}</p>}
+      {passed && <p className="card border-warn/40 bg-warn-light">This time has passed.{mine ? ' Offer a new one, or take it back.' : ` ${otherName} can offer a new one.`}</p>}
 
       {cr && (
         <section className="card space-y-2 border-follow/50 bg-follow-light" aria-label="Change asked for">
-          <p className="eyebrow text-follow-dark">{lead ? `${pod.title('follow')} asks for a change` : 'You asked for'}</p>
+          <p className="eyebrow text-follow-dark">{mine ? `${otherName} asks for a change` : 'You asked for'}</p>
           <p className="font-display text-xl">{cr.startsAt ? when(cr.startsAt, cr.endsAt) : 'The same time'}</p>
           {cr.startsAt && <p className="text-sm">{lengthText(cr.startsAt, cr.endsAt)}</p>}
           {reply && <CapacityLine reply={reply} />}
@@ -266,40 +330,43 @@ export function OfferView({ data, reload }: { data: SceneData; reload: () => Pro
       )}
 
       <ErrorText>{error}</ErrorText>
-      {lead ? (
+      {mine ? (
         <div className="grid gap-2">
           {cr && !passed && <button type="button" className="btn" onClick={() => act('agree_change')}>Agree to the change</button>}
-          {!cr && !passed && <p className="text-sm text-ink-soft">Waiting for {pod.title('follow')} to accept or ask for a change.</p>}
-          <button type="button" className={passed ? 'btn' : 'btn-quiet'} onClick={() => setSheet('reoffer')}>{cr ? 'Offer a different time' : passed ? 'Offer a new time' : 'Change the offer'}</button>
-          <button type="button" className="btn-quiet" onClick={() => { if (confirm('Take back this offer?')) void act('cancel'); }}>Take it back</button>
+          {!cr && !passed && <p className="text-sm text-ink-soft">Waiting for {otherName} to answer.</p>}
+          <button type="button" className={passed ? 'btn' : 'btn-quiet'} onClick={() => setSheet('reoffer')}>{cr ? 'Offer a different time' : passed ? 'Offer a new time' : 'Change the time'}</button>
+          <button type="button" className="btn-quiet" onClick={() => { if (confirm('Take this back?')) void act('cancel'); }}>Take it back</button>
         </div>
       ) : !passed && (
         <div className="space-y-3">
-          <div>
-            <span className="label">How much can you take on that day?</span>
-            <CapacityPicker value={cap} onChange={setCapacity} />
-          </div>
+          {askCapacity && (
+            <div>
+              <span className="label">How much can you take on that day?</span>
+              <CapacityPicker value={cap} onChange={setCapacity} />
+            </div>
+          )}
           <div className="grid gap-2">
-            <button type="button" className="btn-follow" onClick={async () => act('accept', { replyEnc: await seal({ capacity: cap, note: '' }) })}>Accept</button>
+            <button type="button" className={role === 'follow' ? 'btn-follow' : 'btn'} onClick={accept}>{acceptSends ? 'Accept: it’s on' : 'Accept'}</button>
             <button type="button" className="btn-quiet" onClick={() => setSheet('change')}>{cr ? 'Ask for something else' : 'Ask for a change'}</button>
+            <button type="button" className="btn-quiet" onClick={() => { if (confirm('Say no to this one? It goes back to them.')) void act('decline'); }}>Not this time</button>
           </div>
         </div>
       )}
 
       <Sheet open={sheet === 'change'} onClose={() => setSheet(null)} title="Ask for a change">
-        <ChangeForm data={data} capacity={cap} onSubmit={async ({ window, capacity: c, note }) => {
+        <ChangeForm data={data} capacity={askCapacity ? cap : null} onSubmit={async ({ window, capacity: c, note }) => {
           await api(`/api/scenes/${scene.id}/action`, {
-            body: { action: 'request_change', startsAt: window?.start.toISOString() ?? null, endsAt: window?.end.toISOString() ?? null, replyEnc: await seal({ capacity: c, note }) },
+            body: { action: 'request_change', startsAt: window?.start.toISOString() ?? null, endsAt: window?.end.toISOString() ?? null, replyEnc: c || note ? await seal({ capacity: c, note }) : null },
           });
           setSheet(null);
           await reload();
         }} />
       </Sheet>
-      <Sheet open={sheet === 'reoffer'} onClose={() => setSheet(null)} title="Change the offer">
+      <Sheet open={sheet === 'reoffer'} onClose={() => setSheet(null)} title="Change the time">
         <OfferForm
           initial={{ startsAt: cr?.startsAt ?? scene.starts_at, endsAt: cr?.endsAt ?? scene.ends_at }}
-          submit="Send the new offer"
-          noteLabel={`A note for ${pod.title('follow')} (optional)`}
+          submit="Send the new time"
+          noteLabel={`A note for ${otherName} (optional)`}
           onSubmit={async ({ start, end, note }) => {
             const next = cleanPlan({ ...plan, pacing: pacingFor(pod.menu, hoursOf(start, end))?.id ?? plan.pacing, note: note || plan.note });
             await api(`/api/scenes/${scene.id}/action`, { body: { action: 'offer', startsAt: start.toISOString(), endsAt: end.toISOString(), planEnc: await pod.seal(next, `plan:${scene.id}`) } });
@@ -312,16 +379,17 @@ export function OfferView({ data, reload }: { data: SceneData; reload: () => Pro
   );
 }
 
-/** The follow's change: another time (or the same), how much they can take on, and why. */
+/** Asking for a change: another time (or the same), how much the follow can take on (when it's them asking), and why. */
 function ChangeForm({ data, capacity, onSubmit }: {
   data: SceneData;
-  capacity: Capacity;
-  onSubmit: (v: { window: { start: Date; end: Date } | null; capacity: Capacity; note: string }) => Promise<void>;
+  capacity: Capacity | null;
+  onSubmit: (v: { window: { start: Date; end: Date } | null; capacity: Capacity | null; note: string }) => Promise<void>;
 }) {
   const pod = usePod();
   const { scene } = data;
+  const other = pod.members.find((m) => m.account_id !== pod.account.id);
   const [value, setValue] = useState(() => windowValue(scene.change_request?.startsAt ?? scene.starts_at, scene.change_request?.endsAt ?? scene.ends_at));
-  const [cap, setCap] = useState<Capacity>(capacity);
+  const [cap, setCap] = useState<Capacity | null>(capacity);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -331,6 +399,7 @@ function ChangeForm({ data, capacity, onSubmit }: {
     if (!w) return setError('Pick a day and a time.');
     const same = scene.starts_at && scene.ends_at && w.start.getTime() === new Date(scene.starts_at).getTime() && w.end.getTime() === new Date(scene.ends_at).getTime();
     if (!same && w.end.getTime() <= Date.now()) return setError('That time has already passed.');
+    if (same && !cap && !note.trim()) return setError('Pick another time, or say what you’d like.');
     setBusy(true);
     try {
       await onSubmit({ window: same ? null : w, capacity: cap, note: note.trim() });
@@ -345,16 +414,18 @@ function ChangeForm({ data, capacity, onSubmit }: {
         <p className="eyebrow text-follow">When works</p>
         <WindowPicker value={value} onChange={setValue} />
       </section>
-      <section className="space-y-2">
-        <p className="eyebrow text-follow">How much you can take on</p>
-        <CapacityPicker value={cap} onChange={setCap} />
-      </section>
+      {cap && (
+        <section className="space-y-2">
+          <p className="eyebrow text-follow">How much you can take on</p>
+          <CapacityPicker value={cap} onChange={setCap} />
+        </section>
+      )}
       <div>
         <label className="label" htmlFor="change-note">Why, or what would work (optional)</label>
         <textarea id="change-note" className="input" rows={2} value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} />
       </div>
       <ErrorText>{error}</ErrorText>
-      <button type="button" className="btn-follow w-full" disabled={busy} onClick={go}>Send to {pod.title('lead')}</button>
+      <button type="button" className="btn-follow w-full" disabled={busy} onClick={go}>Send to {other ? pod.nameOf(other.account_id) : 'them'}</button>
     </div>
   );
 }
@@ -364,12 +435,15 @@ export function BeingBuilt({ data }: { data: SceneData }) {
   const pod = usePod();
   const reply = useReply(data.scene);
   return (
-    <section className="card space-y-2 border-lead/40 bg-lead-light">
-      <p className="eyebrow text-lead">Accepted</p>
-      <p className="font-display text-2xl text-lead-dark">{when(data.scene.starts_at, data.scene.ends_at)}</p>
-      {reply && <CapacityLine reply={reply} />}
-      <p>{pod.title('lead')} is building your scene. You’ll hear when it’s sent.</p>
-    </section>
+    <div className="space-y-5">
+      <section className="card space-y-2 border-lead/40 bg-lead-light">
+        <p className="eyebrow text-lead">Accepted</p>
+        <p className="font-display text-2xl text-lead-dark">{when(data.scene.starts_at, data.scene.ends_at)}</p>
+        {reply && <CapacityLine reply={reply} />}
+        <p>{pod.title('lead')} is building your scene. You’ll hear when it’s sent.</p>
+      </section>
+      {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} />}
+    </div>
   );
 }
 
@@ -406,7 +480,7 @@ export function ReadyView({ data, reload, onOpen }: { data: SceneData; reload: (
   return (
     <div className="space-y-5">
       <section className="card space-y-2 border-lead/40 bg-lead-light text-center">
-        <p className="eyebrow text-lead">{role === 'lead' ? 'Sent' : `From ${pod.title('lead')}`}</p>
+        <p className="eyebrow text-lead">{data.plan.roleplay ? 'It’s on' : role === 'lead' ? 'Sent' : `From ${pod.title('lead')}`}</p>
         <p className="font-display text-2xl text-lead-dark">{when(scene.starts_at, scene.ends_at)}</p>
         {left !== null && left > 0 && <p className="text-lead-dark" role="timer">Starts in {until(left)}</p>}
         {state === 'ok' && left !== null && left <= 0 && <p className="font-semibold text-lead-dark">It’s time.</p>}
@@ -414,7 +488,8 @@ export function ReadyView({ data, reload, onOpen }: { data: SceneData; reload: (
         {reply && <CapacityLine reply={reply} />}
       </section>
       {data.plan.note && <p className="card whitespace-pre-wrap">“{data.plan.note}”</p>}
-      <section className="card space-y-1" aria-label="The tasks">
+      {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} />}
+      {(tasks.length > 0 || !data.plan.roleplay) && <section className="card space-y-1" aria-label="The tasks">
         <p className="eyebrow text-follow">{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}</p>
         <ul className="divide-y divide-line">
           {tasks.map((t) => (
@@ -429,17 +504,17 @@ export function ReadyView({ data, reload, onOpen }: { data: SceneData; reload: (
             </li>
           ))}
         </ul>
-      </section>
+      </section>}
       <ErrorText>{error}</ErrorText>
       <div className="grid gap-2">
-        {role === 'follow' && state !== 'over' && (
+        {(role === 'follow' || data.plan.roleplay) && state !== 'over' && (
           <>
             <button type="button" className="btn-follow min-h-14 text-lg" disabled={busy || state === 'early'} onClick={() => act('start')}>Start the scene</button>
             {state === 'early' && <p className="text-center text-sm text-ink-soft">You can start from {opensAt}.</p>}
           </>
         )}
         {role === 'follow' && state === 'over' && <p className="text-center text-sm text-ink-soft">{pod.title('lead')} can offer a new time.</p>}
-        {role === 'lead' && state !== 'over' && <p className="text-center text-sm text-ink-soft">{pod.title('follow')} starts it; you’ll hear when.</p>}
+        {role === 'lead' && state !== 'over' && !data.plan.roleplay && <p className="text-center text-sm text-ink-soft">{pod.title('follow')} starts it; you’ll hear when.</p>}
         {role === 'lead' && <button type="button" className={state === 'over' ? 'btn' : 'btn-quiet'} disabled={busy} onClick={() => act('unsend')}>{state === 'over' ? 'Take it back to offer a new time' : 'Take it back to change it'}</button>}
       </div>
     </div>

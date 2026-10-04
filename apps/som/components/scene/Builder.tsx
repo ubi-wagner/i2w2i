@@ -10,6 +10,8 @@ import { usePod } from '../Pod';
 import { ProofEditor } from '../ProofEditor';
 import { ErrorText, Sheet } from '../ui';
 import { CapacityLine, hoursOf, lengthText, OfferForm, useReply, when } from './Offer';
+import { RoleplayCard } from './Roleplay';
+import { LimitsNote } from '../Profiles';
 import type { SceneData } from './useScene';
 
 const BUILD_KINDS: SectionKind[] = ['presentation', 'domain', 'errands', 'tasks', 'play', 'arrival'];
@@ -98,7 +100,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
   // Once agreed, it starts on the pacing for the window and how much the
   // follow can take on (until anything is picked; then it's the lead's call).
   const reply = useReply(scene);
-  const suggested = scene.status === 'accepted' && scene.starts_at ? pacingFor(pod.menu, hoursOf(scene.starts_at, scene.ends_at), reply?.capacity) : null;
+  const suggested = scene.status === 'accepted' && scene.starts_at ? pacingFor(pod.menu, hoursOf(scene.starts_at, scene.ends_at), reply?.capacity ?? undefined) : null;
   useEffect(() => {
     if (suggested && !Object.keys(planRef.current.picks).length && planRef.current.pacing !== suggested.id) edit((x) => setPace(x, suggested));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,7 +143,9 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
   const canWithdraw = sceneTransition(scene.status, 'withdraw', role);
   const canStart = sceneTransition(scene.status, 'start', role);
   const canSend = sceneTransition(scene.status, 'send', role);
-  const canOffer = (scene.status === 'draft' || scene.status === 'accepted') && sceneTransition(scene.status, 'offer', role);
+  const canOffer = (scene.status === 'draft' || scene.status === 'accepted') && sceneTransition(scene.status, 'offer', role, scene.offered_by === pod.account.id);
+  // A roleplay can go with no tasks at all.
+  const sendable = tasks.length > 0 || Boolean(plan.roleplay);
 
   return (
     <div className="space-y-5">
@@ -155,6 +159,8 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
           <p className="pt-1 text-sm">Pick what you’d like to fit (or let it fill itself in), then send it. {pod.title('follow')} starts it.</p>
         </div>
       )}
+      {plan.roleplay && <RoleplayCard rp={plan.roleplay} />}
+      {role === 'lead' && <LimitsNote accountId={data.members.find((m) => m.role === 'follow')?.account_id} name={pod.title('follow')} />}
       {scene.status === 'proposed' && (
         <div className="card border-follow/40 bg-follow-light text-sm">
           {role === 'lead' ? `${pod.nameOf(scene.created_by)} sent you this scene. Change anything you like, then start it.` : `Sent to ${pod.title('lead')}. ${pod.title('lead')} can adjust it and start it.`}
@@ -225,14 +231,14 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
           {canPropose && <button type="button" className="btn-follow" disabled={!tasks.length} onClick={() => act('propose')}>Send to {pod.title('lead')}</button>}
           {canOffer && <button type="button" className="btn-quiet" onClick={() => setOffering(true)}>{scene.status === 'accepted' ? 'Change the time' : 'Offer a time'}</button>}
           {canStart && <button type="button" className="btn" disabled={!tasks.length} onClick={() => setConfirm('start')}>Start now</button>}
-          {canSend && <button type="button" className="btn" disabled={!tasks.length} onClick={() => setConfirm('send')}>Send to {pod.title('follow')}</button>}
+          {canSend && <button type="button" className="btn" disabled={!sendable} onClick={() => setConfirm('send')}>Send to {pod.title('follow')}</button>}
         </span>
       </div>
 
       <Sheet open={confirming !== null} onClose={() => setConfirm(null)} title={confirming === 'send' ? `Send to ${pod.title('follow')}?` : 'Start the scene?'}>
         <div className="space-y-4">
           <p>
-            {pod.title('follow')} gets these {tasks.length} tasks{plan.checkinMinutes ? `, with a check-in every ${plan.checkinMinutes} minutes` : ''}
+            {plan.roleplay && !tasks.length ? `It’s on: ${plan.roleplay.title}` : `${pod.title('follow')} gets these ${tasks.length} tasks`}{plan.checkinMinutes ? `, with a check-in every ${plan.checkinMinutes} minutes` : ''}
             {confirming === 'send' && scene.starts_at ? `, to start ${when(scene.starts_at, null)}` : ''}:
           </p>
           <ol className="list-decimal space-y-1 pl-5 text-sm">

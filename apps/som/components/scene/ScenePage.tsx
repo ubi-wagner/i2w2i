@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { STATUS_LABEL } from '../Home';
-import { usePod } from '../Pod';
+import { SceneRoles, usePod } from '../Pod';
 import { clock, ErrorText, Sheet, Spinner } from '../ui';
 import { Builder } from './Builder';
 import { BeingBuilt, OfferView, ReadyView } from './Offer';
@@ -16,7 +16,6 @@ import { Aftercare, Inspection, Record } from './Wrapup';
 
 /** One scene, whatever stage it's at. */
 export function ScenePage({ id }: { id: string }) {
-  const pod = usePod();
   const { data, error, reload } = useScene(id);
   const [taskId, setTaskId] = useState<string | null>(null);
 
@@ -56,16 +55,9 @@ export function ScenePage({ id }: { id: string }) {
   };
 
   return (
+    <SceneRoles switched={scene.switched}>
     <div className="space-y-5">
-      <header className="space-y-1">
-        <Link href="/" className="text-sm text-ink-soft">← Scenes</Link>
-        <div className="flex items-start justify-between gap-3">
-          <h1 className="font-display text-3xl text-lead-dark">{data.plan.title || (scene.starts_at ? `A scene from ${pod.title('lead')}` : 'Untitled scene')}</h1>
-          <span className={`mt-2 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${scene.paused_at ? 'bg-stop text-white' : 'bg-lead-light text-lead-dark'}`}>
-            {scene.paused_at ? 'Paused' : STATUS_LABEL[scene.status]}
-          </span>
-        </div>
-      </header>
+      <SceneHeader data={data} />
 
       {error && <p className="text-sm text-warn" role="status">Offline? Showing what was last loaded.</p>}
       <PausedBanner data={data} reload={reload} />
@@ -88,6 +80,29 @@ export function ScenePage({ id }: { id: string }) {
         {task && <TaskSheet task={task} data={data} reload={reload} />}
       </Sheet>
     </div>
+    </SceneRoles>
+  );
+}
+
+/** A scene's name: its own, its roleplay's, or whose it is. */
+export function sceneName(plan: SceneData['plan'], scene: SceneData['scene'], nameOf: (id: string) => string): string {
+  return plan.title || plan.roleplay?.title || (scene.offered_by ? `A scene from ${nameOf(scene.offered_by)}` : 'Untitled scene');
+}
+
+function SceneHeader({ data }: { data: SceneData }) {
+  const pod = usePod();
+  const { scene } = data;
+  return (
+    <header className="space-y-1">
+      <Link href="/" className="text-sm text-ink-soft">← Scenes</Link>
+      <div className="flex items-start justify-between gap-3">
+        <h1 className="font-display text-3xl text-lead-dark">{sceneName(data.plan, scene, pod.nameOf)}</h1>
+        <span className={`mt-2 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${scene.paused_at ? 'bg-stop text-white' : 'bg-lead-light text-lead-dark'}`}>
+          {scene.paused_at ? 'Paused' : STATUS_LABEL[scene.status]}
+        </span>
+      </div>
+      {scene.switched && <p className="text-sm font-medium text-follow-dark">⇄ Switched: {pod.title('lead')} leads, {pod.title('follow')} follows</p>}
+    </header>
   );
 }
 

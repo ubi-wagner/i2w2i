@@ -1,12 +1,12 @@
 'use client';
 
-import type { MenuSection, Proof } from '../menu';
+import type { MenuSection, Proof, RateSection } from '../menu';
 import { api } from './api';
 
 export interface DemandIdea { group: string; label: string; param?: string; needs: Proof[]; minutes?: number }
-export interface BuiltIns { sections: MenuSection[]; demands: DemandIdea[] }
+export interface BuiltIns { sections: MenuSection[]; demands: DemandIdea[]; inventory: RateSection[] }
 
-// The built-in ideas and demands come from the server (pod members only), once per visit.
+// The built-in ideas, demands and things to rate come from the server (pod members only), once per visit.
 let loading: Promise<BuiltIns> | null = null;
 export function loadIdeas(): Promise<BuiltIns> {
   loading ??= api<BuiltIns>('/api/ideas').catch((err) => {

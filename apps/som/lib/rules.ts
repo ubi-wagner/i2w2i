@@ -4,16 +4,20 @@
 //
 // Two ways into a scene:
 //   the follow drafts it → proposes → the lead starts it now;
-//   the lead offers a window of their time (a day, from, until) → the follow
-//   accepts, or asks for a change by schedule or capacity → the lead builds
-//   it to fit and sends it → the follow starts it in the window.
+//   either of you offers (or asks for) a window of time (a day, from, until)
+//   → the other accepts, asks for a change (schedule or capacity) or says
+//   not this time → the lead builds it to fit and sends it (a roleplay the
+//   lead accepts is sent as they accept) → it's started in its window.
+//
+// A scene can be switched: the one who usually follows leads it. Roles here
+// are the roles in the scene (see sceneRole).
 
 export type Role = 'lead' | 'follow';
 export type SceneStatus = 'draft' | 'offered' | 'accepted' | 'proposed' | 'ready' | 'active' | 'inspection' | 'aftercare' | 'closed';
 export type TaskStatus = 'todo' | 'started' | 'submitted' | 'returned' | 'approved' | 'skipped';
 export type SceneAction =
   | 'edit' | 'propose' | 'withdraw' | 'start' | 'inspect' | 'aftercare' | 'close'
-  | 'offer' | 'accept' | 'request_change' | 'agree_change' | 'cancel' | 'send' | 'unsend';
+  | 'offer' | 'accept' | 'accept_send' | 'request_change' | 'decline' | 'agree_change' | 'cancel' | 'send' | 'unsend';
 export type TaskAction = 'start' | 'submit' | 'approve' | 'return' | 'skip' | 'reopen';
 
 export const SCENE_STATUSES: SceneStatus[] = ['draft', 'offered', 'accepted', 'proposed', 'ready', 'active', 'inspection', 'aftercare', 'closed'];
@@ -21,8 +25,17 @@ export const SCENE_STATUSES: SceneStatus[] = ['draft', 'offered', 'accepted', 'p
 /** Statuses before anything runs (nothing to pause, no tasks yet except when ready). */
 export const BEFORE_START: SceneStatus[] = ['draft', 'offered', 'accepted', 'proposed', 'ready'];
 
-/** The scene's next status for an action by this role, or null if it isn't allowed. */
-export function sceneTransition(status: SceneStatus, action: SceneAction, role: Role): SceneStatus | null {
+/** Someone's role in a scene: their role in the pod, the other way round if it's switched. */
+export function sceneRole(podRole: Role, switched: boolean): Role {
+  return switched ? (podRole === 'lead' ? 'follow' : 'lead') : podRole;
+}
+
+/**
+ * The scene's next status for an action by this role (in the scene), or
+ * null if it isn't allowed. `offerer`: whether they made the offer on the
+ * table (the other one answers it).
+ */
+export function sceneTransition(status: SceneStatus, action: SceneAction, role: Role, offerer = false): SceneStatus | null {
   const lead = role === 'lead';
   switch (action) {
     case 'edit':
@@ -31,15 +44,20 @@ export function sceneTransition(status: SceneStatus, action: SceneAction, role: 
       return status === 'draft' && !lead ? 'proposed' : null;
     case 'withdraw':
       return status === 'proposed' && !lead ? 'draft' : null;
-    case 'offer': // a new offer, or a different window
-      return lead && (status === 'draft' || status === 'offered' || status === 'accepted') ? 'offered' : null;
+    case 'offer': // a new offer by either of you, or the offerer's different window
+      return status === 'draft' || ((status === 'offered' || status === 'accepted') && offerer) ? 'offered' : null;
     case 'accept':
-    case 'agree_change':
-      return status === 'offered' && (action === 'accept' ? !lead : lead) ? 'accepted' : null;
+      return status === 'offered' && !offerer ? 'accepted' : null;
+    case 'accept_send': // the lead accepts a scene that needs no building (a roleplay)
+      return status === 'offered' && !offerer && lead ? 'ready' : null;
     case 'request_change':
-      return status === 'offered' && !lead ? 'offered' : null;
+      return status === 'offered' && !offerer ? 'offered' : null;
+    case 'decline':
+      return status === 'offered' && !offerer ? 'draft' : null;
+    case 'agree_change':
+      return status === 'offered' && offerer ? 'accepted' : null;
     case 'cancel':
-      return lead && (status === 'offered' || status === 'accepted') ? 'draft' : null;
+      return offerer && (status === 'offered' || status === 'accepted') ? 'draft' : null;
     case 'send':
       return lead && status === 'accepted' ? 'ready' : null;
     case 'unsend':
@@ -49,8 +67,8 @@ export function sceneTransition(status: SceneStatus, action: SceneAction, role: 
       return ((status === 'draft' || status === 'proposed') && lead) || status === 'ready' ? 'active' : null;
     case 'inspect':
       return status === 'active' && lead ? 'inspection' : null;
-    case 'aftercare':
-      return status === 'inspection' && lead ? 'aftercare' : null;
+    case 'aftercare': // after the inspection, or straight from the scene (no scorecard)
+      return (status === 'inspection' || status === 'active') && lead ? 'aftercare' : null;
     case 'close':
       return status === 'aftercare' ? 'closed' : null;
   }

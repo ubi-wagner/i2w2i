@@ -1,6 +1,6 @@
 import 'server-only';
 import { sql } from './db';
-import { nameOf, podMembers } from './pods';
+import { nameOf, sceneMembers } from './pods';
 import { notify } from './push';
 
 // Reminders for a running scene: check-ins, missed check-ins, countdowns and
@@ -77,10 +77,10 @@ export async function restoreArrival(sceneId: string): Promise<void> {
 interface Fired { id: string; scene_id: string; kind: Kind; task_id: string | null; fire_at: Date }
 
 async function fire(t: Fired): Promise<void> {
-  const [scene] = await sql<{ pod_id: string; status: string; paused_at: Date | null; checkin_grace: number; checkin_minutes: number | null }[]>`
-    SELECT pod_id, status, paused_at, checkin_grace, checkin_minutes FROM som.scenes WHERE id = ${t.scene_id}`;
+  const [scene] = await sql<{ pod_id: string; switched: boolean; status: string; paused_at: Date | null; checkin_grace: number; checkin_minutes: number | null }[]>`
+    SELECT pod_id, switched, status, paused_at, checkin_grace, checkin_minutes FROM som.scenes WHERE id = ${t.scene_id}`;
   if (!scene || scene.paused_at || scene.status === 'closed') return;
-  const members = await podMembers(scene.pod_id);
+  const members = await sceneMembers(scene);
   const leads = members.filter((m) => m.role === 'lead').map((m) => m.account_id);
   const follows = members.filter((m) => m.role === 'follow').map((m) => m.account_id);
   const url = `/scene/${t.scene_id}`;

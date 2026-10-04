@@ -26,7 +26,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const name = await nameOf(me.id);
   if (!agree || !allAgreed(votes, members)) {
     await sql`UPDATE som.scenes SET delete_votes = ${votes} WHERE id = ${id}`;
-    if (agree) notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M', body: `${name} would like to delete a scene. It goes once you agree too.`, url: `/scene/${id}`, tag: `delete-${id}` });
+    if (agree) notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} would like to delete a scene. It goes once you agree too.`, url: `/scene/${id}`, tag: `delete-${id}` });
     return json({ deleted: false, votes });
   }
   const media = await sql<{ object_key: string; thumb_key: string | null; upload_id: string | null; status: string }[]>`
@@ -38,6 +38,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   await sql`DELETE FROM som.scenes WHERE id = ${id}`;
   await audit(me.id, 'scene.delete', id);
-  if (!solo) notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M', body: 'A scene was deleted, as you both agreed.', url: '/', tag: `delete-${id}` });
+  if (!solo) notifySoon(await others(scene, me.id), { title: 'S-O-M', body: 'A scene was deleted, as you both agreed.', url: '/', tag: `delete-${id}` });
   return json({ deleted: true });
 }

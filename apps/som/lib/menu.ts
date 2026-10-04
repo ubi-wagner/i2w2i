@@ -104,11 +104,33 @@ export interface Pacing {
   note: string;
 }
 
+/**
+ * A roleplay: who leads it (the pod's usual lead, or the usual follow, which
+ * switches the scene), where, what to wear, and how it goes.
+ */
+export interface Roleplay {
+  id: string;
+  title: string;
+  group: string;
+  leads: 'lead' | 'follow';
+  location: string;
+  intensity: string;
+  attire: string;
+  setup: string;
+  action: string;
+  aftercare: string;
+}
+
+/** The pod's own things to rate in profiles, beside the built-in ones. */
+export interface RateSection { id: string; title: string; items: { id: string; label: string }[] }
+
 export interface Menu {
   v: 1;
   name: string;
   tagline: string;
   titles: { lead: string; follow: string };
+  /** Titles in a switched scene (empty: your names). */
+  switchTitles: { lead: string; follow: string };
   pacing: Pacing[];
   rooms: string[];
   sections: MenuSection[];
@@ -118,6 +140,10 @@ export interface Menu {
    * building a scene.
    */
   library: MenuSection[];
+  roleplays: Roleplay[];
+  inventory: RateSection[];
+  /** Whether profiles list the built-in things to rate too. */
+  builtInInventory: boolean;
 }
 
 const LIMITS = { sections: 10, groups: 12, items: 60, rooms: 40, pacing: 8, text: 160, detail: 600, note: 600 } as const;
@@ -157,6 +183,36 @@ function cleanGroup(raw: unknown, maxItems: number = LIMITS.items): MenuGroup | 
   return { id: id(r.id), title: title || 'Untitled', items };
 }
 
+const RP = { count: 100, text: 120, attire: 400, body: 2500 } as const;
+
+export function cleanRoleplay(raw: unknown): Roleplay | null {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const title = str(r.title, RP.text);
+  if (!title) return null;
+  return {
+    id: id(r.id),
+    title,
+    group: str(r.group, 60),
+    leads: r.leads === 'follow' ? 'follow' : 'lead',
+    location: str(r.location, RP.text),
+    intensity: str(r.intensity, RP.text),
+    attire: longStr(r.attire, RP.attire),
+    setup: longStr(r.setup, RP.body),
+    action: longStr(r.action, RP.body),
+    aftercare: longStr(r.aftercare, RP.body),
+  };
+}
+
+function cleanRateSections(raw: unknown): RateSection[] {
+  return (Array.isArray(raw) ? raw : []).slice(0, 20).map((x) => {
+    const r = (x ?? {}) as Record<string, unknown>;
+    const items = (Array.isArray(r.items) ? r.items : []).slice(0, 150)
+      .map((i) => ({ id: id((i as { id?: unknown })?.id), label: str((i as { label?: unknown })?.label, LIMITS.text) }))
+      .filter((i) => i.label);
+    return { id: id(r.id), title: str(r.title, 80) || 'Ours', items };
+  }).filter((s) => s.items.length);
+}
+
 function cleanPacing(raw: unknown): Pacing | null {
   const r = (raw ?? {}) as Record<string, unknown>;
   const hours = int(r.hours, 1, 48);
@@ -181,6 +237,7 @@ function cleanPacing(raw: unknown): Pacing | null {
 export function cleanMenu(raw: unknown): Menu {
   const r = (raw ?? {}) as Record<string, unknown>;
   const titles = (r.titles ?? {}) as Record<string, unknown>;
+  const switchTitles = (r.switchTitles ?? {}) as Record<string, unknown>;
   const sections = cleanSections(r.sections, LIMITS.groups, LIMITS.items);
   const library = cleanSections(r.library, LIBRARY_LIMITS.groups, LIBRARY_LIMITS.items);
   const pacing = (Array.isArray(r.pacing) ? r.pacing : []).map(cleanPacing).filter((p): p is Pacing => !!p).slice(0, LIMITS.pacing);
@@ -190,10 +247,14 @@ export function cleanMenu(raw: unknown): Menu {
     name: str(r.name, 80) || 'Scene menu',
     tagline: str(r.tagline, 160),
     titles: { lead: str(titles.lead, 40) || 'Lead', follow: str(titles.follow, 40) || 'Follow' },
+    switchTitles: { lead: str(switchTitles.lead, 40), follow: str(switchTitles.follow, 40) },
     pacing: pacing.length ? pacing : starterMenu().pacing,
     rooms,
     sections,
     library,
+    roleplays: (Array.isArray(r.roleplays) ? r.roleplays : []).map(cleanRoleplay).filter((x): x is Roleplay => !!x).slice(0, RP.count),
+    inventory: cleanRateSections(r.inventory),
+    builtInInventory: r.builtInInventory !== false,
   };
 }
 
@@ -234,6 +295,7 @@ export function starterMenu(): Menu {
     name: 'Scene menu',
     tagline: 'Pick what you’d like; the rest is taken care of.',
     titles: { lead: 'Lead', follow: 'Follow' },
+    switchTitles: { lead: '', follow: '' },
     pacing: [
       { id: 'p2', label: '2 hours', hours: 2, rooms: 1, playBreaks: 1, praise: 1, errands: false, note: '1 room, 1 break, 1 praise task.' },
       { id: 'p4', label: '4 hours', hours: 4, rooms: 2, playBreaks: 2, praise: 2, errands: false, note: '2–3 rooms, 2 breaks, 2 praise tasks.' },
@@ -262,5 +324,8 @@ export function starterMenu(): Menu {
       { id: newId(), kind: 'aftercare', title: 'Shutdown & aftercare', groups: [g('Scene closure', ['Declare the scene closed', 'Change into comfy clothes']), g('Couple aftercare', ['Cuddle on the couch', 'Talk about the day as equals'])] },
     ],
     library: SECTION_KINDS.map(({ kind, title }) => ({ id: newId(), kind, title, groups: [] })),
+    roleplays: [],
+    inventory: [],
+    builtInInventory: true,
   };
 }

@@ -51,13 +51,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (kind === 'checkin') {
     // Checking in starts the clock again (and clears the missed-check-in alarm).
     if (!scene.paused_at) await scheduleCheckin(id, scene.checkin_minutes);
-    notifySoon(await others(scene.pod_id, me.id, 'lead'), { title: 'S-O-M', body: `${name} checked in.`, url, tag: `checkin-${id}` });
+    notifySoon(await others(scene, me.id, 'lead'), { title: 'S-O-M', body: `${name} checked in.`, url, tag: `checkin-${id}` });
   } else if (kind === 'praise') {
-    notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M', body: `${name} praised you. ✨`, url, tag: `praise-${id}` });
+    notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} praised you. ✨`, url, tag: `praise-${id}` });
   } else if (kind === 'comment') {
-    notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M', body: `New note from ${name}.`, url, tag: `note-${id}` });
+    notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `New note from ${name}.`, url, tag: `note-${id}` });
   } else if (kind === 'scores' || kind === 'outcomes') {
-    notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M', body: `${name} finished the inspection.`, url, tag: `scene-${id}` });
+    notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} finished the inspection.`, url, tag: `scene-${id}` });
   }
   return json({ ok: true });
 }

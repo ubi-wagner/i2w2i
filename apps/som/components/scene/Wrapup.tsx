@@ -8,6 +8,7 @@ import type { TaskStatus } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { clock, ErrorText, Section } from '../ui';
 import { MediaGrid } from './Media';
+import { RoleplayCard } from './Roleplay';
 import { ArrivalCard, Notes, TaskRow } from './Running';
 import { done, KIND_ICON, ProgressBar, TaskChip } from './parts';
 import type { EntryView, SceneData } from './useScene';
@@ -302,6 +303,7 @@ export function Aftercare({ data, reload }: { data: SceneData; reload: () => Pro
         <p className="font-display text-3xl text-lead-dark">Back to us</p>
         <p className="text-ink-soft">The scene is over. Take your time.</p>
       </div>
+      {data.plan.roleplay?.aftercare && <RoleplayCard rp={data.plan.roleplay} only="aftercare" />}
       {groups.length > 0 && (
         <Section title="Shutdown & aftercare" eyebrow="Together">
           <div className="card space-y-4">
@@ -424,8 +426,11 @@ export function Record({ data, reload, onOpen }: { data: SceneData; reload: () =
     <div className="space-y-6">
       <div className="card text-sm text-ink-soft">
         {scene.started_at && <p>Started {new Date(scene.started_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}{mins !== null ? ` · ${mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min` : `${mins} min`}` : ''}</p>}
-        <p>{data.tasks.filter((t) => t.status === 'approved').length} of {data.tasks.length} tasks approved{data.tasks.some((t) => !done(t)) ? `, ${data.tasks.filter((t) => !done(t)).length} unfinished` : ''}.</p>
+        {data.tasks.length > 0 || !data.plan.roleplay
+          ? <p>{data.tasks.filter((t) => t.status === 'approved').length} of {data.tasks.length} tasks approved{data.tasks.some((t) => !done(t)) ? `, ${data.tasks.filter((t) => !done(t)).length} unfinished` : ''}.</p>
+          : <p>A roleplay, played out.</p>}
       </div>
+      {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} />}
       <Results data={data} />
       {data.tasks.length > 0 && <Section title="Tasks" eyebrow="Record"><TaskList data={data} onOpen={onOpen} /></Section>}
       {theirs.length > 0 && (

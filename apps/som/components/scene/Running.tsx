@@ -10,6 +10,7 @@ import { ErrorText, Section, Sheet } from '../ui';
 import { Composer } from './Composer';
 import { Checklist, done, KIND_ICON, LastCheckin, MOODS, ProgressBar, TaskChip, Timeline, useLocalTicks } from './parts';
 import { LeadBar } from './Lead';
+import { RoleplayCard } from './Roleplay';
 import { mmss, useCountdown, type SceneData, type TaskView } from './useScene';
 
 
@@ -25,6 +26,7 @@ export function Running({ data, reload, onOpen }: { data: SceneData; reload: () 
     <div className="space-y-6">
       {lead && <LeadBar data={data} reload={reload} />}
       {!lead && <ArrivalCard data={data} />}
+      {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} open />}
       {!lead && demands.length > 0 && (
         <section className="card space-y-1 border-follow/50 bg-follow-light" aria-label="Demands">
           <p className="eyebrow text-follow-dark">⚡ From {pod.title('lead')}</p>
@@ -39,14 +41,16 @@ export function Running({ data, reload, onOpen }: { data: SceneData; reload: () 
       )}
       {!lead && scene.checkin_minutes && <CheckinCard data={data} reload={reload} />}
 
-      <Section title={lead ? `${pod.title('follow')}’s tasks` : 'Your tasks'} eyebrow="Running">
-        <div className="card space-y-3">
-          <ProgressBar tasks={tasks} />
-          <ul className="divide-y divide-line">
-            {tasks.map((t) => <li key={t.id}><TaskRow t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} /></li>)}
-          </ul>
-        </div>
-      </Section>
+      {(tasks.length > 0 || !data.plan.roleplay) && (
+        <Section title={lead ? `${pod.title('follow')}’s tasks` : 'Your tasks'} eyebrow="Running">
+          <div className="card space-y-3">
+            <ProgressBar tasks={tasks} />
+            <ul className="divide-y divide-line">
+              {tasks.map((t) => <li key={t.id}><TaskRow t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} /></li>)}
+            </ul>
+          </div>
+        </Section>
+      )}
 
       {lead && <LeadCheckins data={data} reload={reload} />}
 
@@ -219,13 +223,18 @@ export function Notes({ data, reload, title = 'Notes' }: { data: SceneData; relo
   );
 }
 
+/** The end of the running part: an inspection with a scorecard, or straight to aftercare (a roleplay usually does). */
 function StartInspection({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
   const [error, setError] = useState('');
   const open = data.tasks.filter((t) => !['approved', 'skipped'].includes(t.status)).length;
-  async function go() {
-    if (!confirm(open ? `${open} ${open === 1 ? 'task isn’t' : 'tasks aren’t'} finished. Start the inspection anyway?` : 'Start the inspection?')) return;
+  const roleplay = Boolean(data.plan.roleplay);
+  async function go(action: 'inspect' | 'aftercare') {
+    const ask = action === 'aftercare'
+      ? 'Go straight to aftercare (no scorecard)?'
+      : open ? `${open} ${open === 1 ? 'task isn’t' : 'tasks aren’t'} finished. Start the inspection anyway?` : 'Start the inspection?';
+    if (!confirm(ask)) return;
     try {
-      await api(`/api/scenes/${data.scene.id}/action`, { body: { action: 'inspect' } });
+      await api(`/api/scenes/${data.scene.id}/action`, { body: { action } });
       await reload();
     } catch (err) {
       setError((err as Error).message);
@@ -233,7 +242,8 @@ function StartInspection({ data, reload }: { data: SceneData; reload: () => Prom
   }
   return (
     <div className="space-y-2">
-      <button type="button" className="btn w-full" onClick={go}>Start the inspection</button>
+      <button type="button" className={roleplay ? 'btn-quiet w-full' : 'btn w-full'} onClick={() => go('inspect')}>Start the inspection</button>
+      <button type="button" className={roleplay ? 'btn w-full' : 'btn-quiet w-full'} onClick={() => go('aftercare')}>Straight to aftercare</button>
       <ErrorText>{error}</ErrorText>
     </div>
   );
