@@ -3,6 +3,7 @@
 // turns it into the follow's tasks (planToTasks). Pure.
 
 import { cleanProofs, itemsById, NEEDS, section, type Menu, type MenuItem, type Need, type Pacing, type Proof, type SectionKind } from './menu';
+import type { Capacity } from './rules';
 
 export interface Plan {
   v: 1;
@@ -205,12 +206,25 @@ export function pacingForHours(menu: Menu, hours: number): Pacing | null {
 }
 
 /**
+ * The pacing for a window and how much the follow can take on: the one
+ * nearest the window's length, a step lighter for a light day and a step
+ * fuller for a full one.
+ */
+export function pacingFor(menu: Menu, hours: number, capacity: Capacity = 'normal'): Pacing | null {
+  const base = pacingForHours(menu, hours);
+  if (!base || capacity === 'normal') return base;
+  const byLoad = [...menu.pacing].sort((a, b) => a.hours - b.hours);
+  const i = byLoad.indexOf(base) + (capacity === 'light' ? -1 : 1);
+  return byLoad[Math.max(0, Math.min(byLoad.length - 1, i))] ?? base;
+}
+
+/**
  * Fill it for me: tops the plan up to its pacing (rooms, play breaks,
  * praise tasks, errands) with picks from the menu, plus a little
  * presentation, evidence and an arrival routine if there's none yet.
  * Keeps everything already picked. `rand` is for tests.
  */
-export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.random): Plan {
+export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.random, windowHours?: number): Plan {
   const next = cleanPlan(structuredClone(plan));
   const pace = pacingOf(menu, next) ?? menu.pacing[0] ?? null;
   if (pace && !next.pacing) next.pacing = pace.id;
@@ -241,7 +255,8 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
     if (check.errands && !have('errands')) pickFrom('errands', 1 + Math.floor(rand() * 2));
   }
   if (!have('arrival')) pickFrom('arrival', 3, true);
-  if (!next.checkinMinutes && pace && pace.hours >= 4) next.checkinMinutes = 60;
+  // Check-ins follow how long it lasts (the window, if there is one), not how much is in it.
+  if (!next.checkinMinutes && (windowHours ?? pace?.hours ?? 0) >= 4) next.checkinMinutes = 60;
   return cleanPlan(next);
 }
 

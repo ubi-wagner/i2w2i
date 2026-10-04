@@ -23,8 +23,9 @@ export interface SceneRow {
   started_at: string | null;
   closed_at: string | null;
   starts_at: string | null;
-  hours: number | null;
-  change_request: { by: string; startsAt: string | null; hours: number | null; noteEnc: string | null } | null;
+  ends_at: string | null;
+  change_request: { by: string; startsAt: string | null; endsAt: string | null } | null;
+  reply_enc: string | null;
   close_votes: string[];
   delete_votes: string[];
   created_at: string;

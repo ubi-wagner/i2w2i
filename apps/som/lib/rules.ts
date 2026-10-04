@@ -4,8 +4,9 @@
 //
 // Two ways into a scene:
 //   the follow drafts it → proposes → the lead starts it now;
-//   the lead offers a day (when, how long) → the follow accepts or asks for
-//   a change → the lead builds it and sends it → the follow starts it.
+//   the lead offers a window of their time (a day, from, until) → the follow
+//   accepts, or asks for a change by schedule or capacity → the lead builds
+//   it to fit and sends it → the follow starts it in the window.
 
 export type Role = 'lead' | 'follow';
 export type SceneStatus = 'draft' | 'offered' | 'accepted' | 'proposed' | 'ready' | 'active' | 'inspection' | 'aftercare' | 'closed';
@@ -30,7 +31,7 @@ export function sceneTransition(status: SceneStatus, action: SceneAction, role: 
       return status === 'draft' && !lead ? 'proposed' : null;
     case 'withdraw':
       return status === 'proposed' && !lead ? 'draft' : null;
-    case 'offer': // a new offer, or a different time or length
+    case 'offer': // a new offer, or a different window
       return lead && (status === 'draft' || status === 'offered' || status === 'accepted') ? 'offered' : null;
     case 'accept':
     case 'agree_change':
@@ -82,4 +83,44 @@ export function allAgreed(votes: string[], memberIds: string[]): boolean {
 /** Writing in a scene (comments, proof, check-ins) is open until it's closed. */
 export function canWrite(status: SceneStatus): boolean {
   return status !== 'closed';
+}
+
+// ── Windows ─────────────────────────────────────────────────────────────────
+// An offered scene is a window of the lead's time. Windows are 15 minutes
+// to 48 hours, end in the future, and don't overlap another planned one.
+// It can be started from a little before it opens until it closes.
+
+/** How much the follow can take on that day. */
+export type Capacity = 'light' | 'normal' | 'full';
+export const CAPACITIES: Capacity[] = ['light', 'normal', 'full'];
+
+const MIN = 60_000;
+export const WINDOW_MIN = 15 * MIN;
+export const WINDOW_MAX = 48 * 60 * MIN;
+/** How early a sent scene can be started. */
+export const EARLY_START = 30 * MIN;
+
+/** Why a window can't be offered, or null if it's fine. */
+export function windowProblem(start: Date, end: Date, now: Date): string | null {
+  const s = start.getTime();
+  const e = end.getTime();
+  if (!Number.isFinite(s) || !Number.isFinite(e)) return 'Pick a day and a time.';
+  if (e - s < WINDOW_MIN) return 'Make it at least 15 minutes.';
+  if (e - s > WINDOW_MAX) return 'Make it 48 hours or less.';
+  if (e <= now.getTime()) return 'That time has already passed.';
+  if (s > now.getTime() + 120 * 24 * 60 * MIN) return 'That’s too far ahead.';
+  return null;
+}
+
+/** True when two windows share any time (touching ends don't count). */
+export function overlaps(a: { start: Date; end: Date }, b: { start: Date; end: Date }): boolean {
+  return a.start.getTime() < b.end.getTime() && b.start.getTime() < a.end.getTime();
+}
+
+/** Whether a sent scene can be started now: 'early', 'ok' or 'over'. */
+export function startState(start: Date | null, end: Date | null, now: Date): 'early' | 'ok' | 'over' {
+  if (!start || !end) return 'ok';
+  if (now.getTime() < start.getTime() - EARLY_START) return 'early';
+  if (now.getTime() >= end.getTime()) return 'over';
+  return 'ok';
 }

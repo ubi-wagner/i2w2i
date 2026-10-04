@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cleanMenu, itemsById, proofText, section, SECTION_KINDS, starterMenu, type Menu } from '@/lib/menu';
-import { arrivalChecklist, autoFill, cleanPlan, emptyPlan, noProof, pacingCheck, pacingForHours, planToTasks, proofComplete, proofProgress, withParam, type Plan } from '@/lib/plan';
-import { allAgreed, canDelete, sceneTransition, taskTransition } from '@/lib/rules';
+import { arrivalChecklist, autoFill, cleanPlan, emptyPlan, noProof, pacingCheck, pacingFor, pacingForHours, planToTasks, proofComplete, proofProgress, withParam, type Plan } from '@/lib/plan';
+import { allAgreed, canDelete, overlaps, sceneTransition, startState, taskTransition, windowProblem } from '@/lib/rules';
 
 const find = (menu: Menu, label: string) => [...itemsById(menu).values()].find((x) => x.item.label === label)!.item;
 
@@ -211,6 +211,37 @@ describe('offering a day', () => {
   });
 });
 
+describe('an offer is a window of time', () => {
+  const now = new Date('2026-10-05T12:00:00Z');
+  const at = (h: number, m = 0) => new Date(Date.UTC(2026, 9, 6, h, m));
+
+  it('is 15 minutes to 48 hours, and not over already', () => {
+    expect(windowProblem(at(8, 30), at(16, 30), now)).toBeNull();
+    expect(windowProblem(at(8), at(8, 10), now)).toMatch(/15 minutes/);
+    expect(windowProblem(at(8), new Date(at(8).getTime() + 49 * 3_600_000), now)).toMatch(/48 hours/);
+    expect(windowProblem(new Date('2026-10-05T08:00:00Z'), new Date('2026-10-05T11:00:00Z'), now)).toMatch(/passed/);
+    expect(windowProblem(new Date('2026-10-05T08:00:00Z'), new Date('2026-10-05T16:00:00Z'), now)).toBeNull(); // already open
+    expect(windowProblem(new Date('nope'), at(9), now)).toMatch(/Pick/);
+  });
+
+  it('two windows clash only if they share time', () => {
+    const work = { start: at(8, 30), end: at(16, 30) };
+    expect(overlaps(work, { start: at(16), end: at(18) })).toBe(true);
+    expect(overlaps(work, { start: at(6), end: at(9) })).toBe(true);
+    expect(overlaps(work, { start: at(9), end: at(10) })).toBe(true);
+    expect(overlaps(work, { start: at(16, 30), end: at(18) })).toBe(false);
+    expect(overlaps(work, { start: at(6), end: at(8, 30) })).toBe(false);
+  });
+
+  it('starts from half an hour before it opens until it closes', () => {
+    expect(startState(at(8, 30), at(16, 30), at(7, 59))).toBe('early');
+    expect(startState(at(8, 30), at(16, 30), at(8))).toBe('ok');
+    expect(startState(at(8, 30), at(16, 30), at(12))).toBe('ok');
+    expect(startState(at(8, 30), at(16, 30), at(16, 30))).toBe('over');
+    expect(startState(null, null, at(3))).toBe('ok');
+  });
+});
+
 describe('fill it for me', () => {
   let seed = 7;
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -220,6 +251,14 @@ describe('fill it for me', () => {
     expect(pacingForHours(menu, 8)?.hours).toBe(8);
     expect(pacingForHours(menu, 5)?.hours).toBe(4);
     expect(pacingForHours(menu, 30)?.hours).toBe(8);
+  });
+
+  it('a light day is a step lighter, a full one a step fuller', () => {
+    expect(pacingFor(menu, 8, 'normal')?.hours).toBe(8);
+    expect(pacingFor(menu, 8, 'light')?.hours).toBe(4);
+    expect(pacingFor(menu, 4, 'full')?.hours).toBe(8);
+    expect(pacingFor(menu, 2, 'light')?.hours).toBe(2);
+    expect(pacingFor(menu, 8, 'full')?.hours).toBe(8);
   });
 
   it('tops the plan up to its pacing and keeps what was picked', () => {
@@ -236,6 +275,13 @@ describe('fill it for me', () => {
     expect(p.checkinMinutes).toBe(60);
     // Running it again adds nothing new.
     expect(Object.keys(autoFill(menu, p, rand).picks).sort()).toEqual(Object.keys(p.picks).sort());
+  });
+
+  it('a light day in a long window: a lighter load, but check-ins for the whole window', () => {
+    const p = autoFill(menu, cleanPlan({ ...emptyPlan(menu), pacing: pacingFor(menu, 4, 'light')!.id }), rand, 4);
+    expect(pacingCheck(menu, p)!.rooms[1]).toBe(1);
+    expect(p.checkinMinutes).toBe(60);
+    expect(autoFill(menu, cleanPlan({ ...emptyPlan(menu), pacing: 'p2' }), rand).checkinMinutes).toBeNull();
   });
 
   it('fills a blank with a sensible number', () => {

@@ -3,16 +3,23 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
-import { proofText, section, type MenuItem, type SectionKind } from '@/lib/menu';
-import { autoFill, cleanPlan, CHECKIN_CHOICES, pacingCheck, pacingForHours, pacingOf, picked, planToTasks, withParam, type Plan } from '@/lib/plan';
+import { proofText, section, type MenuItem, type Pacing, type SectionKind } from '@/lib/menu';
+import { autoFill, cleanPlan, CHECKIN_CHOICES, pacingCheck, pacingFor, pacingOf, picked, planToTasks, withParam, type Plan } from '@/lib/plan';
 import { sceneTransition } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ProofEditor } from '../ProofEditor';
 import { ErrorText, Sheet } from '../ui';
-import { OfferForm, when } from './Offer';
+import { CapacityLine, hoursOf, lengthText, OfferForm, useReply, when } from './Offer';
 import type { SceneData } from './useScene';
 
 const BUILD_KINDS: SectionKind[] = ['presentation', 'domain', 'errands', 'tasks', 'play', 'arrival'];
+
+/** Sets the pacing, with a room slot for each room it asks for. */
+function setPace(x: Plan, p: Pacing) {
+  x.pacing = p.id;
+  const filled = x.rooms.filter((r) => r.room);
+  x.rooms = [...filled, ...Array.from({ length: Math.max(0, p.rooms - filled.length) }, () => ({ room: '', note: '' }))];
+}
 
 /** Drafting a scene from the menu: tap to pick. Saves as you go. */
 export function Builder({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
@@ -88,6 +95,15 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
     setError('');
   };
 
+  // Once agreed, it starts on the pacing for the window and how much the
+  // follow can take on (until anything is picked; then it's the lead's call).
+  const reply = useReply(scene);
+  const suggested = scene.status === 'accepted' && scene.starts_at ? pacingFor(pod.menu, hoursOf(scene.starts_at, scene.ends_at), reply?.capacity) : null;
+  useEffect(() => {
+    if (suggested && !Object.keys(planRef.current.picks).length && planRef.current.pacing !== suggested.id) edit((x) => setPace(x, suggested));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggested?.id]);
+
   async function act(action: 'propose' | 'withdraw') {
     setError('');
     try {
@@ -125,15 +141,18 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
   const canWithdraw = sceneTransition(scene.status, 'withdraw', role);
   const canStart = sceneTransition(scene.status, 'start', role);
   const canSend = sceneTransition(scene.status, 'send', role);
-  const canOffer = scene.status === 'draft' && sceneTransition(scene.status, 'offer', role);
+  const canOffer = (scene.status === 'draft' || scene.status === 'accepted') && sceneTransition(scene.status, 'offer', role);
 
   return (
     <div className="space-y-5">
       {scene.status === 'accepted' && (
         <div className="card space-y-1 border-lead/40 bg-lead-light">
           <p className="eyebrow text-lead">Agreed with {pod.title('follow')}</p>
-          <p className="font-display text-xl text-lead-dark">{when(scene.starts_at, scene.hours)}</p>
-          <p className="text-sm">Pick what you’d like (or let it fill itself in), then send it. {pod.title('follow')} starts it.</p>
+          <p className="font-display text-xl text-lead-dark">{when(scene.starts_at, scene.ends_at)}</p>
+          <p className="text-sm text-lead-dark">{lengthText(scene.starts_at, scene.ends_at)}</p>
+          {reply && <CapacityLine reply={reply} />}
+          {reply?.note && <p className="whitespace-pre-wrap text-sm">“{reply.note}”</p>}
+          <p className="pt-1 text-sm">Pick what you’d like to fit (or let it fill itself in), then send it. {pod.title('follow')} starts it.</p>
         </div>
       )}
       {scene.status === 'proposed' && (
@@ -152,11 +171,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
           <div className="flex flex-wrap gap-2">
             {pod.menu.pacing.map((p) => (
               <button key={p.id} type="button" className="chip" aria-pressed={plan.pacing === p.id} disabled={!editable}
-                onClick={() => edit((x) => {
-                  x.pacing = p.id;
-                  const filled = x.rooms.filter((r) => r.room);
-                  x.rooms = [...filled, ...Array.from({ length: Math.max(0, p.rooms - filled.length) }, () => ({ room: '', note: '' }))];
-                })}>
+                onClick={() => edit((x) => setPace(x, p))}>
                 {p.label}
               </button>
             ))}
@@ -173,7 +188,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
         </div>
         {editable && (
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" className="btn-follow flex-1" onClick={() => edit((p) => { Object.assign(p, autoFill(pod.menu, p)); })}>✨ Fill it for me</button>
+            <button type="button" className="btn-follow flex-1" onClick={() => edit((p) => { Object.assign(p, autoFill(pod.menu, p, Math.random, scene.starts_at ? hoursOf(scene.starts_at, scene.ends_at) : undefined)); })}>✨ Fill it for me</button>
             {tasks.length > 0 && (
               <button type="button" className="text-sm text-ink-soft underline"
                 onClick={() => { if (confirm('Clear every pick and start again?')) edit((p) => { p.picks = {}; p.rooms = p.rooms.map(() => ({ room: '', note: '' })); }); }}>
@@ -208,7 +223,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
         <span className="flex gap-2">
           {canWithdraw && <button type="button" className="btn-quiet" onClick={() => act('withdraw')}>Take it back</button>}
           {canPropose && <button type="button" className="btn-follow" disabled={!tasks.length} onClick={() => act('propose')}>Send to {pod.title('lead')}</button>}
-          {canOffer && <button type="button" className="btn-quiet" onClick={() => setOffering(true)}>Offer a time</button>}
+          {canOffer && <button type="button" className="btn-quiet" onClick={() => setOffering(true)}>{scene.status === 'accepted' ? 'Change the time' : 'Offer a time'}</button>}
           {canStart && <button type="button" className="btn" disabled={!tasks.length} onClick={() => setConfirm('start')}>Start now</button>}
           {canSend && <button type="button" className="btn" disabled={!tasks.length} onClick={() => setConfirm('send')}>Send to {pod.title('follow')}</button>}
         </span>
@@ -226,14 +241,15 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
           <button type="button" className="btn w-full" onClick={() => go(confirming ?? 'start')}>{confirming === 'send' ? 'Send it' : 'Start now'}</button>
         </div>
       </Sheet>
-      <Sheet open={offering} onClose={() => setOffering(false)} title={`Offer it to ${pod.title('follow')}`}>
+      <Sheet open={offering} onClose={() => setOffering(false)} title={scene.status === 'accepted' ? 'Change the time' : `Offer it to ${pod.title('follow')}`}>
         <OfferForm
-          submit="Send the offer"
+          initial={{ startsAt: scene.starts_at, endsAt: scene.ends_at }}
+          submit={scene.status === 'accepted' ? 'Send the new time' : 'Send the offer'}
           noteLabel={`A note for ${pod.title('follow')} (optional)`}
-          onSubmit={async ({ startsAt, hours, note }) => {
+          onSubmit={async ({ start, end, note }) => {
             await save();
-            const next = cleanPlan({ ...plan, pacing: plan.pacing ?? pacingForHours(pod.menu, hours)?.id ?? null, note: note || plan.note });
-            await api(`/api/scenes/${scene.id}/action`, { body: { action: 'offer', startsAt: startsAt.toISOString(), hours, planEnc: await pod.seal(next, `plan:${scene.id}`) } });
+            const next = cleanPlan({ ...plan, pacing: plan.pacing ?? pacingFor(pod.menu, hoursOf(start, end))?.id ?? null, note: note || plan.note });
+            await api(`/api/scenes/${scene.id}/action`, { body: { action: 'offer', startsAt: start.toISOString(), endsAt: end.toISOString(), planEnc: await pod.seal(next, `plan:${scene.id}`) } });
             setOffering(false);
             await reload();
           }}

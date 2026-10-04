@@ -36,8 +36,11 @@ export interface SceneRow {
   started_at: Date | null;
   closed_at: Date | null;
   starts_at: Date | null;
-  hours: number | null;
-  change_request: { by: string; startsAt: string | null; hours: number | null; noteEnc: string | null } | null;
+  ends_at: Date | null;
+  /** The window the follow asked for instead (null: the same). */
+  change_request: { by: string; startsAt: string | null; endsAt: string | null } | null;
+  /** The follow's answer, encrypted: capacity and a note. */
+  reply_enc: string | null;
   close_votes: string[];
   delete_votes: string[];
   created_at: Date;

@@ -7,14 +7,14 @@ import { api } from '@/lib/client/api';
 import { cleanPlan, emptyPlan, type Plan } from '@/lib/plan';
 import type { SceneStatus } from '@/lib/rules';
 import { NotifyToggle } from './NotifyToggle';
-import { NewOffer, when as whenText } from './scene/Offer';
+import { lengthText, NewOffer, when as whenText } from './scene/Offer';
 import { usePod } from './Pod';
 import { ErrorText, Section, Spinner, timeAgo } from './ui';
 
 interface SceneListRow {
   id: string; status: SceneStatus; plan_enc: string; created_by: string; created_at: string; started_at: string | null; closed_at: string | null;
   paused_at: string | null; delete_votes: string[]; tasks: number; done: number; waiting: number;
-  starts_at: string | null; hours: number | null; change_requested: boolean;
+  starts_at: string | null; ends_at: string | null; change_requested: boolean;
 }
 
 export const STATUS_LABEL: Record<SceneStatus, string> = {
@@ -118,16 +118,18 @@ export function Home() {
 function SceneCard({ s, big = false }: { s: SceneListRow & { plan: Plan | null }; big?: boolean }) {
   const pod = usePod();
   const when = s.closed_at ?? s.started_at ?? s.created_at;
+  // An offer or a plan whose window has gone by without starting.
+  const passed = ['offered', 'accepted', 'ready'].includes(s.status) && s.ends_at !== null && new Date(s.ends_at).getTime() <= Date.now();
   return (
     <Link href={`/scene/${s.id}`} className={`card block space-y-1 ${big ? 'border-lead/40 p-5' : ''} ${s.paused_at ? 'border-stop/50' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <h3 className={`font-display ${big ? 'text-2xl' : 'text-lg'}`}>{s.plan?.title || (s.starts_at ? `A scene from ${pod.title('lead')}` : 'Untitled scene')}</h3>
         <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${s.paused_at ? 'bg-stop text-white' : s.status === 'closed' ? 'bg-paper-sunk text-ink-soft' : 'bg-lead-light text-lead-dark'}`}>
-          {s.paused_at ? 'Paused' : STATUS_LABEL[s.status]}
+          {s.paused_at ? 'Paused' : passed ? 'Time passed' : STATUS_LABEL[s.status]}
         </span>
       </div>
       {s.starts_at && ['offered', 'accepted', 'ready'].includes(s.status) && (
-        <p className="font-medium text-lead-dark">{whenText(s.starts_at, s.hours)}</p>
+        <p className="font-medium text-lead-dark">{whenText(s.starts_at, s.ends_at)} <span className="font-normal text-ink-soft">({lengthText(s.starts_at, s.ends_at)})</span></p>
       )}
       {s.change_requested && <p className="text-sm font-medium text-follow-dark">Change asked for</p>}
       <p className="text-sm text-ink-soft">

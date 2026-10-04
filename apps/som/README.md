@@ -18,7 +18,7 @@ leaves them. The server stores ciphertext and can't read it.
 |---|---|
 | The menu, the pod's name and titles | Usernames and account names (needed to sign in) |
 | Scene plans, tasks, notes, writing, check-ins | Who is in a pod and which role they have |
-| Offer notes and the reason for asking for a change; demands and praise | An offered scene's day, start time and length (for the start reminder) |
+| Offer notes; the follow's capacity and note when answering; demands and praise | An offered scene's window: day, from and until (for reminders and so offers don't overlap) |
 | Scorecards (overall and per task), consequences, rewards, aftercare, reflections | A scene's stage, and when things happened |
 | Photos, videos, voice notes, files (and their thumbnails, names, sizes in the file) | Encrypted file sizes, check-in times, countdown times |
 
@@ -55,15 +55,21 @@ leaves them. The server stores ciphertext and can't read it.
 
 There are two ways in:
 
-- **The lead offers a day** (say, a day of tasks while they're at work).
+- **The lead offers a window of their time** (say, their workday).
   **Offer {follow} a scene** on the home screen: today, tomorrow or another
-  day, a start time, how long (from the menu's pacing) and a note. The follow
-  **accepts** or **asks for a change** (another day, time or length, and
-  why); the lead agrees, offers something else or takes it back. Once
-  agreed, the lead builds it (**Fill it for me** fills it to the pacing in
-  one tap; change anything) and **sends** it. The follow sees the tasks and
-  a countdown, gets a reminder at the start time, and taps **Start**. The
-  lead can take a sent scene back to change it until then.
+  day, from and until (2, 4 or 8 hours in one tap), and a note. Windows
+  don't overlap another offered or planned scene, and an offer whose time
+  has passed can't be accepted. The follow answers by their schedule and
+  their **capacity** (Light, Normal or Full: how much they can take on that
+  day): **accept**, or **ask for a change** (another window, a different
+  capacity, or both, and why). The lead agrees, offers something else or
+  takes it back. Once agreed, the lead's builder shows the window and the
+  follow's capacity and starts on the matching pacing (a light day is a
+  step lighter); **Fill it for me** fills it in one tap; change anything,
+  or change the time (the follow answers again). Then **send** it. The
+  follow sees the tasks and a countdown, gets a reminder when the window
+  opens, and can **start** it from half an hour before until the window
+  closes. The lead can take a sent scene back to change it until then.
 - **The follow drafts one**: tap to pick from the menu, pick rooms, pacing,
   check-ins; it saves as you go. **Send** it to the lead, who adjusts
   anything and **starts it now**.
@@ -189,7 +195,8 @@ npm run e2e     # against a running build; see e2e/run.mjs for the settings it n
 ```
 
 The end-to-end suites run two phones through pairing, a whole scene, a
-workday (offer, change, agree, fill, send, start, demands, praise, redo, on
+workday (offer a window, ask for a change of time and capacity, agree, no
+overlaps, expiry, fill, send, start in the window, demands, praise, redo, on
 my way, per-task scores) and deleting, with a stand-in push service, and
 check that the database and the bucket hold nothing readable. The layout suite walks every screen on a small
 phone (iPhone SE; `E2E_LAYOUT_DEVICE` for another) and checks nothing is

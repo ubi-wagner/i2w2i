@@ -3,7 +3,7 @@ import { sql } from '@/lib/server/db';
 import { nameOf, others, podMembers, sceneFor } from '@/lib/server/pods';
 import { notifySoon } from '@/lib/server/push';
 import { cancelTimers, scheduleCheckin, scheduleSceneStart } from '@/lib/server/scheduler';
-import { allAgreed, sceneTransition, type SceneAction } from '@/lib/rules';
+import { allAgreed, sceneTransition, startState, windowProblem, type SceneAction } from '@/lib/rules';
 import { CHECKIN_CHOICES } from '@/lib/plan';
 
 export const dynamic = 'force-dynamic';
@@ -14,20 +14,17 @@ const ACTIONS: SceneAction[] = [
 
 type Body = {
   action?: unknown; tasks?: unknown; planEnc?: unknown; checkinMinutes?: unknown;
-  startsAt?: unknown; hours?: unknown; noteEnc?: unknown;
+  startsAt?: unknown; endsAt?: unknown; replyEnc?: unknown;
 };
 type TaskIn = { id?: unknown; ord?: unknown; bodyEnc?: unknown; minutes?: unknown };
+type Window = { start: Date; end: Date };
 
-const DAY = 86_400_000;
-/** A start time from a phone: a real time, not long past, not far off. */
-function startTime(v: unknown): Date | null | undefined {
-  if (v == null) return null;
-  if (typeof v !== 'string') return undefined;
-  const d = new Date(v);
-  const t = d.getTime();
-  return Number.isFinite(t) && t > Date.now() - DAY && t < Date.now() + 120 * DAY ? d : undefined;
+/** A window from a phone, checked (see windowProblem), or why not. */
+function windowOf(s: unknown, e: unknown): Window | string {
+  if (typeof s !== 'string' || typeof e !== 'string') return 'Pick a day and a time.';
+  const w = { start: new Date(s), end: new Date(e) };
+  return windowProblem(w.start, w.end, new Date()) ?? w;
 }
-const hoursOf = (v: unknown) => (v == null ? null : Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 48 ? (v as number) : undefined);
 
 function taskList(v: unknown): TaskIn[] | null {
   const tasks = Array.isArray(v) ? (v as TaskIn[]) : null;
@@ -38,10 +35,12 @@ function taskList(v: unknown): TaskIn[] | null {
 }
 
 // Moving a scene along. The follow drafts and proposes and the lead starts
-// it now; or the lead offers a day, the follow accepts or asks for a change,
-// the lead builds and sends it, and the follow starts it. Then inspection,
-// aftercare, and it closes once everyone is back to "us". Tasks are made
-// on the phone (encrypted) and arrive with "start" or "send".
+// it now; or the lead offers a window of their time, the follow accepts or
+// asks for a change (another window, or how much they can take on), the
+// lead builds it to fit and sends it, and the follow starts it in the
+// window. Then inspection, aftercare, and it closes once everyone is back to
+// "us". Tasks are made on the phone (encrypted) and arrive with "start" or
+// "send". Windows in a pod never overlap.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const me = await guard(req);
   if (me instanceof Response) return me;
@@ -60,6 +59,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     notifySoon(await others(scene.pod_id, me.id, onlyRole), { title: 'S-O-M', body, url, tag: `scene-${id}` });
   if (b?.planEnc != null && !isCipher(b.planEnc, 'j1', 200_000)) return bad('That doesn’t look like a plan.');
   const planEnc = (b?.planEnc as string | undefined) ?? null;
+  if (b?.replyEnc != null && !isCipher(b.replyEnc, 'j1', 8_000)) return bad('That doesn’t look like an answer.');
+  const replyEnc = (b?.replyEnc as string | undefined) ?? null;
   const every = typeof b?.checkinMinutes === 'number' && CHECKIN_CHOICES.includes(b.checkinMinutes) ? b.checkinMinutes : null;
 
   // Changes only if nobody else moved the scene first.
@@ -71,38 +72,58 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   };
   const raced = () => bad('Someone else just changed this scene.', 409);
 
+  // Takes a window for this scene, unless another planned scene in the pod
+  // already has some of that time. One lock per pod, so two offers can't
+  // both take it.
+  const takeWindow = (w: Window, more: (tx: typeof sql) => ReturnType<typeof sql>) => sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`som-window:${scene.pod_id}`}, 0))`;
+    const [hit] = await tx`SELECT 1 FROM som.scenes WHERE pod_id = ${scene.pod_id} AND id <> ${id}
+                             AND status IN ('offered', 'accepted', 'ready', 'active')
+                             AND starts_at < ${w.end} AND ends_at > ${w.start} LIMIT 1`;
+    if (hit) return 'clash' as const;
+    const [s] = await tx`UPDATE som.scenes SET status = ${next}, updated_at = now(), starts_at = ${w.start}, ends_at = ${w.end}, ${more(tx as unknown as typeof sql)}
+                          WHERE id = ${id} AND status = ${scene.status} RETURNING 1`;
+    return s ? ('ok' as const) : ('raced' as const);
+  });
+  const clashed = () => bad('That time overlaps another scene you’ve planned.', 409);
+  const passed = scene.ends_at !== null && scene.ends_at.getTime() <= Date.now();
+
   switch (action) {
     case 'offer': {
-      const startsAt = startTime(b?.startsAt);
-      const hours = hoursOf(b?.hours);
-      if (!startsAt || !hours) return bad('Pick a day, a time and how long.');
-      if (!(await move(sql`starts_at = ${startsAt}, hours = ${hours}, change_request = NULL,
-                           plan_enc = coalesce(${planEnc}, plan_enc), plan_rev = plan_rev + ${planEnc ? 1 : 0}`))) return raced();
+      const w = windowOf(b?.startsAt, b?.endsAt);
+      if (typeof w === 'string') return bad(w);
+      // A new offer wants a new answer.
+      const r = await takeWindow(w, (tx) => tx`change_request = NULL, reply_enc = NULL,
+                                               plan_enc = coalesce(${planEnc}, plan_enc), plan_rev = plan_rev + ${planEnc ? 1 : 0}`);
+      if (r !== 'ok') return r === 'clash' ? clashed() : raced();
       await tell(`${name} offered you a scene.`, 'follow');
       return json({ status: next });
     }
     case 'accept': {
-      if (!(await move(sql`change_request = NULL`))) return raced();
+      if (passed) return bad('This offer’s time has passed.', 409);
+      if (!(await move(sql`change_request = NULL, reply_enc = coalesce(${replyEnc}, reply_enc)`))) return raced();
       await tell(`${name} accepted your offer.`, 'lead');
       return json({ status: next });
     }
     case 'request_change': {
-      const startsAt = startTime(b?.startsAt);
-      const hours = hoursOf(b?.hours);
-      const noteOk = b?.noteEnc == null || isCipher(b.noteEnc, 'j1', 8_000);
-      if (startsAt === undefined || hours === undefined || !noteOk || (!startsAt && !hours && b?.noteEnc == null)) return bad('Say what you’d like changed.');
-      const request = { by: me.id, startsAt: startsAt?.toISOString() ?? null, hours, noteEnc: (b?.noteEnc as string) ?? null };
-      if (!(await move(sql`change_request = ${sql.json(request)}`))) return raced();
+      // Another window, or the same one with a different capacity (in replyEnc).
+      if (passed) return bad('This offer’s time has passed.', 409);
+      const w = b?.startsAt == null && b?.endsAt == null ? null : windowOf(b?.startsAt, b?.endsAt);
+      if (typeof w === 'string') return bad(w);
+      if (!w && !replyEnc) return bad('Say what you’d like changed.');
+      const request = { by: me.id, startsAt: w?.start.toISOString() ?? null, endsAt: w?.end.toISOString() ?? null };
+      if (!(await move(sql`change_request = ${sql.json(request)}, reply_enc = coalesce(${replyEnc}, reply_enc)`))) return raced();
       await tell(`${name} asked for a change.`, 'lead');
       return json({ status: next });
     }
     case 'agree_change': {
       const cr = scene.change_request;
       if (!cr) return bad('There’s no change to agree to.', 409);
-      const startsAt = startTime(cr.startsAt) ?? scene.starts_at;
-      // The lead's phone sends the plan back with pacing for the new length.
-      if (!(await move(sql`starts_at = ${startsAt ?? null}, hours = ${cr.hours ?? scene.hours}, change_request = NULL,
-                           plan_enc = coalesce(${planEnc}, plan_enc), plan_rev = plan_rev + ${planEnc ? 1 : 0}`))) return raced();
+      const w = cr.startsAt && cr.endsAt ? windowOf(cr.startsAt, cr.endsAt)
+        : scene.starts_at && scene.ends_at ? { start: scene.starts_at, end: scene.ends_at } : 'There’s no time to agree to.';
+      if (typeof w === 'string') return bad(w, 409);
+      const r = await takeWindow(w, (tx) => tx`change_request = NULL`);
+      if (r !== 'ok') return r === 'clash' ? clashed() : raced();
       await tell(`${name} agreed to your change.`, 'follow');
       return json({ status: next });
     }
@@ -113,6 +134,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return json({ status: next });
     }
     case 'send': {
+      if (passed) return bad('This scene’s time has passed; offer a new one.', 409);
       const tasks = taskList(b?.tasks);
       if (!tasks) return bad('That doesn’t look like a task list.');
       const ok = await sql.begin(async (tx) => {
@@ -145,7 +167,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     case 'start': {
       if (scene.status === 'ready') {
-        // Sent earlier: the tasks are already there.
+        // Sent earlier: the tasks are already there. It starts in its window.
+        const when = startState(scene.starts_at, scene.ends_at, new Date());
+        if (when === 'early') return bad('It’s too early: it can start half an hour before its time.', 409);
+        if (when === 'over') return bad('This scene’s time has passed. Ask for a new time.', 409);
         if (!(await move(sql`started_at = now()`))) return raced();
         await cancelTimers(id, ['scene_start']);
         await scheduleCheckin(id, scene.checkin_minutes);
