@@ -2,21 +2,23 @@
 
 import { useMemo, useState } from 'react';
 import { ideasFor, inMenu, type IdeaGroup } from '@/lib/ideas';
-import { proofText, type Menu, type MenuItem, type SectionKind } from '@/lib/menu';
+import { proofText, type Menu, type MenuItem, type MenuSection, type SectionKind } from '@/lib/menu';
 
 /**
  * Ideas for one section of the menu: tap one to add it to the menu, tap
  * again to take it out. Your own ideas (from an ideas pack) come first.
  */
-export function IdeasPicker({ menu, kind, onToggle, onForget }: {
+export function IdeasPicker({ menu, kind, builtIn, onToggle, onForget }: {
   menu: Menu;
   kind: SectionKind;
+  /** The built-in ideas, titles already filled in. */
+  builtIn: MenuSection[];
   onToggle: (groupTitle: string, idea: MenuItem) => void;
   /** Take one of your own ideas out of the pool. */
   onForget: (label: string) => void;
 }) {
   const [q, setQ] = useState('');
-  const all = useMemo(() => ideasFor(menu, kind), [menu, kind]);
+  const all = useMemo(() => ideasFor(menu, kind, builtIn), [menu, kind, builtIn]);
   const query = q.trim().toLowerCase();
   const groups: IdeaGroup[] = query
     ? all.map((g) => ({ ...g, items: g.items.filter((i) => `${i.label} ${i.detail ?? ''} ${g.title}`.toLowerCase().includes(query)) })).filter((g) => g.items.length)

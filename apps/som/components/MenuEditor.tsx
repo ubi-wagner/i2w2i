@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { newId, proofText, SECTION_KINDS, type Menu, type MenuGroup, type MenuItem, type SectionKind } from '@/lib/menu';
+import { useEffect, useMemo, useState } from 'react';
+import { newId, proofText, SECTION_KINDS, type Menu, type MenuGroup, type MenuItem, type MenuSection, type SectionKind } from '@/lib/menu';
 import { describeParsed, KIND_WORD, menuToText, mergeMenus, readMenuFile, sectionText, type ParsedMenu } from '@/lib/menu-text';
-import { addIdeas, keepRemoved, ownIdeaCount, removeIdea, toggleIdea } from '@/lib/ideas';
+import { addIdeas, keepRemoved, ownIdeaCount, removeIdea, toggleIdea, withTitles } from '@/lib/ideas';
+import { loadBuiltInIdeas } from '@/lib/client/ideas';
 import { IdeasPicker } from './Ideas';
 import { MenuTextEditor } from './MenuText';
 import { ProofEditor } from './ProofEditor';
 import { usePod } from './Pod';
-import { ErrorText, Sheet } from './ui';
+import { ErrorText, Sheet, Spinner } from './ui';
 
 
 /** The menu: what scenes are built from. Mostly the follow's to fill, so the lead only chooses. */
@@ -44,9 +45,14 @@ export function MenuEditor() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
 
+  // The built-in ideas, from the server, with this pod's titles filled in.
+  const [rawIdeas, setRawIdeas] = useState<MenuSection[] | null>(null);
+  useEffect(() => { void loadBuiltInIdeas().then(setRawIdeas).catch((e) => setError((e as Error).message)); }, []);
+  const builtIn = useMemo(() => (rawIdeas ? withTitles(rawIdeas, menu.titles) : null), [rawIdeas, menu.titles]);
+
   // Every change goes through here: anything that leaves the menu and isn't
   // in the pool is kept in your own ideas, so nothing written is lost.
-  const update = (fn: (m: Menu) => Menu) => setMenu((m) => keepRemoved(m, fn(m), newId));
+  const update = (fn: (m: Menu) => Menu) => setMenu((m) => keepRemoved(m, fn(m), newId, builtIn ?? []));
 
   const change = (fn: (m: Menu) => void) => {
     update((m) => {
@@ -110,6 +116,9 @@ export function MenuEditor() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
+
+  // Wait for the ideas, so nothing taken out of the menu is mistaken for a new idea.
+  if (!builtIn && !error) return <Spinner label="Loading the menu…" />;
 
   const item = editing ? menu.sections[editing.s]!.groups[editing.g]!.items[editing.i] : undefined;
 
@@ -216,10 +225,12 @@ export function MenuEditor() {
       </div>
 
       <Sheet open={ideas !== null} onClose={() => setIdeas(null)} title={`Ideas: ${menu.sections.find((x) => x.kind === ideas)?.title ?? ''}`} wide>
-        {ideas && (
+        {ideas && !builtIn && <Spinner label="Loading ideas…" />}
+        {ideas && builtIn && (
           <IdeasPicker
             menu={menu}
             kind={ideas}
+            builtIn={builtIn}
             onForget={(label) => {
               if (!confirm(`Take “${label}” out of your ideas?`)) return;
               setMenu((m) => removeIdea(m, ideas, label));

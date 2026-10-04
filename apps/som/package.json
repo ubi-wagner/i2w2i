@@ -15,7 +15,8 @@
     "bootstrap": "node scripts/bootstrap.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "e2e": "node e2e/run.mjs"
+    "e2e": "node e2e/run.mjs",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",

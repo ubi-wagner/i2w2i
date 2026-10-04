@@ -216,6 +216,8 @@ jobs:
           npm run bootstrap
           npm run bootstrap
       - run: npm run build
+      - name: Built-in ideas stay out of the public browser files
+        run: npm run check:bundle
       - run: npx playwright install --with-deps chromium
       - name: Start the production server
         run: |

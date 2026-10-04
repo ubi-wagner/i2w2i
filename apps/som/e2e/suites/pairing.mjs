@@ -36,6 +36,9 @@ await login(admin, process.env.E2E_ADMIN_USERNAME ?? 'admin', process.env.E2E_AD
 await admin.waitForURL((u) => !u.pathname.startsWith('/login'));
 const peek = await call(admin, `/api/pods/${podId}/scenes`);
 check(peek.status === 404, 'the admin can’t see inside a pod they’re not in');
+check((await call(admin, '/api/ideas')).status === 404, 'the built-in ideas are only for people in a pod (not the admin)…');
+const anon = await phone('anon');
+check((await anon.request.get(`${BASE}/api/ideas`)).status() === 401, '…and never for anyone signed out');
 
 // Someone else entirely can't use a spent link.
 const stranger = await account('Stranger');
@@ -117,8 +120,16 @@ await sheetB.getByLabel('Search ideas').fill('squats');
 await sheetB.getByRole('button', { name: /^\+ 20 squats, on video/ }).click();
 await sheetB.getByRole('button', { name: /^✓ 20 squats, on video/ }).waitFor();
 check(true, 'tapping an idea adds it to the menu (search narrows the pool)');
+await sheetB.getByLabel('Search ideas').fill('self-bondage');
+check((await sheetB.getByText('Self-bondage, done safely').count()) === 1, 'the pool includes common BDSM activities');
 await sheetB.getByRole('button', { name: 'Close' }).first().click();
 check((await b.getByRole('button', { name: /20 squats, on video/ }).count()) === 1, '…where it shows in its section, with its proof');
+await b.getByRole('button', { name: /^6\. Arrival routine/ }).click();
+await b.getByRole('button', { name: 'Ideas for Arrival routine' }).click();
+await sheetB.getByLabel('Search ideas').fill('kiss');
+check((await sheetB.getByRole('button', { name: `+ Kneel and kiss ${TITLES.lead}’s feet` }).count()) === 1, 'built-in ideas use the pod’s own titles');
+await sheetB.getByRole('button', { name: 'Close' }).first().click();
+await b.getByRole('button', { name: /^5\. Play break/ }).click();
 const packFile = join(tmpdir(), `ideas-${RUN}.txt`);
 writeFileSync(packFile, `## Play\n### Our private ideas\n- Private idea ${RUN} [3 photos + 1 video] (10 min)\n- Another ${RUN}\n## Errands\n### Out and about\n- Errand idea ${RUN} [1 photo]\n`);
 await b.getByLabel('Import ideas').setInputFiles(packFile);

@@ -73,10 +73,18 @@ leaves them. The server stores ciphertext and can't read it.
 
 ## The menu and Ideas
 
-- **Ideas** is the big pool: about 160 everyday ideas built in (chores,
-  service, presentation, writing, rituals, aftercare), plus the couple's own
-  ideas, imported as an *ideas pack* (Menu → Import ideas) and stored
-  encrypted with the menu.
+- **Ideas** is the big pool: over 300 built in, everyday ones (chores,
+  service, presentation, writing, rituals, aftercare) and common kink and
+  BDSM activities (self-impact, safe self-bondage, sensation, edging and
+  denial, toys, positions, protocol, consequences and rewards), plus the
+  pod's own ideas, imported as an *ideas pack* (Menu → Import ideas) and
+  stored encrypted with the menu. Built-in ideas say `{lead}` and
+  `{follow}`, which show as the pod's own titles.
+- The built-in ideas are **for people in a pod only**: they live in
+  `lib/ideas-data.ts`, are served by `/api/ideas` to signed-in pod members,
+  and never ship in the public browser files (`npm run check:bundle`, run in
+  CI after the build, fails if they do). Solo-play ideas carry their safety
+  notes in their details.
 - **The menu** (their Select-O-Matic) is what they've picked from Ideas, plus
   their own entries. In each section, **Ideas for …** opens the pool: tap to
   add, tap again to take out. Anything taken out of the menu that isn't in
@@ -84,8 +92,9 @@ leaves them. The server stores ciphertext and can't read it.
 - **Scenes** are built from the menu ("More ideas for this section…" jumps to
   that section's Ideas).
 
-The built-in ideas stay everyday on purpose. **Never commit a couple's menu
-or their ideas to this repository**; those come in as files in the app.
+Built-in ideas stay generic. **Never commit a couple's own menu or ideas**
+to this repository (their names, their sheet); those come in as files in
+the app.
 
 The menu can be edited as **plain text** (Menu → Edit it all as text, or
 Edit as text in one section), downloaded as text, and imported from text or
@@ -126,7 +135,8 @@ An ideas pack is written the same way (sections, groups, items).
 - `lib/crypto.ts`: all encryption (WebCrypto; runs in the browser and tests).
 - `lib/menu.ts`, `lib/menu-text.ts`, `lib/ideas.ts`, `lib/plan.ts`,
   `lib/rules.ts`: the menu, its text form, the idea pool, plans → tasks and
-  proof, and who may do what. Pure, with unit tests.
+  proof, and who may do what. Pure, with unit tests. `lib/ideas-data.ts`
+  is the built-in ideas: server only (see above).
 - `lib/server/`: database, sessions, storage, push, the scheduler.
 - `db/migrations/`: schema `som`; same rules as the family site (never edit
   an applied migration).
@@ -153,6 +163,7 @@ Without a bucket it stores (encrypted) files in `/tmp/som-storage`.
 npm run typecheck
 npm test
 npm run build
+npm run check:bundle   # built-in ideas aren't in the public browser files
 npm run e2e     # against a running build; see e2e/run.mjs for the settings it needs
 ```
 
