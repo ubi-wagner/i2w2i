@@ -7,7 +7,7 @@ Everything runs as **one Next.js service in one Railway container**, behind
 
 | Path | What |
 |---|---|
-| `/login` | Sign in: email + password, or an emailed link |
+| `/login` | Sign in: username + password (older accounts may use their email), or an emailed link if email is set up |
 | `/` | Dashboard: the apps you can open |
 | `/admin` | People: invite, roles, app access (admin) |
 | `/account` | Name, password, sign out everywhere |
@@ -19,9 +19,9 @@ Everything runs as **one Next.js service in one Railway container**, behind
 
 | Who | Account? | Gets in with | Can |
 |---|---|---|---|
-| **Admin** (Eric) | yes, `admin` | email + password | Everything in non-sensitive apps; manages people |
-| **Creator** | yes, `creator` | email + password | Creates and runs events |
-| **Family member** | yes, `member` | email + password | Joins events they're added to: album, uploads, chat |
+| **Admin** (Eric) | yes, `admin` | username + password | Everything in non-sensitive apps; manages people |
+| **Creator** | yes, `creator` | username + password | Creates and runs events |
+| **Family member** | yes, `member` | username + password | Joins events they're added to: album, uploads, chat |
 | **Event guest** | no | the event's QR link, or its typed code as a fallback | Adds photos and/or sees that one album |
 | **Public viewer** | no | the album link, if the album is public | Looks |
 
@@ -30,17 +30,24 @@ Everything runs as **one Next.js service in one Railway container**, behind
   existing accounts), guest codes and QR cards, guests, content, gift links
   and the activity record. Eric, as platform admin, is implicitly owner of
   every event and also manages all accounts (People page).
-- **No email needed.** Accounts get a one-time link, shown to whoever
-  invited them as text to copy and as a QR code to scan in person. The
-  person opens it once and chooses a password.
-- **Forgot password:** a new one-time link from the host who invited them,
-  or from Eric. Signing in with it allows choosing a new password without
-  the old one for 30 minutes, and other devices are signed out. A sign-in
-  link opens someone's whole account, so hosts can only make links for
-  accounts they invited (`canIssueLink` in `lib/access.ts`); everyone else
-  comes to Eric.
-- If email is set up later (`RESEND_API_KEY`), invites are also emailed and
-  the login page offers "Email me a link".
+- **Usernames, no email.** Whoever adds someone (Eric on the People page,
+  or a host on their event) picks a username, suggested from the name, and
+  a starting password, suggested as three words (`lib/auth/suggest.ts`).
+  They pass both on themselves: the box offers "Text it to…" (the phone's
+  own share sheet) and "Copy message". People can change their username and
+  password on their account page. Usernames are unique, lower case, 2–32
+  of a–z 0–9 . _ - (migration 010; `normalizeUsername`). Accounts made
+  before usernames got one from their email and can sign in with either.
+- **A username belongs to one account.** Typing an existing username when
+  adding someone is refused, never treated as "add that person": existing
+  accounts are picked from the list instead.
+- **Forgot password:** "Reset password" gives a new made-up one to whoever
+  pressed it, and signs the person out everywhere. That's as good as signing
+  in as them, so hosts can only reset accounts they made
+  (`canResetPassword` in `lib/access.ts`); everyone else comes to Eric.
+- One-time sign-in links remain only for the optional email sign-in
+  (`RESEND_API_KEY`, "Email me a link") and links handed out before
+  usernames (`/album/<slug>/welcome` now just forwards to `/auth/link`).
 - Guests are deliberately **not** `core.users`. They're rows in
   `events.guests`, scoped to one event, named by themselves, and only as
   good as the credential they came in with.
@@ -108,14 +115,14 @@ The tests in `tests/events-rls.test.ts` run against real Postgres as `i2w2i_app`
 
 The end-to-end suites:
 
-- **auth:** sign-in, invites, passwords, deactivation, sign out everywhere
+- **auth:** usernames, starting passwords, resets, renaming, deactivation, sign out everywhere
 - **album:** the shower flow on phones, activity records, venue Wi-Fi
 - **matrix:** 9 kinds of visitor × 4 album states, pages and APIs
 - **uploads:** reload, offline, stall, re-pick, limits
 - **select:** select, zip, bulk moderation
 - **decorate:** frames and filters
 - **social:** comments and gift links
-- **hosts:** inviting people onto an event, one-time links as resets, co-hosts
+- **hosts:** adding people to an event with usernames, resets, co-hosts
 - **theme:** event pages, looks, directions, schedule, printed cards
 - **app:** the home-screen app and review notifications (local push stand-in)
 - **help:** the public help pages, their pictures, printing, and the links to them
@@ -172,7 +179,7 @@ Hosts write their event's page in one editor with a live preview (manage page, "
 - **Look** (`events.theme`): Enchanted forest, Garden or Classic. Colours are CSS variables under `[data-theme]` in `app/globals.css` (Tailwind's `stone` and `brand` read them), so every component follows the theme; drawings are inline SVG in `components/events/ThemeFrame.tsx`. Used on the join page, album, welcome page and printed cards.
 - **Wording, directions, schedule, notes** (`events.page`, jsonb): shape and limits in `lib/events/page.ts` (`cleanPage` is the only way in). They become the invitation-style hero and action buttons (Directions with Google/Apple Maps/Waze, Schedule, Good to know, Send a gift) that open themed sheets.
 - **What's public:** before someone joins, `public_event()` returns only the invitation wording. The address, schedule and notes come from `events.events` under RLS, so only people who can see the album get them.
-- **Invite links made on an event's page** open `/album/<slug>/welcome`: the event's look, choose a password, straight into the album. The link is used up only once the password is accepted.
+- **People added on an event's page** get a message whose link is `/login?next=/album/<slug>`, so signing in lands them in that album.
 - **Frames, filters and captions** are a small manifest on the upload; the original is never touched:
   - photos get their gallery copy re-rendered on the phone;
   - videos are framed and filtered at playback;
@@ -231,7 +238,7 @@ applied migration stops the boot.
 
 - **Accounts:** a random 256-bit token in the httpOnly cookie `i2w2i_session` (only its SHA-256 is stored). It's checked on every request, so deactivation and "sign out everywhere" are immediate. Sessions slide: each visit renews them for 90 days (the cookie is renewed on page loads only, never on a POST, so signing out can't be undone).
 - **Guests:** a separate token in the cookie `i2w2i_guest`, scoped to `/album/<slug>`, lasting 60 days.
-- **Sign-in links:** single-use, handed over as text or QR (there's no email). Opening one signs no one in (message previews fetch links); pressing Continue, or choosing a password on an event's welcome page, does.
+- **Sign-in links** (only with email set up, or from before usernames): single-use. Opening one signs no one in (message previews fetch links); pressing Continue does.
 
 ## Plans for the Couples app
 
@@ -241,3 +248,7 @@ It runs in the same container, but stricter by design:
 - Its own bucket prefix and short-lived signed URLs; its own schema and role.
 - Row-level security keyed to the couple.
 - A path-scoped step-up session (`Path=/couples`) on top of the normal sign-in.
+- Accounts can be made-up usernames with no real name or email, separate
+  from someone's family account. Since whoever makes an account knows its
+  starting password, Couples should make people choose their own password
+  before first use, and nobody but Eric should be able to reset one.

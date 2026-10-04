@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { sql } from '@/lib/db';
-import { canUsePassword } from '@/lib/access';
+import { canUsePassword, normalizeUsername } from '@/lib/access';
 import { hashPassword, passwordProblem, verifyPassword } from '@/lib/auth/password';
 import { createSession, endSession, requireUser, revokeAllSessions } from '@/lib/auth/session';
 import { audit } from '@/lib/audit';
@@ -50,6 +50,24 @@ export async function updateName(form: FormData): Promise<void> {
   const name = String(form.get('display_name') ?? '').trim().slice(0, 80);
   if (name) await sql`UPDATE core.users SET display_name = ${name} WHERE id = ${user.id}`;
   revalidatePath('/account');
+}
+
+export async function updateUsername(_prev: FormState, form: FormData): Promise<FormState> {
+  const user = await requireUser();
+  const username = normalizeUsername(String(form.get('username') ?? ''));
+  if (!username) return { error: 'Usernames are 2 to 32 letters or numbers (dots, dashes and _ are fine).' };
+  if (username === user.username.toLowerCase()) return {};
+  try {
+    const rows = await sql`UPDATE core.users SET username = ${username} WHERE id = ${user.id}
+                            AND NOT EXISTS (SELECT 1 FROM core.users WHERE username = ${username}) RETURNING id`;
+    if (!rows.length) return { error: `Someone already has “${username}”.` };
+  } catch (err) {
+    if ((err as { code?: string }).code === '23505') return { error: `Someone already has “${username}”.` };
+    throw err;
+  }
+  await audit(user.id, 'account.username', undefined, { from: user.username, to: username });
+  revalidatePath('/account');
+  return { message: `Saved. Sign in with “${username}” from now on.` };
 }
 
 export async function signOutEverywhere(): Promise<void> {

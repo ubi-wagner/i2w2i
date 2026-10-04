@@ -3,14 +3,15 @@ import { requireAdmin } from '@/lib/auth/session';
 import { allApps } from '@/lib/apps';
 import { sql } from '@/lib/db';
 import type { AppRole, PlatformRole } from '@/lib/access';
-import { InviteForm, ResendButton } from './InviteForms';
+import { InviteForm, ResetPasswordButton } from './InviteForms';
 import { setActive, setAppRole, setPlatformRole } from './actions';
 
 export const metadata = { title: 'People' };
 
 interface Person {
   id: string;
-  email: string;
+  username: string;
+  email: string | null;
   display_name: string;
   platform_role: PlatformRole;
   is_active: boolean;
@@ -22,7 +23,7 @@ export default async function AdminPage() {
   const admin = await requireAdmin();
   const [people, apps] = await Promise.all([
     sql<Person[]>`
-      SELECT u.id, u.email, u.display_name, u.platform_role, u.is_active, u.last_login_at,
+      SELECT u.id, u.username, u.email, u.display_name, u.platform_role, u.is_active, u.last_login_at,
              (SELECT jsonb_object_agg(g.app_key, g.role) FROM core.user_app_roles g WHERE g.user_id = u.id) AS grants
         FROM core.users u
        ORDER BY u.is_active DESC, u.display_name`,
@@ -34,7 +35,7 @@ export default async function AdminPage() {
       <Header user={admin} />
       <main className="mx-auto max-w-5xl space-y-8 px-4 py-8">
         <section className="card space-y-4">
-          <h1 className="text-xl font-semibold">Invite someone</h1>
+          <h1 className="text-xl font-semibold">Add someone</h1>
           <InviteForm />
         </section>
 
@@ -48,7 +49,7 @@ export default async function AdminPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold">{p.display_name}{self && ' (you)'}</p>
-                      <p className="text-sm text-stone-600">{p.email}</p>
+                      <p className="text-sm text-stone-600"><span className="font-mono">{p.username}</span>{p.email && <> · {p.email}</>}</p>
                       <p className="text-xs text-stone-500">
                         {p.last_login_at ? `Last signed in ${p.last_login_at.toLocaleDateString()}` : 'Hasn’t signed in yet'}
                       </p>
@@ -88,7 +89,7 @@ export default async function AdminPage() {
                       </form>
                     ))}
                   </div>
-                  {p.is_active && !self && <ResendButton userId={p.id} />}
+                  {p.is_active && !self && <ResetPasswordButton userId={p.id} />}
                 </li>
               );
             })}

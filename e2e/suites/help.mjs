@@ -5,7 +5,7 @@ import { ADMIN, BASE, RUN, adminPage, check, createEvent, finish, login, page, p
 
 const PAGES = [
   ['/help', 'How can we help?'],
-  ['/help/start', 'You got a link. Here’s all there is to it.'],
+  ['/help/start', 'You got a username and password. Here’s all there is to it.'],
   ['/help/hosting', 'Running an event album'],
   ['/help/faq', 'Quick answers'],
 ];

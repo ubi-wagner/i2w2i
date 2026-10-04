@@ -5,7 +5,7 @@ export const metadata = { title: 'Running an event' };
 const ROUTE = [
   ['#create', 'Create the event', 'Name and web address'],
   ['#page', 'Make the page', 'Look, wording, directions'],
-  ['#invite', 'Invite people', 'Co-hosts, family, friends'],
+  ['#invite', 'Add people', 'Co-hosts, family, friends'],
   ['#cards', 'Print QR cards', 'For the tables'],
   ['#photos', 'Photos come in', 'You approve them'],
   ['#publish', 'Publish', 'Choose who sees it'],
@@ -69,19 +69,20 @@ export default function HostingHelp() {
         </Step>
       </Section>
 
-      <Section id="invite" eyebrow="Step 3" title="Invite people" lead="For anyone who should have their own sign-in: co-hosts, the wedding party, family.">
+      <Section id="invite" eyebrow="Step 3" title="Add people" lead="For anyone who should have their own sign-in: co-hosts, the wedding party, family. You give each one a username and password; there’s no email.">
         <Step title="People on this event" shots={[
-          { src: 'host-people.webp', alt: 'People on this event: co-hosts, a guest and the invite form' },
-          { src: 'host-invited.webp', alt: 'The one-time link with a Text it to button' },
+          { src: 'host-people.webp', alt: 'People on this event, with the Add someone new form filled in' },
+          { src: 'host-invited.webp', alt: 'The new person’s username and password, with Copy message' },
         ]}>
-          <p>Under <b>People on this event</b>, type a name and an email (it’s only their username), pick a role and tap <K>Invite</K>:</p>
+          <p>Under <b>People on this event</b>, in <b>Add someone new</b>, type their name. A username and a starting password are filled in for you; change either if you like. Pick a role and tap <K>Add to this event</K>:</p>
           <List>
             <li><b>Co-host:</b> runs everything for this event, like you.</li>
             <li><b>Helper:</b> approves, hides and stars photos and edits the page.</li>
             <li><b>Guest:</b> sees the album, adds photos and joins the group chat.</li>
           </List>
-          <p>You get a one-time link. On a phone, tap <K>Text it to…</K>. On a laptop, <K>Copy</K> it into a message, or show the <K>QR</K> for them to scan. They tap it, pick a password and land in the album.</p>
-          <Tip>Links work once, within 7 days. Lost one, or forgot a password? Tap <K>New sign-in link</K> under their name. You can do that for people you invited; Eric can for anyone.</Tip>
+          <p>You get a box with their username and password. On a phone, tap <K>Text it to…</K>; on a laptop, <K>Copy message</K> and paste it into a text, or just read it out. The message has the link to sign in; they land in the album.</p>
+          <p>Someone who already has an account? Pick them under <b>Or add someone who already has an account</b> instead.</p>
+          <Tip>Forgot their password? Tap <K>Reset password</K> under their name and pass on the new one. You can do that for people you added; Eric can for anyone.</Tip>
         </Step>
       </Section>
 

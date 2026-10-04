@@ -32,10 +32,17 @@ export function LoginForm({ next, emailEnabled }: { next: string; emailEnabled: 
       <form action={mode === 'password' ? pwAction : linkAction} className="space-y-4">
         <input type="hidden" hidden name="next" value={next} />
         <input type="hidden" hidden name="client" value={client} />
-        <div>
-          <label className="label" htmlFor="email">Email</label>
-          <input className="input" id="email" name="email" type="email" autoComplete="email" required defaultValue={state.email} />
-        </div>
+        {mode === 'password' ? (
+          <div>
+            <label className="label" htmlFor="username">Username</label>
+            <input className="input" id="username" name="username" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} required defaultValue={pwState.username} />
+          </div>
+        ) : (
+          <div>
+            <label className="label" htmlFor="email">Email</label>
+            <input className="input" id="email" name="email" type="email" autoComplete="email" required defaultValue={linkState.email} />
+          </div>
+        )}
         {mode === 'password' && (
           <div>
             <label className="label" htmlFor="password">Password</label>
@@ -51,7 +58,7 @@ export function LoginForm({ next, emailEnabled }: { next: string; emailEnabled: 
       {mode === 'link' && <p className="text-center text-xs text-stone-500">Forgot your password? We’ll email you a link that signs you in.</p>}
       {!emailEnabled && (
         <p className="text-center text-sm text-stone-600">
-          Forgot your password, or haven’t set one yet? Ask the person who invited you (or Eric) for a new sign-in link.
+          Forgot your password? Ask the person who added you (or Eric) to reset it.
         </p>
       )}
     </div>

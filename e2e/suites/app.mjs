@@ -11,7 +11,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  ADMIN, BASE, PHONES, RUN, acceptInvite, adminPage, check, createCode, createEvent, db, finish, fixture, joinWithCode, login, page, uploadFiles,
+  ADMIN, BASE, PHONES, RUN, acceptInvite, adminPage, hostInvite, check, createCode, createEvent, db, finish, fixture, joinWithCode, login, page, uploadFiles,
 } from '../lib.mjs';
 
 const ece = createRequire(import.meta.url)('http_ece');
@@ -71,14 +71,7 @@ const bad = await host.request.post(`${BASE}/api/push`, { data: { endpoint: `${S
 check(bad.status() === 400, 'a malformed subscription is refused');
 
 // An invitee on the event (not a host) also subscribes: they must get nothing.
-const memberEmail = `nm-${RUN}@example.com`;
-await host.goto(ev.manage);
-const form = host.locator('form', { has: host.getByText('Invite someone by name and email', { exact: true }) });
-await form.getByLabel('Name').fill(`Nora Member ${RUN}`);
-await form.getByLabel('Email').fill(memberEmail);
-await form.getByRole('button', { name: 'Invite' }).click();
-await form.getByText(`Send Nora Member ${RUN} this link`).waitFor();
-const nora = await acceptInvite(await form.getByLabel('One-time link').inputValue(), 'nora-password-1');
+const nora = await acceptInvite(await hostInvite(host, ev, `Nora Member ${RUN}`, `nm-${RUN}`));
 const noraPhone = phone(`nora-${RUN}`);
 await subscribe(nora, noraPhone);
 
@@ -137,17 +130,11 @@ check(await blocked.getByText('Notifications are blocked for i2w2i').isVisible()
 // iPhone Safari (no push until it's on the home screen): explain how, and offer the home-screen card.
 const iphone = await page(PHONES.iphone);
 await iphone.addInitScript(() => { delete window.PushManager; });
-const momEmail = `mom-${RUN}@example.com`;
-await host.goto(ev.manage);
-await form.getByLabel('Name').fill(`Mom ${RUN}`);
-await form.getByLabel('Email').fill(momEmail);
-await form.getByRole('button', { name: 'Invite' }).click();
-await form.getByText(`Send Mom ${RUN} this link`).waitFor();
-const momLink = await form.getByLabel('One-time link').inputValue();
-await iphone.goto(momLink);
-await iphone.fill('#password', 'mom-password-1');
-await iphone.fill('#confirm', 'mom-password-1');
-await iphone.getByRole('button', { name: 'See the photos' }).click();
+const mom = await hostInvite(host, ev, `Mom ${RUN}`, `mom-${RUN}`);
+await iphone.goto(`${BASE}/login?next=/album/${ev.slug}`);
+await iphone.fill('#username', mom.username);
+await iphone.fill('#password', mom.password);
+await iphone.getByRole('button', { name: 'Sign in' }).click();
 await iphone.waitForURL(`${BASE}/album/${ev.slug}`);
 await iphone.getByText('Put i2w2i on your home screen').waitFor({ timeout: 5000 }).catch(() => {});
 check(await iphone.getByText('Put i2w2i on your home screen').isVisible(), 'Mom is offered the home-screen icon right in the album');

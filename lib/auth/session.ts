@@ -12,7 +12,9 @@ export const SESSION_DAYS = 90;
 
 export interface CurrentUser {
   id: string;
-  email: string;
+  username: string;
+  /** Only for accounts made before usernames; nothing is ever sent to it. */
+  email: string | null;
   display_name: string;
   platform_role: PlatformRole;
   has_password: boolean;
@@ -43,7 +45,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const rows = await sql<(CurrentUser & { session_id: string; stale: boolean })[]>`
-    SELECT u.id, u.email, u.display_name, u.platform_role, (u.password_hash IS NOT NULL) AS has_password,
+    SELECT u.id, u.username, u.email, u.display_name, u.platform_role, (u.password_hash IS NOT NULL) AS has_password,
            (s.via = 'link' AND s.created_at > now() - interval '30 minutes') AS fresh_link,
            s.id AS session_id, (s.last_seen_at < now() - interval '1 hour') AS stale
       FROM core.sessions s JOIN core.users u ON u.id = s.user_id

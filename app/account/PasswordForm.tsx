@@ -9,7 +9,7 @@ export function PasswordForm({ hasPassword, needCurrent }: { hasPassword: boolea
   if (state.continueTo) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-green-700" role="status">{state.message} Next time, sign in with your email and this password.</p>
+        <p className="text-sm text-green-700" role="status">{state.message} Next time, sign in with your username and this password.</p>
         <Link href={state.continueTo} className="btn">Continue →</Link>
       </div>
     );

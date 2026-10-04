@@ -25,7 +25,7 @@ export default async function HelpLayout({ children }: { children: React.ReactNo
         <HelpNav />
         {children}
         <footer className="rounded-2xl bg-stone-100 px-5 py-4 text-base text-stone-700 break-inside-avoid">
-          <b>Still stuck?</b> Text the person who invited you (or Eric). They can send you a new sign-in link in a minute.
+          <b>Still stuck?</b> Text the person who added you (or Eric). They can reset your password in a minute.
           <span className="hidden print:block print:pt-1 print:text-sm print:text-stone-500">i2w2i.com/help</span>
         </footer>
       </main>

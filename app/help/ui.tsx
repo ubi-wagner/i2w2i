@@ -3,7 +3,7 @@
 
 export function Intro({ eyebrow, title, children }: { eyebrow: string; title: string; children?: React.ReactNode }) {
   return (
-    <header className="space-y-3">
+    <header className="space-y-3 break-inside-avoid break-after-avoid">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand">{eyebrow}</p>
       <h1 className="text-3xl font-semibold leading-tight text-balance sm:text-4xl">{title}</h1>
       {children && <div className="max-w-2xl text-lg text-stone-600">{children}</div>}
@@ -14,7 +14,8 @@ export function Intro({ eyebrow, title, children }: { eyebrow: string; title: st
 export function Section({ id, eyebrow, title, lead, children }: { id: string; eyebrow?: string; title: string; lead?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section id={id} className="scroll-mt-6 space-y-4 border-t border-stone-200 pt-8">
-      <div className="space-y-2">
+      {/* Printed, a heading never sits alone at the bottom of a page. */}
+      <div className="space-y-2 break-inside-avoid break-after-avoid">
         {eyebrow && <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand">{eyebrow}</p>}
         <h2 className="text-2xl font-semibold text-balance sm:text-3xl">{title}</h2>
         {lead && <p className="max-w-2xl text-stone-600">{lead}</p>}

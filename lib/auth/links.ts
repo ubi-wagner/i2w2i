@@ -24,10 +24,10 @@ export async function issueLink(userId: string, purpose: LinkPurpose): Promise<s
 }
 
 /** Who a link is for, without using it (for the confirm page). */
-export interface LinkPeek { display_name: string; email: string; purpose: LinkPurpose; has_password: boolean; inviter: string | null }
+export interface LinkPeek { display_name: string; username: string; purpose: LinkPurpose; has_password: boolean; inviter: string | null }
 export async function peekLink(token: string): Promise<LinkPeek | null> {
   const rows = await sql<LinkPeek[]>`
-    SELECT u.display_name, u.email, t.purpose, (u.password_hash IS NOT NULL) AS has_password, inv.display_name AS inviter
+    SELECT u.display_name, u.username, t.purpose, (u.password_hash IS NOT NULL) AS has_password, inv.display_name AS inviter
       FROM core.login_tokens t JOIN core.users u ON u.id = t.user_id
       LEFT JOIN core.users inv ON inv.id = u.created_by
      WHERE t.token_hash = ${hashToken(token)} AND t.used_at IS NULL AND t.expires_at > now() AND u.is_active`;
