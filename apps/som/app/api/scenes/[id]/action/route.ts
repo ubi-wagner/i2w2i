@@ -228,14 +228,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return json({ status: 'active' });
     }
     case 'close': {
-      const votes = Array.from(new Set([...scene.close_votes, me.id]));
+      // The vote is added in the database, so two at the same moment both count.
+      const [row] = await sql<{ close_votes: string[] }[]>`
+        UPDATE som.scenes SET close_votes = array_append(array_remove(close_votes, ${me.id}::uuid), ${me.id}::uuid), updated_at = now()
+         WHERE id = ${id} AND status = 'aftercare' RETURNING close_votes`;
+      if (!row) return raced();
       const members = (await podMembers(scene.pod_id)).map((m) => m.account_id);
-      const closing = allAgreed(votes, members);
-      await sql`UPDATE som.scenes SET close_votes = ${votes}, status = ${closing ? 'closed' : scene.status},
-                       closed_at = ${closing ? new Date() : null}, updated_at = now() WHERE id = ${id}`;
-      if (closing) await cancelTimers(id);
-      await tell(closing ? 'The scene is closed. Back to us.' : `${name} is back to “us”.`);
-      return json({ status: closing ? 'closed' : scene.status, votes });
+      if (!allAgreed(row.close_votes, members)) {
+        await tell(`${name} is back to “us”.`);
+        return json({ status: scene.status, votes: row.close_votes });
+      }
+      const [closed] = await sql`UPDATE som.scenes SET status = 'closed', closed_at = now(), updated_at = now() WHERE id = ${id} AND status = 'aftercare' RETURNING 1`;
+      if (closed) {
+        await cancelTimers(id);
+        await tell('The scene is closed. Back to us.');
+      }
+      return json({ status: 'closed', votes: row.close_votes });
     }
     default: {
       if (!(await move())) return raced();

@@ -1,8 +1,11 @@
 // Deleting: you can delete what you sent any time (from the bucket too);
 // a whole scene goes only when both agree; an unsent draft is its author's.
+// And when both say yes at the same moment (to deleting, or to being back
+// to "us"), both count.
+import { randomUUID } from 'node:crypto';
 import { BASE, bucketObjects, call, check, db, finish, newPod, png, runningScene, TITLES } from '../lib.mjs';
 
-const { b, r } = await newPod();
+const { b, r, podId } = await newPod();
 const sheet = (p) => p.locator('dialog[open]').last();
 
 // ── An unsent draft is just its author's ────────────────────────────────────
@@ -73,6 +76,32 @@ const left = await db`SELECT (SELECT count(*) FROM som.scenes WHERE id = ${id}):
 check(left[0].s === 0 && left[0].e === 0 && left[0].t === 0, 'when both agree the scene goes, with its tasks and notes');
 const gone = await call(r, `/api/scenes/${id}`);
 check(gone.status === 404, '…for both of them');
+
+// ── Both at the same moment ─────────────────────────────────────────────────
+// Scenes made straight through the API (contents are never opened here).
+const cipher = () => `j1.${randomUUID().replace(/-/g, '')}.${randomUUID().replace(/-/g, '')}`;
+async function sceneIn(status) {
+  const sid = randomUUID();
+  await call(b, `/api/pods/${podId}/scenes`, 'POST', { id: sid, planEnc: cipher() });
+  await call(b, `/api/scenes/${sid}/action`, 'POST', { action: 'propose' });
+  if (status === 'proposed') return sid;
+  await call(r, `/api/scenes/${sid}/action`, 'POST', { action: 'start', tasks: [{ id: randomUUID(), ord: 0, bodyEnc: cipher() }] });
+  await call(r, `/api/scenes/${sid}/action`, 'POST', { action: 'inspect' });
+  await call(r, `/api/scenes/${sid}/action`, 'POST', { action: 'aftercare' });
+  return sid;
+}
+let deletedTogether = 0;
+let closedTogether = 0;
+for (let i = 0; i < 6; i++) {
+  const d = await sceneIn('proposed');
+  await Promise.all([call(b, `/api/scenes/${d}/delete`, 'POST', { agree: true }), call(r, `/api/scenes/${d}/delete`, 'POST', { agree: true })]);
+  if (!(await db`SELECT 1 FROM som.scenes WHERE id = ${d}`).length) deletedTogether++;
+  const c = await sceneIn('aftercare');
+  await Promise.all([call(b, `/api/scenes/${c}/action`, 'POST', { action: 'close' }), call(r, `/api/scenes/${c}/action`, 'POST', { action: 'close' })]);
+  if ((await db`SELECT status FROM som.scenes WHERE id = ${c}`)[0]?.status === 'closed') closedTogether++;
+}
+check(deletedTogether === 6, `both agreeing to delete at the same moment deletes it (${deletedTogether}/6)`);
+check(closedTogether === 6, `both back to “us” at the same moment closes it (${closedTogether}/6)`);
 
 const errors = [...b.errors, ...r.errors];
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
