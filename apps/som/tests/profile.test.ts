@@ -63,6 +63,19 @@ describe('roleplays as text', () => {
     expect(m.switchTitles).toEqual({ lead: 'Sir', follow: '' });
     expect(m.builtInInventory).toBe(true);
   });
+
+  it('templates keep the shape of a scene, never its picks', () => {
+    const m = cleanMenu({ templates: [
+      { name: 'Workday', from: '07:30', until: '15:30', leads: 'lead', kind: 'tasks', note: 'Make me proud.', picks: { x: {} } },
+      { name: 'Bad time', from: '25:00', until: '10:00' },
+      { name: '', from: '09:00', until: '10:00' },
+      { name: 'Switch', from: '09:00', until: '11:00', leads: 'follow', kind: 'roleplay' },
+    ] });
+    expect(m.templates.map(({ id: _, ...t }) => t)).toEqual([
+      { name: 'Workday', from: '07:30', until: '15:30', leads: 'lead', kind: 'tasks', note: 'Make me proud.' },
+      { name: 'Switch', from: '09:00', until: '11:00', leads: 'follow', kind: 'roleplay', note: '' },
+    ]);
+  });
 });
 
 describe('profiles', () => {

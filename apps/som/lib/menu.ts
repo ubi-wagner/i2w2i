@@ -121,6 +121,21 @@ export interface Roleplay {
   aftercare: string;
 }
 
+/**
+ * A template: the shape of a scene to offer again (its hours, who leads,
+ * tasks or a roleplay, a note), never what's in it, so each one is new.
+ */
+export interface Template {
+  id: string;
+  name: string;
+  /** "08:30" */
+  from: string;
+  until: string;
+  leads: 'lead' | 'follow';
+  kind: 'tasks' | 'roleplay';
+  note: string;
+}
+
 /** The pod's own things to rate in profiles, beside the built-in ones. */
 export interface RateSection { id: string; title: string; items: { id: string; label: string }[] }
 
@@ -141,6 +156,7 @@ export interface Menu {
    */
   library: MenuSection[];
   roleplays: Roleplay[];
+  templates: Template[];
   inventory: RateSection[];
   /** Whether profiles list the built-in things to rate too. */
   builtInInventory: boolean;
@@ -203,6 +219,22 @@ export function cleanRoleplay(raw: unknown): Roleplay | null {
   };
 }
 
+const hhmm = (v: unknown) => (typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : '');
+
+export function cleanTemplate(raw: unknown): Template | null {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const name = str(r.name, 60);
+  const from = hhmm(r.from);
+  const until = hhmm(r.until);
+  if (!name || !from || !until) return null;
+  return {
+    id: id(r.id), name, from, until,
+    leads: r.leads === 'follow' ? 'follow' : 'lead',
+    kind: r.kind === 'roleplay' ? 'roleplay' : 'tasks',
+    note: longStr(r.note, 1000),
+  };
+}
+
 function cleanRateSections(raw: unknown): RateSection[] {
   return (Array.isArray(raw) ? raw : []).slice(0, 20).map((x) => {
     const r = (x ?? {}) as Record<string, unknown>;
@@ -253,6 +285,7 @@ export function cleanMenu(raw: unknown): Menu {
     sections,
     library,
     roleplays: (Array.isArray(r.roleplays) ? r.roleplays : []).map(cleanRoleplay).filter((x): x is Roleplay => !!x).slice(0, RP.count),
+    templates: (Array.isArray(r.templates) ? r.templates : []).map(cleanTemplate).filter((x): x is Template => !!x).slice(0, 30),
     inventory: cleanRateSections(r.inventory),
     builtInInventory: r.builtInInventory !== false,
   };
@@ -325,6 +358,7 @@ export function starterMenu(): Menu {
     ],
     library: SECTION_KINDS.map(({ kind, title }) => ({ id: newId(), kind, title, groups: [] })),
     roleplays: [],
+    templates: [],
     inventory: [],
     builtInInventory: true,
   };

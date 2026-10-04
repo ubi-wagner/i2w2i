@@ -11,6 +11,7 @@ import { ProofEditor } from './ProofEditor';
 import { usePod } from './Pod';
 import { Collapsible, ErrorText, Sheet, Spinner } from './ui';
 import { RoleplaysEditor } from './RoleplayEditor';
+import { TemplatesEditor } from './TemplatesEditor';
 
 
 /** The menu: what scenes are built from. Mostly the follow's to fill, so the lead only chooses. */
@@ -228,6 +229,7 @@ export function MenuEditor() {
       })}
 
       <RoleplaysEditor menu={menu} change={change} open={open} setOpen={setOpen} />
+      <TemplatesEditor menu={menu} change={change} open={open} setOpen={setOpen} />
 
       <ErrorText>{error}</ErrorText>
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-paper-raised/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">

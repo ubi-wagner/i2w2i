@@ -3,9 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
-import { proofText } from '@/lib/menu';
 import { cleanPlan, emptyPlan, pacingFor, type Plan } from '@/lib/plan';
-import type { Roleplay } from '@/lib/menu';
+import { newId, proofText, type Roleplay } from '@/lib/menu';
 import { lovedByAll } from '@/lib/profile';
 import { useProfiles } from '../Profiles';
 import { feelLine } from '../RoleplayFeel';
@@ -79,10 +78,11 @@ export function CapacityLine({ reply }: { reply: Reply }) {
 
 interface WindowValue { day: string; from: string; until: string }
 
-function windowValue(start?: string | Date | null, end?: string | Date | null): WindowValue {
+/** A window to start from: given times, or these hours tomorrow (8:30 to 4:30 unless said). */
+function windowValue(start?: string | Date | null, end?: string | Date | null, hours?: { from: string; until: string }): WindowValue {
   if (start && end) return { day: dateValue(new Date(start)), from: timeValue(new Date(start)), until: timeValue(new Date(end)) };
   const now = new Date();
-  return { day: dateValue(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)), from: '08:30', until: '16:30' };
+  return { day: dateValue(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)), from: hours?.from ?? '08:30', until: hours?.until ?? '16:30' };
 }
 
 /** The window as times; an "until" at or before "from" means the next day. */
@@ -160,14 +160,19 @@ function CapacityPicker({ value, onChange }: { value: Capacity; onChange: (c: Ca
 export interface WindowAnswer { start: Date; end: Date; note: string }
 
 /** The lead's offer: when they're yours, and a note. */
-export function OfferForm({ initial, submit, onSubmit, noteLabel = 'A note (optional)' }: {
-  initial?: { startsAt?: string | Date | null; endsAt?: string | Date | null };
+export function OfferForm({ initial, submit, onSubmit, onSaveTemplate, noteLabel = 'A note (optional)' }: {
+  /** A window, or just hours (for tomorrow), and a note to start from. */
+  initial?: { startsAt?: string | Date | null; endsAt?: string | Date | null; hours?: { from: string; until: string }; note?: string };
   submit: string;
   noteLabel?: string;
   onSubmit: (v: WindowAnswer) => Promise<void>;
+  /** Keeping these hours and the note (and whatever the caller adds) as a named template. */
+  onSaveTemplate?: (name: string, v: { from: string; until: string; note: string }) => Promise<void>;
 }) {
-  const [value, setValue] = useState(() => windowValue(initial?.startsAt, initial?.endsAt));
-  const [note, setNote] = useState('');
+  const [value, setValue] = useState(() => windowValue(initial?.startsAt, initial?.endsAt, initial?.hours));
+  const [note, setNote] = useState(initial?.note ?? '');
+  const [naming, setNaming] = useState<string | null>(null);
+  const [saved, setSaved] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function go() {
@@ -192,6 +197,31 @@ export function OfferForm({ initial, submit, onSubmit, noteLabel = 'A note (opti
       </div>
       <ErrorText>{error}</ErrorText>
       <button type="button" className="btn w-full" disabled={busy} onClick={go}>{submit}</button>
+      {onSaveTemplate && (naming === null ? (
+        <div className="text-center">
+          <button type="button" className="text-sm text-ink-soft underline" onClick={() => { setNaming(''); setSaved(''); }}>Save as a template</button>
+          {saved && <p className="text-sm text-ok" role="status">{saved}</p>}
+        </div>
+      ) : (
+        <div className="space-y-2 rounded-2xl bg-paper-sunk p-3">
+          <label className="label" htmlFor="template-name">Template name</label>
+          <input id="template-name" className="input" value={naming} maxLength={60} placeholder="e.g. Workday" onChange={(e) => setNaming(e.target.value)} />
+          <p className="text-xs text-ink-soft">Keeps the hours, who leads, tasks or roleplay, and the note; never the picks, so each one’s new.</p>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-quiet" onClick={() => setNaming(null)}>Cancel</button>
+            <button type="button" className="btn" disabled={!naming.trim()} onClick={async () => {
+              setError('');
+              try {
+                await onSaveTemplate(naming.trim(), { from: value.from, until: value.until, note: note.trim() });
+                setSaved(`Saved “${naming.trim()}”.`);
+                setNaming(null);
+              } catch (err) {
+                setError((err as Error).message);
+              }
+            }}>Save template</button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -202,14 +232,25 @@ export function OfferForm({ initial, submit, onSubmit, noteLabel = 'A note (opti
  * kind (tasks to build, or one of your roleplays), and when. The other one
  * answers it.
  */
-export function NewOffer({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function NewOffer({ open, onClose, last, history = {} }: {
+  open: boolean;
+  onClose: () => void;
+  /** Your last offer: a new one starts from its hours, who led and what kind. */
+  last?: { startsAt: string; endsAt: string; leads: Role; kind: 'tasks' | 'roleplay' } | null;
+  /** How often each roleplay has been played, and when last. */
+  history?: Record<string, { count: number; last: string }>;
+}) {
   const pod = usePod();
   const router = useRouter();
   const partner = pod.members.find((m) => m.account_id !== pod.account.id);
   const them = partner?.display_name ?? 'Them';
-  const [leader, setLeader] = useState<'me' | 'them'>(pod.role === 'lead' ? 'me' : 'them');
-  const [kind, setKind] = useState<'tasks' | 'roleplay'>('tasks');
+  const who = (leads: Role): 'me' | 'them' => (leads === pod.role ? 'me' : 'them');
+  const [leader, setLeader] = useState<'me' | 'them'>(last ? who(last.leads) : pod.role === 'lead' ? 'me' : 'them');
+  const [kind, setKind] = useState<'tasks' | 'roleplay'>(last?.kind ?? 'tasks');
   const [rpId, setRpId] = useState<string | null>(null);
+  // Where the form starts: your last offer's hours, or a template's (a new key starts it again).
+  const [preset, setPreset] = useState<{ key: string; hours?: { from: string; until: string }; note?: string; name?: string }>(() =>
+    ({ key: 'last', hours: last ? { from: timeValue(new Date(last.startsAt)), until: timeValue(new Date(last.endsAt)) } : undefined }));
   const leaderRole: Role = leader === 'me' ? pod.role : (partner?.role ?? (pod.role === 'lead' ? 'follow' : 'lead'));
   const switched = leaderRole === 'follow';
   const choices = pod.menu.roleplays.filter((r) => r.leads === leaderRole);
@@ -218,6 +259,20 @@ export function NewOffer({ open, onClose }: { open: boolean; onClose: () => void
   return (
     <Sheet open={open} onClose={onClose} title={`Plan a scene with ${them}`}>
       <div className="space-y-5">
+        {pod.menu.templates.length > 0 && (
+          <section className="space-y-2">
+            <span className="label">Start from a template</span>
+            <div className="flex flex-wrap gap-2">
+              {pod.menu.templates.map((t) => (
+                <button key={t.id} type="button" className="chip" aria-pressed={preset.key.startsWith(t.id)}
+                  onClick={() => { setLeader(who(t.leads)); setKind(t.kind); setRpId(null); setPreset({ key: `${t.id}-${Date.now()}`, hours: { from: t.from, until: t.until }, note: t.note, name: t.name }); }}>
+                  {t.name}
+                </button>
+              ))}
+            </div>
+            {preset.name && <p className="text-sm text-ink-soft">“{preset.name}”: the shape is set; what’s in it is new.</p>}
+          </section>
+        )}
         <section className="space-y-2">
           <span className="label">Who leads?</span>
           <div className="grid grid-cols-2 gap-2">
@@ -236,11 +291,18 @@ export function NewOffer({ open, onClose }: { open: boolean; onClose: () => void
           {kind === 'roleplay' && !choices.length && (
             <p className="text-sm text-ink-soft">No roleplays where {leader === 'me' ? 'you lead' : `${them} leads`} yet. Add some on the Menu page.</p>
           )}
-          {kind === 'roleplay' && choices.length > 0 && <RoleplayPicker choices={choices} groups={groups} value={rpId} onChange={setRpId} />}
+          {kind === 'roleplay' && choices.length > 0 && <RoleplayPicker choices={choices} groups={groups} value={rpId} onChange={setRpId} history={history} />}
         </section>
         <OfferForm
+          key={preset.key}
+          initial={{ hours: preset.hours, note: preset.note }}
           submit={leader === 'me' ? 'Send the offer' : 'Send the request'}
           noteLabel={`A note for ${them} (optional)`}
+          onSaveTemplate={async (name, v) => {
+            const t = { id: newId(), name, ...v, leads: leaderRole, kind };
+            const rest = pod.menu.templates.filter((x) => x.name.toLowerCase() !== name.toLowerCase());
+            await pod.saveMenu({ ...pod.menu, templates: [...rest, t] });
+          }}
           onSubmit={async ({ start, end, note }) => {
             if (kind === 'roleplay' && !rp) throw new Error('Pick a roleplay.');
             const id = crypto.randomUUID();
@@ -265,18 +327,24 @@ export function NewOffer({ open, onClose }: { open: boolean; onClose: () => void
  * Picking a roleplay: how each of you feels about each one, the ones you
  * both love first. One your partner said isn't for them can't be picked.
  */
-function RoleplayPicker({ choices, groups, value, onChange }: { choices: Roleplay[]; groups: string[]; value: string | null; onChange: (id: string) => void }) {
+function RoleplayPicker({ choices, groups, value, onChange, history }: {
+  choices: Roleplay[]; groups: string[]; value: string | null; onChange: (id: string) => void;
+  history: Record<string, { count: number; last: string }>;
+}) {
   const pod = usePod();
   const { profiles } = useProfiles();
   const partner = pod.members.find((m) => m.account_id !== pod.account.id);
   const feel = (id: string, rp: string) => profiles?.[id]?.profile.roleplays[rp]?.feel;
-  const rank = (r: Roleplay) => (lovedByAll([r], Object.values(profiles ?? {}).map((p) => p.profile)).length && Object.keys(profiles ?? {}).length > 1 ? 0 : 1);
+  // Never played first (novelty), then ones you both love, then the longest ago.
+  const loved = (r: Roleplay) => lovedByAll([r], Object.values(profiles ?? {}).map((p) => p.profile)).length > 0 && Object.keys(profiles ?? {}).length > 1;
+  const order = (a: Roleplay, b: Roleplay) => Number(Boolean(history[a.id])) - Number(Boolean(history[b.id]))
+    || Number(!loved(a)) - Number(!loved(b)) || (history[a.id]?.last ?? '').localeCompare(history[b.id]?.last ?? '');
   return (
     <>
       {groups.map((g) => (
         <div key={g} className="space-y-2" role="radiogroup" aria-label={g || 'Roleplays'}>
           {g && <p className="eyebrow text-follow">{g}</p>}
-          {choices.filter((r) => r.group === g).sort((a, b) => rank(a) - rank(b)).map((r) => {
+          {choices.filter((r) => r.group === g).sort(order).map((r) => {
             const no = partner && feel(partner.account_id, r.id) === 'no';
             const line = feelLine(r.id, profiles, pod.account.id, (id) => pod.members.find((m) => m.account_id === id)?.display_name ?? 'Them');
             return (
@@ -284,6 +352,7 @@ function RoleplayPicker({ choices, groups, value, onChange }: { choices: Rolepla
                 className="chip w-full flex-col items-start gap-0.5 text-left disabled:opacity-60" onClick={() => onChange(r.id)}>
                 <span className="font-medium">{r.title}</span>
                 {(r.location || r.intensity) && <span className="text-xs font-normal text-ink-soft">{[r.location, r.intensity].filter(Boolean).join(' · ')}</span>}
+                <span className="text-xs font-normal text-ink-soft">{history[r.id] ? `Played ${history[r.id]!.count}× · last ${dayText(new Date(history[r.id]!.last))}` : '🆕 Not played yet'}</span>
                 {no ? <span className="text-xs font-medium text-stop">👎 Not for {partner!.display_name}</span> : line && <span className="text-xs font-normal">{line}</span>}
               </button>
             );

@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
 import { proofText, section, type MenuItem, type Pacing, type SectionKind } from '@/lib/menu';
-import { autoFill, cleanPlan, CHECKIN_CHOICES, pacingCheck, pacingFor, pacingOf, picked, planToTasks, withParam, type Plan } from '@/lib/plan';
+import { autoFill, cleanPlan, CHECKIN_CHOICES, pacingCheck, pacingFor, pacingOf, picked, planToTasks, recentlyUsed, withParam, type Plan } from '@/lib/plan';
 import { sceneTransition } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ProofEditor } from '../ProofEditor';
@@ -12,6 +12,7 @@ import { ErrorText, Sheet } from '../ui';
 import { CapacityLine, hoursOf, lengthText, OfferForm, useReply, when } from './Offer';
 import { RoleplayCard } from './Roleplay';
 import { LimitsNote } from '../Profiles';
+import { recentPlans, useScenes } from '../scenes';
 import type { SceneData } from './useScene';
 
 const BUILD_KINDS: SectionKind[] = ['presentation', 'domain', 'errands', 'tasks', 'play', 'arrival'];
@@ -96,6 +97,10 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
     setSaving('idle');
     setError('');
   };
+
+  // Novelty: Fill it for me steers away from what the last few scenes used.
+  const { scenes: listed } = useScenes();
+  const avoid = useMemo(() => recentlyUsed(listed ? recentPlans(listed, scene.id) : []), [listed, scene.id]);
 
   // Once agreed, it starts on the pacing for the window and how much the
   // follow can take on (until anything is picked; then it's the lead's call).
@@ -194,7 +199,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
         </div>
         {editable && (
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" className="btn-follow flex-1" onClick={() => edit((p) => { Object.assign(p, autoFill(pod.menu, p, Math.random, scene.starts_at ? hoursOf(scene.starts_at, scene.ends_at) : undefined)); })}>✨ Fill it for me</button>
+            <button type="button" className="btn-follow flex-1" onClick={() => edit((p) => { Object.assign(p, autoFill(pod.menu, p, Math.random, scene.starts_at ? hoursOf(scene.starts_at, scene.ends_at) : undefined, avoid)); })}>✨ Fill it for me</button>
             {tasks.length > 0 && (
               <button type="button" className="text-sm text-ink-soft underline"
                 onClick={() => { if (confirm('Clear every pick and start again?')) edit((p) => { p.picks = {}; p.rooms = p.rooms.map(() => ({ room: '', note: '' })); }); }}>
@@ -203,6 +208,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
             )}
           </div>
         )}
+        {editable && avoid.size > 0 && <p className="text-xs text-ink-soft">New first: it skips what your last few scenes used, while there’s something else.</p>}
       </div>
 
       {BUILD_KINDS.map((kind) => <SectionPicker key={kind} kind={kind} plan={plan} edit={edit} editable={editable} />)}

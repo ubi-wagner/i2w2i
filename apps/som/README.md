@@ -78,6 +78,16 @@ There are two ways in:
   check-ins; it saves as you go. **Send** it to the lead, who adjusts
   anything and **starts it now**.
 
+**Templates, and something new each time.** A new offer starts from
+your last one: its hours, who leads, tasks or a roleplay. **Save as a
+template** keeps that shape under a name (Workday, Saturday switch…) to
+set in one tap next time; never what's in it, because novelty matters.
+**Fill it for me** picks things your last five scenes didn't use while
+there's anything else, rooms included, and the roleplay picker puts ones
+you've never played first (then ones you both love), with how often and
+when the others were played. Templates are listed (and deleted) on the
+Menu page.
+
 **Switching.** Any scene can be led by whoever usually follows: choose who
 leads when you offer or ask. In a switched scene everything follows the
 switch (the lead's controls, demands, praise, who's notified of what), and
@@ -240,7 +250,9 @@ overlaps, expiry, fill, send, start in the window, demands, praise, redo, on
 my way, per-task scores), a switched roleplay (asked for by the usual lead,
 accepted by the usual follow, run with the roles swapped, straight to
 loves and dislikes from both at the inspection, rewards as usual; a
-roleplay marked "not for me" can't be picked; and a request turned down), profiles (ratings, notes, the
+roleplay marked "not for me" can't be picked; and a request turned down),
+templates and novelty (the last offer remembered, a template applied, a
+fill that avoids the last scene's picks, never-played roleplays first), profiles (ratings, notes, the
 other's view, Together, limits in the builder) and deleting, with a stand-in push service, and
 check that the database and the bucket hold nothing readable. The layout suite walks every screen on a small
 phone (iPhone SE; `E2E_LAYOUT_DEVICE` for another) and checks nothing is

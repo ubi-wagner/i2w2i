@@ -228,17 +228,20 @@ export function pacingFor(menu: Menu, hours: number, capacity: Capacity = 'norma
  * presentation, evidence and an arrival routine if there's none yet.
  * Keeps everything already picked. `rand` is for tests.
  */
-export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.random, windowHours?: number): Plan {
+export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.random, windowHours?: number, avoid: ReadonlySet<string> = new Set()): Plan {
   const next = cleanPlan(structuredClone(plan));
   const pace = pacingOf(menu, next) ?? menu.pacing[0] ?? null;
   if (pace && !next.pacing) next.pacing = pace.id;
-  const shuffle = <T,>(xs: T[]) => xs.map((x) => [rand(), x] as const).sort((a, b) => a[0] - b[0]).map(([, x]) => x);
+  // Shuffled, with anything done recently (`avoid`) last: new first, repeats only if nothing new is left.
+  const shuffle = <T,>(xs: T[], key?: (x: T) => string) => xs.map((x) => [(key && avoid.has(key(x)) ? 1 : 0) + rand(), x] as const)
+    .sort((a, b) => a[0] - b[0]).map(([, x]) => x);
+  const fresh = (xs: MenuItem[]) => shuffle(xs, (i) => i.id);
   const pickFrom = (kind: SectionKind, n: number, oneEachGroup = false) => {
     if (n <= 0) return;
     const groups = section(menu, kind).groups.filter((g) => g.items.length);
     const pool = oneEachGroup
-      ? shuffle(groups).map((g) => shuffle(g.items.filter((i) => !next.picks[i.id]))[0]).filter((i): i is MenuItem => !!i)
-      : shuffle(groups.flatMap((g) => g.items).filter((i) => !next.picks[i.id]));
+      ? shuffle(groups).map((g) => fresh(g.items.filter((i) => !next.picks[i.id]))[0]).filter((i): i is MenuItem => !!i).sort((a, b) => Number(avoid.has(a.id)) - Number(avoid.has(b.id)))
+      : fresh(groups.flatMap((g) => g.items).filter((i) => !next.picks[i.id]));
     for (const it of pool.slice(0, n)) next.picks[it.id] = it.param ? { param: defaultParam(it.param) } : {};
   };
   const have = (kind: SectionKind) => picked(menu, next, kind).length;
@@ -246,7 +249,7 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
   // Rooms, as many as the pacing says.
   const want = pace?.rooms ?? 0;
   const chosen = next.rooms.filter((r) => r.room);
-  const free = shuffle(menu.rooms.filter((r) => !chosen.some((c) => c.room === r)));
+  const free = shuffle(menu.rooms.filter((r) => !chosen.some((c) => c.room === r)), (r) => `room:${r}`);
   while (chosen.length < want && free.length) chosen.push({ room: free.shift()!, note: '' });
   next.rooms = chosen.length ? chosen : next.rooms.slice(0, 1);
   if (chosen.length && !have('domain')) pickFrom('domain', 1);
@@ -262,6 +265,28 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
   // Check-ins follow how long it lasts (the window, if there is one), not how much is in it.
   if (!next.checkinMinutes && (windowHours ?? pace?.hours ?? 0) >= 4) next.checkinMinutes = 60;
   return cleanPlan(next);
+}
+
+/** What recent scenes used (picks, and rooms as "room:<name>"), for Fill it for me to steer away from. */
+export function recentlyUsed(plans: Plan[]): Set<string> {
+  const out = new Set<string>();
+  for (const p of plans) {
+    for (const id of Object.keys(p.picks)) out.add(id);
+    for (const r of p.rooms) if (r.room) out.add(`room:${r.room}`);
+  }
+  return out;
+}
+
+/** How often each roleplay has been played, and when last, from past scenes. */
+export function roleplayHistory(scenes: { plan: Plan | null; started_at: string | null }[]): Record<string, { count: number; last: string }> {
+  const out: Record<string, { count: number; last: string }> = {};
+  for (const s of scenes) {
+    const id = s.plan?.roleplay?.id;
+    if (!id || !s.started_at) continue;
+    const h = out[id] ?? { count: 0, last: s.started_at };
+    out[id] = { count: h.count + 1, last: s.started_at > h.last ? s.started_at : h.last };
+  }
+  return out;
 }
 
 /** A sensible number for a blank ("mins" → 10). */

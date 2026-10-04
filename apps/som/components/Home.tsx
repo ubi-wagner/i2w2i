@@ -2,20 +2,15 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api } from '@/lib/client/api';
-import { cleanPlan, emptyPlan, type Plan } from '@/lib/plan';
+import { emptyPlan, roleplayHistory } from '@/lib/plan';
 import type { SceneStatus } from '@/lib/rules';
 import { NotifyToggle } from './NotifyToggle';
 import { lengthText, NewOffer, when as whenText } from './scene/Offer';
 import { usePod } from './Pod';
+import { useScenes, type ListedScene } from './scenes';
 import { ErrorText, Section, Spinner, timeAgo } from './ui';
-
-interface SceneListRow {
-  id: string; status: SceneStatus; plan_enc: string; created_by: string; created_at: string; started_at: string | null; closed_at: string | null;
-  paused_at: string | null; delete_votes: string[]; tasks: number; done: number; waiting: number;
-  starts_at: string | null; ends_at: string | null; switched: boolean; offered_by: string | null; change_requested: boolean;
-}
 
 export const STATUS_LABEL: Record<SceneStatus, string> = {
   draft: 'Draft', offered: 'Offered', accepted: 'Accepted', proposed: 'Waiting to start', ready: 'Ready to start',
@@ -25,16 +20,11 @@ export const STATUS_LABEL: Record<SceneStatus, string> = {
 export function Home() {
   const pod = usePod();
   const router = useRouter();
-  const [scenes, setScenes] = useState<(SceneListRow & { plan: Plan | null })[] | null>(null);
+  const { scenes, error: loadError } = useScenes();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [err, setError] = useState('');
+  const error = err || loadError;
   const [offering, setOffering] = useState(false);
-
-  const load = useCallback(async () => {
-    const r = await api<{ scenes: SceneListRow[] }>(`/api/pods/${pod.pod.id}/scenes`);
-    setScenes(await Promise.all(r.scenes.map(async (s) => ({ ...s, plan: await pod.open(s.plan_enc, `plan:${s.id}`).then(cleanPlan).catch(() => null) }))));
-  }, [pod]);
-  useEffect(() => { void load().catch((e) => setError((e as Error).message)); }, [load]);
 
   async function newScene() {
     setBusy(true);
@@ -57,6 +47,12 @@ export function Home() {
     .sort((a, b) => (a.starts_at ?? '').localeCompare(b.starts_at ?? ''));
   const proposed = scenes?.filter((s) => s.status === 'proposed') ?? [];
   const lead = pod.role === 'lead';
+  // A new offer starts from your last one; roleplays show how often (and when) they've been played.
+  const last = useMemo(() => {
+    const s = (scenes ?? []).filter((x) => x.offered_by === pod.account.id && x.starts_at && x.ends_at).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+    return s ? { startsAt: s.starts_at!, endsAt: s.ends_at!, leads: s.switched ? 'follow' as const : 'lead' as const, kind: s.plan?.roleplay ? 'roleplay' as const : 'tasks' as const, id: s.id } : null;
+  }, [scenes, pod.account.id]);
+  const history = useMemo(() => roleplayHistory(scenes ?? []), [scenes]);
   const drafts = scenes?.filter((s) => s.status === 'draft') ?? [];
   const past = scenes?.filter((s) => s.status === 'closed') ?? [];
 
@@ -116,12 +112,12 @@ export function Home() {
           )}
         </>
       )}
-      <NewOffer open={offering} onClose={() => setOffering(false)} />
+      {scenes && <NewOffer key={last?.id ?? 'none'} open={offering} onClose={() => setOffering(false)} last={last} history={history} />}
     </div>
   );
 }
 
-function SceneCard({ s, big = false }: { s: SceneListRow & { plan: Plan | null }; big?: boolean }) {
+function SceneCard({ s, big = false }: { s: ListedScene; big?: boolean }) {
   const pod = usePod();
   const when = s.closed_at ?? s.started_at ?? s.created_at;
   // An offer or a plan whose window has gone by without starting.

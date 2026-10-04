@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cleanMenu, itemsById, proofText, section, SECTION_KINDS, starterMenu, type Menu } from '@/lib/menu';
-import { arrivalChecklist, autoFill, cleanPlan, emptyPlan, noProof, pacingCheck, pacingFor, pacingForHours, planToTasks, proofComplete, proofProgress, withParam, type Plan } from '@/lib/plan';
+import { arrivalChecklist, autoFill, cleanPlan, emptyPlan, noProof, pacingCheck, picked, pacingFor, pacingForHours, planToTasks, proofComplete, proofProgress, recentlyUsed, roleplayHistory, withParam, type Plan } from '@/lib/plan';
 import { allAgreed, canDelete, overlaps, sceneRole, sceneTransition, startState, taskTransition, windowProblem } from '@/lib/rules';
 
 const find = (menu: Menu, label: string) => [...itemsById(menu).values()].find((x) => x.item.label === label)!.item;
@@ -313,6 +313,34 @@ describe('fill it for me', () => {
     expect(pacingCheck(menu, p)!.rooms[1]).toBe(1);
     expect(p.checkinMinutes).toBe(60);
     expect(autoFill(menu, cleanPlan({ ...emptyPlan(menu), pacing: 'p2' }), rand).checkinMinutes).toBeNull();
+  });
+
+  it('steers away from what recent scenes used, while there’s something new', () => {
+    const play = section(menu, 'play').groups.flatMap((g) => g.items);
+    const tasks = section(menu, 'tasks').groups.flatMap((g) => g.items);
+    const [keep, ...rest] = menu.rooms;
+    const last = cleanPlan({ ...emptyPlan(menu), picks: Object.fromEntries([...play.slice(1), ...tasks.slice(1)].map((i) => [i.id, {}])), rooms: rest.map((room) => ({ room, note: '' })) });
+    const avoid = recentlyUsed([last]);
+    for (let i = 0; i < 5; i++) {
+      const p = autoFill(menu, cleanPlan({ ...emptyPlan(menu), pacing: 'p2' }), rand, undefined, avoid);
+      expect(picked(menu, p, 'play').map((x) => x.item.id)).toEqual([play[0]!.id]);
+      expect(picked(menu, p, 'tasks').map((x) => x.item.id)).toEqual([tasks[0]!.id]);
+      expect(p.rooms.map((r) => r.room)).toEqual([keep]);
+    }
+    // Nothing new left: it repeats rather than leaving a gap.
+    const all = recentlyUsed([cleanPlan({ ...emptyPlan(menu), picks: Object.fromEntries(play.map((i) => [i.id, {}])) })]);
+    expect(picked(menu, autoFill(menu, cleanPlan({ ...emptyPlan(menu), pacing: 'p2' }), rand, undefined, all), 'play')).toHaveLength(1);
+  });
+
+  it('knows which roleplays were played, how often and when last', () => {
+    const rp = (id: string) => cleanPlan({ ...emptyPlan(menu), roleplay: { id, title: id } });
+    const h = roleplayHistory([
+      { plan: rp('a'), started_at: '2026-10-01T09:00:00Z' },
+      { plan: rp('a'), started_at: '2026-10-03T09:00:00Z' },
+      { plan: rp('b'), started_at: null },
+      { plan: null, started_at: '2026-10-02T09:00:00Z' },
+    ]);
+    expect(h).toEqual({ a: { count: 2, last: '2026-10-03T09:00:00Z' } });
   });
 
   it('fills a blank with a sensible number', () => {
