@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
 import type { MediaRow } from '@/lib/client/media';
 import { cleanProofs } from '@/lib/menu';
-import { cleanPlan, type Plan, type TaskDraft } from '@/lib/plan';
+import { cleanPlan, upgradePlan, type Plan, type TaskDraft } from '@/lib/plan';
 import type { Role, SceneStatus, TaskStatus } from '@/lib/rules';
 import { usePod, type Member } from '../Pod';
 
@@ -100,6 +100,8 @@ export function useScene(id: string) {
   const [data, setData] = useState<SceneData | null>(null);
   const [error, setError] = useState('');
   const cache = useRef(new Map<string, unknown>());
+  const menuRef = useRef(pod.menu);
+  menuRef.current = pod.menu;
 
   const open = useCallback(async <T,>(payload: string, context: string): Promise<T> => {
     const k = `${context}|${payload.slice(-24)}`;
@@ -112,7 +114,8 @@ export function useScene(id: string) {
       const r = await api<Raw>(`/api/scenes/${id}`);
       // Each piece opens on its own: one that can't be read never hides the rest.
       const [plan, tasks, entries] = await Promise.all([
-        open(r.scene.plan_enc, `plan:${id}`).then(cleanPlan).catch(() => null),
+        // A plan from before blocks comes over whole (rooms, story, own task: see upgradePlan).
+        open(r.scene.plan_enc, `plan:${id}`).then((raw) => upgradePlan(menuRef.current, raw)).catch(() => null),
         Promise.all(r.tasks.map(async ({ body_enc, ...t }) => ({ ...t, body: await open<TaskDraft>(body_enc, `task:${t.id}`).then(taskBody).catch(() => UNREADABLE) }))),
         Promise.all(r.entries.map(async ({ body_enc, ...e }) => ({ ...e, body: await open(body_enc, `entry:${e.id}`).catch(() => null) }))),
       ]);

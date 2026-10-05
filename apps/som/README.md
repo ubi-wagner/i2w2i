@@ -85,6 +85,24 @@ There are two ways in:
   block; it saves as you go. **Send** it to the lead, who adjusts
   anything and **starts it now**.
 
+**The whole scene, before anyone says yes.** The lead can build a scene
+first (**Build it first, then offer it**) and see it as one sheet (**See
+the whole scene**): what to get ready beforehand (equipment, new clothes:
+a list the lead writes), what to wear, every block with its times and
+tasks and the proof each needs, the arrival routine and check-ins. The one
+answering an offer sees that same sheet before accepting, and the follow
+can tick off what they've got ready on the sent scene. An offer made
+before anything is built says so.
+
+**Scenes from before an update come over whole.** A draft or proposal made
+before blocks keeps its rooms (with the evidence picked for them), story
+assignment, writing prompt and own task, placed into blocks (nothing is
+dropped; a part over its count is left for the lead to trim). Running
+scenes keep their tasks, and a scene keeps its arrival routine as it was
+when it started or was sent, whatever later happens to the menu. Importing
+a menu keeps the ids of items with the same wording, and anything it
+replaces goes into your own ideas.
+
 **The day, in two-hour blocks.** A block at home is getting ready (30
 minutes; after the first block, a 15-minute **change-over**, like out of
 the cleaning clothes and into something for the shops), then **exactly
@@ -287,7 +305,8 @@ other's view, Together, limits in the builder), deleting, and resilience (edits 
 save themselves once back online, the last tap before leaving a page is kept, two phones saving the
 menu never silently drop either, calling off and rescheduling from either side, nothing moving while
 paused, retried notes and demands arriving once, unfinished uploads removable, an invite nobody
-opened not holding up a close), with a stand-in push service, and
+opened not holding up a close), a staged scene (built first, seen whole by
+both before it's agreed, with what to get ready beforehand), with a stand-in push service, and
 check that the database and the bucket hold nothing readable. The layout suite walks every screen on a small
 phone (iPhone SE; `E2E_LAYOUT_DEVICE` for another) and checks nothing is
 wider than the screen, text boxes are 16px (so iPhones don't zoom) and

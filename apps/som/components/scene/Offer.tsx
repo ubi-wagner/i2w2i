@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
-import { blocksFor, cleanPlan, emptyPlan, pacingFor, type Plan } from '@/lib/plan';
+import { blocksFor, cleanPlan, emptyPlan, pacingFor, placeLoose, type Plan } from '@/lib/plan';
 import { newId, proofText, type Roleplay } from '@/lib/menu';
 import { lovedByAll } from '@/lib/profile';
 import { useProfiles } from '../Profiles';
@@ -13,6 +13,7 @@ import { usePod } from '../Pod';
 import { ErrorText, Sheet } from '../ui';
 import { KIND_ICON } from './parts';
 import { DayList } from './Day';
+import { AheadList, SceneSummary } from './Summary';
 import { RoleplayCard } from './Roleplay';
 import { mmss, useCountdown, type SceneData, type SceneRow } from './useScene';
 
@@ -257,6 +258,12 @@ export function NewOffer({ open, onClose, last, history = {} }: {
   const choices = pod.menu.roleplays.filter((r) => r.leads === leaderRole);
   const groups = [...new Set(choices.map((r) => r.group))];
   const rp = kind === 'roleplay' ? choices.find((r) => r.id === rpId) ?? null : null;
+  /** Stage the whole scene first (a draft), then offer it from the builder. */
+  async function buildFirst() {
+    const id = crypto.randomUUID();
+    await api(`/api/pods/${pod.pod.id}/scenes`, { body: { id, planEnc: await pod.seal(emptyPlan(pod.menu), `plan:${id}`) } });
+    router.push(`/scene/${id}`);
+  }
   return (
     <Sheet open={open} onClose={onClose} title={`Plan a scene with ${them}`}>
       <div className="space-y-5">
@@ -288,7 +295,12 @@ export function NewOffer({ open, onClose, last, history = {} }: {
             <button type="button" className="chip justify-center" aria-pressed={kind === 'tasks'} onClick={() => setKind('tasks')}>Tasks</button>
             <button type="button" className="chip justify-center" aria-pressed={kind === 'roleplay'} onClick={() => setKind('roleplay')}>🎭 A roleplay</button>
           </div>
-          {kind === 'tasks' && <p className="text-sm text-ink-soft">{leader === 'me' ? 'You build it once it’s agreed.' : `${them} builds it once it’s agreed.`}</p>}
+          {kind === 'tasks' && (leader === 'me' && !switched ? (
+            <div className="space-y-2 text-sm">
+              <p className="text-ink-soft">Offer the time now and build it once it’s agreed, or build it first: {them} sees the whole scene (and what to get ready) before saying yes.</p>
+              <button type="button" className="btn-quiet w-full" onClick={buildFirst}>Build it first, then offer it</button>
+            </div>
+          ) : <p className="text-sm text-ink-soft">{leader === 'me' ? 'You build it once it’s agreed.' : `${them} builds it once it’s agreed.`}</p>)}
           {kind === 'roleplay' && !choices.length && (
             <p className="text-sm text-ink-soft">No roleplays where {leader === 'me' ? 'you lead' : `${them} leads`} yet. Add some on the Menu page.</p>
           )}
@@ -412,6 +424,8 @@ export function OfferView({ data, reload }: { data: SceneData; reload: () => Pro
         {plan.note && <p className="whitespace-pre-wrap">“{plan.note}”</p>}
       </section>
       {plan.roleplay && <RoleplayCard rp={plan.roleplay} />}
+      {/* Everything that's staged, so whoever answers knows exactly what they're saying yes to. */}
+      <SceneSummary data={data} showNote={false} />
 
       {passed && <p className="card border-warn/40 bg-warn-light">This time has passed.{mine ? ' Offer a new one, or take it back.' : ` ${otherName} can offer a new one.`}</p>}
 
@@ -466,7 +480,7 @@ export function OfferView({ data, reload }: { data: SceneData; reload: () => Pro
           onSubmit={async ({ start, end, note }) => {
             const hours = hoursOf(start, end);
             const empty = !plan.blocks.some((b) => b.items.length);
-            const next = cleanPlan({ ...plan, pacing: pacingFor(pod.menu, hours)?.id ?? plan.pacing, blocks: empty ? blocksFor(hours) : plan.blocks, note: note || plan.note });
+            const next = placeLoose(pod.menu, cleanPlan({ ...plan, pacing: pacingFor(pod.menu, hours)?.id ?? plan.pacing, blocks: empty ? blocksFor(hours) : plan.blocks, note: note || plan.note }));
             await api(`/api/scenes/${scene.id}/action`, { body: { action: 'offer', startsAt: start.toISOString(), endsAt: end.toISOString(), planEnc: await pod.seal(next, `plan:${scene.id}`) } });
             setSheet(null);
             await reload();
@@ -544,6 +558,7 @@ export function BeingBuilt({ data, reload }: { data: SceneData; reload: () => Pr
         <p>{passed ? 'This time has passed. Ask for a new one, or call it off.' : `${pod.title('lead')} is building your scene. You’ll hear when it’s sent.`}</p>
       </section>
       {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} />}
+      <SceneSummary data={data} />
       <div className="grid gap-2">
         <button type="button" className={passed ? 'btn' : 'btn-quiet'} onClick={() => setChanging(true)}>Ask for a different time</button>
         <CallOff data={data} reload={reload} label="Can’t make it this time" />
@@ -628,6 +643,7 @@ export function ReadyView({ data, reload, onOpen }: { data: SceneData; reload: (
         {reply && <CapacityLine reply={reply} />}
       </section>
       {data.plan.note && <p className="card whitespace-pre-wrap">“{data.plan.note}”</p>}
+      <AheadList data={data} />
       {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} />}
       {(tasks.length > 0 || !data.plan.roleplay) && <section className="card space-y-2" aria-label="The tasks">
         <p className="eyebrow text-follow">{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}</p>
