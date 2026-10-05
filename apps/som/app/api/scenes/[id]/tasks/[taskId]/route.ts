@@ -43,5 +43,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (next === 'submitted') notifySoon(await others(scene, me.id, 'lead'), { title: 'S-O-M', body: `${name} sent something for review.`, url, tag: `task-${taskId}` });
   if (next === 'approved') notifySoon(await others(scene, me.id, 'follow'), { title: 'S-O-M', body: `${name} approved a task. ✓`, url, tag: `task-${taskId}` });
   if (next === 'returned') notifySoon(await others(scene, me.id, 'follow'), { title: 'S-O-M', body: `${name} sent a task back.`, url, tag: `task-${taskId}` });
+  if (next === 'skipped') notifySoon(await others(scene, me.id, 'follow'), { title: 'S-O-M', body: `${name} let a task go: you don’t need to do it.`, url, tag: `task-${taskId}` });
+  if (action === 'reopen') notifySoon(await others(scene, me.id, 'follow'), { title: 'S-O-M', body: `${name} opened a task again: it’s to do.`, url, tag: `task-${taskId}` });
   return json({ status: next, dueAt });
 }

@@ -215,6 +215,8 @@ await b.getByRole('button', { name: 'Save reflection' }).click();
 await b.getByText('Only you').waitFor();
 await r.getByLabel('How do you feel?').fill('Proud of her.');
 await r.getByRole('button', { name: 'Save reflection' }).click();
+check(!!await pushTo('sunny', /wrote a reflection/) && !pushes.some((m) => m.who === 'kay' && /wrote a reflection/.test(`${m.body}`)),
+  'Sunny hears Kay wrote a reflection; Sunny’s private one tells nobody');
 await b.getByRole('button', { name: 'I’m back to us' }).click();
 await b.getByText('You’re back to us').waitFor();
 const [{ status: still }] = await db`SELECT status FROM som.scenes WHERE id = ${id}`;

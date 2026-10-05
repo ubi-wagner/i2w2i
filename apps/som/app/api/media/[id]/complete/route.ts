@@ -1,6 +1,8 @@
 import { bad, guard, isUuid, json } from '@/lib/server/api';
 import { sql } from '@/lib/server/db';
 import { mediaFor, partCount, TAG_BYTES } from '@/lib/server/media';
+import { nameOf, others } from '@/lib/server/pods';
+import { notifySoon } from '@/lib/server/push';
 import { completeMultipart, listParts, objectSize } from '@/lib/server/storage';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +19,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // One completion at a time per upload: a retry and the request it
   // replaced can both arrive, and two at once would glue the parts together
   // twice. The second waits, then finds it done.
-  return sql.begin(async (tx) => {
+  const done = await sql.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`media:${id}`}, 0))`;
     const [now] = await tx<{ status: string; upload_id: string | null }[]>`SELECT status, upload_id FROM som.media WHERE id = ${id}`;
     if (!now) return bad('Not found', 404);
@@ -33,6 +35,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if ((await objectSize(m.object_key)) !== bytes) return json({ error: 'The upload didn’t arrive whole. Try again.' }, 409);
     if (m.thumb_key && (await objectSize(m.thumb_key)) !== m.thumb_bytes) return json({ error: 'The thumbnail didn’t arrive. Try again.' }, 409);
     await tx`UPDATE som.media SET status = 'ready', upload_id = NULL WHERE id = ${id}`;
-    return json({ ok: true });
+    return 'ready' as const;
   });
+  if (done !== 'ready') return done;
+  // Sent on its own (in the notes): tell the others. A task's photos are
+  // told when the task is sent for review, all at once.
+  const [row] = await sql<{ task_id: string | null; switched: boolean }[]>`
+    SELECT m.task_id, s.switched FROM som.media m JOIN som.scenes s ON s.id = m.scene_id WHERE m.id = ${id}`;
+  if (row && !row.task_id) {
+    notifySoon(await others({ pod_id: m.pod_id, switched: row.switched }, me.id), {
+      title: 'S-O-M', body: `${await nameOf(me.id)} sent you something.`, url: `/scene/${m.scene_id}#notes`, tag: `note-${m.scene_id}`,
+    });
+  }
+  return json({ ok: true });
 }

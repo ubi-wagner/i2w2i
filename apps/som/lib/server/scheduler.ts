@@ -76,6 +76,12 @@ export async function scheduleSceneStart(sceneId: string, at: Date): Promise<voi
   await add(sceneId, 'scene_start', at);
 }
 
+/** Agreed but not sent: a reminder to whoever leads, an hour before it starts (or in a minute, if that's sooner). */
+export async function scheduleSendReminder(sceneId: string, startsAt: Date | null): Promise<void> {
+  if (!startsAt) return;
+  await scheduleSceneStart(sceneId, new Date(Math.max(Date.now() + 60_000, startsAt.getTime() - 60 * 60_000)));
+}
+
 /** Pausing stops every reminder; resuming moves countdowns on by the time spent paused. */
 export async function pauseTimers(sceneId: string): Promise<void> {
   await cancelTimers(sceneId);
@@ -137,6 +143,12 @@ async function fire(t: Fired): Promise<void> {
       await notify(follows, { title: 'S-O-M', body: 'Time’s up on a task.', url: t.task_id ? `${url}#task-${t.task_id}` : url, tag: `task-${t.task_id}` });
       return;
     case 'scene_start': {
+      // Agreed but not sent yet: remind whoever leads, within the hour before it starts.
+      if (scene.status === 'accepted') {
+        const who = follows.length === 1 ? await nameOf(follows[0]!) : 'your partner';
+        await notify(leads, { title: 'S-O-M', body: `The scene with ${who} starts within the hour and isn’t sent yet. Build it and send it.`, url, tag: `scene-${t.scene_id}` });
+        return;
+      }
       if (scene.status !== 'ready') return;
       const who = follows.length === 1 ? await nameOf(follows[0]!) : 'Your partner';
       await notify(follows, { title: 'S-O-M', body: 'Your scene starts now. Open it and tap Start.', url, tag: `scene-${t.scene_id}` });

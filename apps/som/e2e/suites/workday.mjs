@@ -79,6 +79,11 @@ await audit(r, 'a change asked for');
 await r.getByRole('button', { name: 'Agree to the change' }).click();
 await r.getByText(`Agreed with ${TITLES.follow}`).waitFor();
 check(!!await pushTo('sunny', /agreed to your change/), 'Sunny hears Kay agreed');
+const pendingStart = async () => (await db`SELECT fire_at FROM som.timers WHERE scene_id = ${id} AND kind = 'scene_start' AND fired_at IS NULL AND cancelled_at IS NULL`)[0];
+const [{ starts_at: agreedAt }] = await db`SELECT starts_at FROM som.scenes WHERE id = ${id}`;
+check((await pendingStart())?.fire_at.getTime() === agreedAt.getTime() - 3_600_000, 'once agreed, a reminder for Kay to send it is set for an hour before it starts');
+await db`UPDATE som.timers SET fire_at = now() WHERE scene_id = ${id} AND kind = 'scene_start' AND fired_at IS NULL AND cancelled_at IS NULL`;
+check(!!await pushTo('kay', /isn’t sent yet/), '…and if it still isn’t sent by then, Kay hears it');
 [scene] = await db`SELECT status, starts_at, ends_at, change_request, reply_enc FROM som.scenes WHERE id = ${id}`;
 check(scene.status === 'accepted' && hours(scene) === 4 && scene.change_request === null && /^j1\./.test(scene.reply_enc), 'the scene is agreed for 4 hours; her capacity and note are stored encrypted');
 check((await whatNow(r)).includes('your turn') && (await whatNow(r)).includes('now build it') && await step(r) === 'Build & send', 'once agreed, Kay’s screen says it’s her turn to build it, then send it');
@@ -140,7 +145,7 @@ await r.getByRole('button', { name: 'Take it back to change it' }).click();
 await r.getByText(`Agreed with ${TITLES.follow}`).waitFor();
 check(!!await pushTo('sunny', /took the scene back/), 'Kay can take it back to change it (Sunny is told)');
 const [{ n: left }] = await db`SELECT count(*)::int AS n FROM som.tasks WHERE scene_id = ${id}`;
-check(left === 0 && !(await timer()), '…its tasks and the start reminder go');
+check(left === 0 && (await timer())?.fire_at.getTime() === starts_at.getTime() - 3_600_000, '…its tasks go, and the start reminder becomes a reminder to send it again');
 await r.getByRole('button', { name: `Send to ${TITLES.follow}` }).click();
 await sheet(r).getByRole('button', { name: 'Send it' }).click();
 await r.getByText(`${TITLES.follow} starts it; you’ll hear when.`).waitFor();
@@ -282,6 +287,20 @@ await b.reload();
 await b.locator('#arrival').getByText('until arrival').waitFor();
 check(true, 'Sunny gets the countdown and the arrival routine');
 
+// ── Kay lets a task go and opens it again; a photo sent on its own ──────────
+const [{ id: other }] = await db`SELECT id FROM som.tasks WHERE scene_id = ${id} AND status = 'todo' ORDER BY ord DESC LIMIT 1`;
+await r.goto(`${BASE}/scene/${id}#task-${other}`);
+await sheet(r).getByRole('button', { name: 'Skip it' }).click();
+await sheet(r).getByRole('button', { name: 'Reopen' }).waitFor();
+check(!!await pushTo('sunny', /let a task go/), 'Kay lets a task go: Sunny hears she needn’t do it');
+await sheet(r).getByRole('button', { name: 'Reopen' }).click();
+await sheet(r).getByRole('button', { name: 'Skip it' }).waitFor();
+check(!!await pushTo('sunny', /opened a task again/), '…and opens it again: Sunny hears it’s to do');
+await closeSheet(r);
+await b.goto(`${BASE}/scene/${id}`);
+await b.locator('#notes input[type=file][accept="image/*,video/*,audio/*"]').setInputFiles([await png(b, 'NOTE', '#37a')]);
+check(!!await pushTo('kay', /sent you something/), 'a photo sent on its own in the notes: Kay hears something came');
+
 // ── Kay scores each task she set ────────────────────────────────────────────
 await r.getByRole('button', { name: 'Start the inspection' }).click();
 await r.getByText('Each task').waitFor();
@@ -299,6 +318,7 @@ await audit(r, 'scoring each task');
 await r.getByLabel('Inspection notes').fill('A good day. Lovely folding.');
 await r.getByRole('button', { name: `Share with ${TITLES.follow}` }).click();
 await r.getByRole('region', { name: 'Results' }).waitFor();
+check(!!await pushTo('sunny', /scorecard and rewards are ready/), 'Sunny hears her scorecard and rewards are ready');
 
 await b.reload();
 const results = b.getByRole('region', { name: 'Results' });

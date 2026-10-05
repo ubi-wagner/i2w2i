@@ -38,7 +38,23 @@ leaves them. The server stores ciphertext and can't read it.
   (when the browser can read the format, as iPhones and Android phones do),
   which drops location and camera details.
 - **Notifications** only say that something happened and who did it ("Sunny
-  sent something for review"), never what.
+  sent something for review"), never what. Each of you turns them on, on
+  each phone, from the home screen (on an iPhone, add the app to the Home
+  Screen first); **Send a test** checks they arrive. Who hears what:
+  - **Offers and answers:** an offer or request; accepted (or "it's on"), a
+    change asked for or agreed, not this time, taken back, called off; a
+    scene sent to look at, or "not now".
+  - **Before it starts:** the scene sent (to the one doing the tasks) or
+    taken back; a reminder to whoever leads, within the hour before an
+    agreed scene that isn't sent yet; "it starts now" to both.
+  - **While it runs:** proof sent for review (photos, video, writing: to
+    whoever leads); approved, sent back, let go or opened again (to the one
+    doing them); a demand, praise, a note or a photo sent on its own; check
+    in now, a missed check-in, time's up on a task; on my way, 5 minutes
+    away, arriving; paused and resumed.
+  - **After:** inspection time; the scorecard and rewards ready; time for
+    aftercare; a reflection (unless kept private); back to us and closed;
+    a request to delete a scene, and the delete.
 - **Forgetting the passphrase.** If one of you forgets it, the other can make
   you a new key link in Settings. If you both lose every phone *and* both
   passphrases, the content can't be recovered by anyone, including the admin.
