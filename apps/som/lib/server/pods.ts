@@ -1,5 +1,5 @@
 import 'server-only';
-import type { Role, SceneStatus } from '../rules';
+import { sceneRole, type Role, type SceneStatus } from '../rules';
 import { sql } from './db';
 
 export interface Member { account_id: string; role: Role; display_name: string; username: string; has_key: boolean; invited: boolean }
@@ -30,28 +30,50 @@ export interface SceneRow {
   checkin_minutes: number | null;
   checkin_grace: number;
   next_checkin_at: Date | null;
+  /** Check-ins at the end of each block: minutes from checkin_base (when the day started, moved on by pauses). */
+  checkin_at: number[];
+  checkin_base: Date | null;
+  checkin_blocks: boolean;
   arrival_at: Date | null;
   paused_at: Date | null;
   paused_by: string | null;
   started_at: Date | null;
   closed_at: Date | null;
+  starts_at: Date | null;
+  ends_at: Date | null;
+  /** The window the follow asked for instead (null: the same). */
+  change_request: { by: string; startsAt: string | null; endsAt: string | null } | null;
+  /** The follow's answer, encrypted: capacity and a note. */
+  reply_enc: string | null;
+  /** The one who usually follows leads this scene. */
+  switched: boolean;
+  /** Who made the offer on the table (the other one answers it). */
+  offered_by: string | null;
   close_votes: string[];
   delete_votes: string[];
   created_at: Date;
   updated_at: Date;
 }
 
-/** The scene and this account's role in it, or null if they aren't in its pod. */
+/** The scene and this account's role in it (switched if the scene is), or null if they aren't in its pod. */
 export async function sceneFor(accountId: string, sceneId: string): Promise<{ scene: SceneRow; role: Role } | null> {
   const [scene] = await sql<SceneRow[]>`SELECT * FROM som.scenes WHERE id = ${sceneId}`;
   if (!scene) return null;
   const role = await podRole(accountId, scene.pod_id);
-  return role ? { scene, role } : null;
+  return role ? { scene, role: sceneRole(role, scene.switched) } : null;
 }
 
-/** Everyone else in the pod (for notifications), optionally only one role. */
-export async function others(podId: string, accountId: string, role?: Role): Promise<string[]> {
-  return (await podMembers(podId)).filter((m) => m.account_id !== accountId && (!role || m.role === role)).map((m) => m.account_id);
+/** The pod's members with their roles in this scene. */
+export async function sceneMembers(scene: Pick<SceneRow, 'pod_id' | 'switched'>): Promise<Member[]> {
+  return (await podMembers(scene.pod_id)).map((m) => ({ ...m, role: sceneRole(m.role, scene.switched) }));
+}
+
+/**
+ * Everyone else in the pod (for notifications), optionally only those with
+ * one role in this scene.
+ */
+export async function others(scene: Pick<SceneRow, 'pod_id' | 'switched'>, accountId: string, role?: Role): Promise<string[]> {
+  return (await sceneMembers(scene)).filter((m) => m.account_id !== accountId && (!role || m.role === role)).map((m) => m.account_id);
 }
 
 export async function nameOf(accountId: string): Promise<string> {

@@ -22,17 +22,52 @@ const BUILT_IN: Record<SectionKind, Record<string, Idea[]>> = {
     Makeup: ['Skincare only', 'A light, natural look', 'Lipstick in my favourite shade', 'Full glam'],
     Shoes: ['Barefoot', 'Slippers', 'Heels', 'Polished shoes'],
   },
-  domain: {
-    'Required evidence': [
-      { label: 'Before & after photos of each room', needs: [P(2, 'before & after')] },
-      { label: 'A photo of each finished room', needs: [P(1)] },
-      { label: 'A short video walk-through when done', needs: [V(1, 'walk-through')] },
-      { label: 'A message when each room is done', needs: [T(1)] },
-      { label: 'A voice note saying what you did', needs: [A(1)] },
-      { label: 'Close-ups of the detail work', needs: [P(3, 'close-ups')] },
-      { label: 'A time-lapse while you clean', needs: [V(1, 'time-lapse')] },
+  changeover: {
+    'Into the next thing': [
+      { label: 'Out of the cleaning clothes, into ___ for going out', param: 'what', needs: [P(1)] },
+      { label: 'Into ___ for the afternoon', param: 'what', needs: [P(1)] },
+      { label: 'Into your apron for the chores', needs: [P(1)] },
+      { label: 'Into what {lead} laid out', needs: [P(1)] },
     ],
-    Standards: ['Dust every surface, top to bottom', 'Mirrors and glass streak-free', 'Floors vacuumed and mopped', 'Bins emptied and relined', 'Bed made with crisp corners', 'Clutter away, surfaces clear', 'Light switches and handles wiped', 'Fresh towels out'],
+    'Fresh up': [
+      { label: 'Hair redone, fresh lipstick, a photo', needs: [P(1)] },
+      { label: 'A quick shower and fresh underwear', needs: [P(1)] },
+      { label: 'Face washed, moisturised, a smile for the camera', needs: [P(1)] },
+    ],
+    'Welcome home': [
+      { label: 'Into your best outfit, waiting at the door', needs: [P(1)] },
+      { label: 'A drink poured and the lights low for when {lead} walks in', needs: [P(1)] },
+      { label: 'Showered and dressed for the evening', needs: [P(1)] },
+    ],
+  },
+  domain: {
+    Rooms: [
+      { label: 'Deep-clean the ___', param: 'room', needs: [P(2, 'before & after')] },
+      { label: 'Vacuum and mop the ___ floor', param: 'room', needs: [P(2, 'before & after')] },
+      { label: 'Declutter and dust the ___', param: 'room', needs: [P(2, 'before & after')] },
+      { label: 'Every surface in the ___ wiped, top to bottom', param: 'room', needs: [P(1)] },
+      { label: 'Skirting boards and door frames in the ___', param: 'room', needs: [P(2, 'before & after')] },
+    ],
+    Kitchen: [
+      { label: 'Clean the refrigerator, inside and out', needs: [P(2, 'before & after')] },
+      { label: 'Clean the oven', needs: [P(2, 'before & after')] },
+      { label: 'Wipe every cupboard front and handle', needs: [P(1)] },
+      { label: 'Clean the microwave and descale the kettle', needs: [P(1)] },
+      { label: 'Clear out and wipe the pantry shelves', needs: [P(2, 'before & after')] },
+    ],
+    Bathroom: [
+      { label: 'Scrub the shower and tiles', needs: [P(2, 'before & after')] },
+      { label: 'Clean the toilet, top to bottom', needs: [P(1)] },
+      { label: 'Polish the taps and mirror, streak-free', needs: [P(1)] },
+    ],
+    'Around the house': [
+      { label: 'Wash the windows, inside', needs: [P(2, 'before & after')] },
+      { label: 'Change the sheets, crisp corners', needs: [P(1)] },
+      { label: 'Laundry: wash, dry, fold and put away', needs: [P(1)] },
+      { label: 'Iron ___ shirts', param: 'how many', needs: [P(1)] },
+      { label: 'Dust the shelves, frames and lamps', needs: [P(1)] },
+      { label: 'Bins emptied, washed and relined', needs: [P(1)] },
+    ],
   },
   errands: {
     'Out and about': [
@@ -81,6 +116,70 @@ const BUILT_IN: Record<SectionKind, Record<string, Idea[]>> = {
       { label: 'Fresh sheets on the bed', needs: [P(1)] },
       { label: 'Plan our next date', needs: [T(1)] },
       { label: 'Outfit photos for your journal', needs: [P(3, 'outfits')] },
+    ],
+    'Praise acts': [
+      { label: 'Do a chore while singing a song about {lead}', needs: [V(1, 'singing')] },
+      { label: 'Do a chore while telling {lead} everything you want to do for them', needs: [V(1)] },
+      { label: 'Three things {lead} did this week that you loved, on video', needs: [V(1)] },
+      { label: 'A two-minute speech: why {lead} is the best thing that ever happened to you', needs: [V(1)] },
+      { label: 'Kneel for five minutes thinking only of {lead}, then write what came to mind', needs: [T(1)], minutes: 5 },
+      { label: 'Read aloud a poem that reminds you of {lead}', needs: [A(1)] },
+      { label: 'Compliment {lead} ten different ways', needs: [T(10, 'compliments')] },
+      { label: 'Write {lead}’s name ___ times, beautifully', param: 'how many', needs: [P(1, 'the page')] },
+      { label: 'Recreate a photo from our first year', needs: [P(1)] },
+      { label: 'Sketch {lead} from a favourite photo', needs: [P(1)] },
+      { label: 'A collage of our photos, made by hand', needs: [P(1)] },
+      { label: 'Talk about the outfits you love seeing {lead} in', needs: [V(1)] },
+      { label: 'A voice note: thank {lead} for today', needs: [A(1)] },
+      { label: 'Polish {lead}’s shoes, 4 pairs', needs: [P(4, 'each pair')] },
+      { label: 'Polish {lead}’s jewellery and lay it out', needs: [P(1)] },
+    ],
+  },
+  wishes: {
+    Words: [
+      { label: 'Write me a sonnet about our marriage', needs: [T(1)] },
+      { label: 'A love letter I can keep', needs: [T(1)] },
+      { label: 'Ten things you love about me, and why', needs: [T(10)] },
+      { label: 'Write down our best day together, in detail', needs: [T(1)] },
+      { label: 'The story of how we met, from your side', needs: [T(1)] },
+      { label: 'A love letter I can open on a bad day', needs: [T(1)] },
+      { label: 'Write our vows again, as you’d say them today', needs: [T(1)] },
+      { label: 'Ten memories of us you never want to forget', needs: [T(10, 'memories')] },
+      { label: 'What you want our next ten years to look like', needs: [T(1)] },
+      { label: 'Why you’d marry me all over again', needs: [T(1)] },
+    ],
+    Plans: [
+      { label: 'Plan a night out: a new activity in a new place', needs: [T(1, 'the plan')] },
+      { label: 'Plan a weekend away I’d love', needs: [T(1, 'the plan')] },
+      { label: 'Book something for us to look forward to', needs: [P(1, 'the booking')] },
+      { label: 'Plan my perfect evening at home', needs: [T(1)] },
+      { label: 'Three weekend-away options, with prices', needs: [T(3, 'options')] },
+      { label: 'Plan a date at home: the menu, the music, my outfit', needs: [T(1, 'the plan')] },
+      { label: 'Plan a day where I don’t lift a finger', needs: [T(1, 'the plan')] },
+      { label: 'Find a class we could take together', needs: [T(1)] },
+      { label: 'Plan a picnic somewhere we’ve never been', needs: [T(1, 'the plan')] },
+      { label: 'Plan our next anniversary, start to finish', needs: [T(1, 'the plan')] },
+      { label: 'A list of five things we’ve never done together, to choose from', needs: [T(5)] },
+    ],
+    Surprises: [
+      { label: 'Pick an outfit for a date, underwear to shoes, and surprise me with it this week', needs: [P(1, 'laid out')] },
+      { label: 'Order a small surprise for me', needs: [P(1)] },
+      { label: 'Fresh flowers for the bedroom, arranged', needs: [P(1)] },
+      { label: 'Hide three notes for me to find this week', needs: [P(3, 'where they’re hidden')] },
+      { label: 'A playlist for the two of us, and why each song', needs: [T(1)] },
+      { label: 'Start a photo book of our year', needs: [P(1)] },
+    ],
+    'Looking after me': [
+      { label: 'Lay out my clothes for tomorrow', needs: [P(1)] },
+      { label: 'Make my favourite dessert', needs: [P(1)] },
+      { label: 'Clean and fill up my car', needs: [P(2, 'inside & the pump')] },
+      { label: 'Do one job I’ve been putting off', needs: [P(2, 'before & after')] },
+      { label: 'Make the bedroom a retreat: candles, fresh sheets, music ready', needs: [P(1)] },
+      { label: 'Pack my bag for tomorrow, snacks included', needs: [P(1)] },
+      { label: 'Choose a gift for me, under ___', param: 'budget', needs: [P(1)] },
+      { label: 'Make a playlist for us', needs: [T(1, 'the list')] },
+      { label: 'Breakfast in bed for me this week', needs: [T(1, 'which day')] },
+      { label: 'Prepare a welcome-home comfort station', needs: [P(3)] },
     ],
   },
   play: {
@@ -158,15 +257,40 @@ const KINK: Record<SectionKind, Record<string, Idea[]>> = {
     ],
     'Posture & manners': ['Heels on the whole time', 'Hands clasped behind your back when standing', 'Eyes down unless spoken to', 'Every answer ends in “{lead}”', 'Curtsy when you enter a room', 'Ask permission before sitting'],
   },
+  changeover: {
+    'Into the next thing': [
+      { label: 'Plug in for the next block', needs: [P(1)] },
+      { label: 'Into heels for the rest of the day', needs: [P(1)] },
+      { label: 'Into ___ for when {lead} walks in', param: 'what', needs: [P(1)] },
+      { label: 'Uniform off, lingerie on under your clothes for going out', needs: [P(2, 'under and over')] },
+    ],
+  },
   domain: {
-    'Required evidence': [
-      { label: 'Clean in uniform, on video', needs: [V(1)] },
-      { label: 'Scrub the floor on hands and knees', needs: [P(2, 'before & after')] },
-      { label: 'Clean wearing the plug', needs: [P(1)] },
-      { label: 'Clean in heels the whole time', needs: [V(1, 'walk-through in heels')] },
-      { label: 'Kneel and present each finished room', needs: [P(1)] },
-      { label: 'A written inspection report for each room', needs: [T(1)] },
-      { label: 'Clean while locked in chastity', needs: [P(1)] },
+    'With a twist': [
+      { label: 'Clean the ___ in uniform, on video', param: 'room', needs: [V(1)] },
+      { label: 'Scrub the ___ floor on hands and knees', param: 'room', needs: [P(2, 'before & after')] },
+      { label: 'Clean the ___ wearing the plug', param: 'room', needs: [P(1)] },
+      { label: 'Clean the ___ in heels the whole time', param: 'room', needs: [V(1, 'walk-through in heels')] },
+      { label: 'Clean the ___, then kneel and present it', param: 'room', needs: [P(1)] },
+      { label: 'Clean the ___ locked in chastity', param: 'room', needs: [P(1)] },
+    ],
+  },
+  wishes: {
+    'For {lead}': [
+      { label: 'Write {lead} a filthy poem about last time', needs: [T(1)] },
+      { label: 'Plan our next scene, start to finish', needs: [T(1, 'the plan')] },
+      { label: 'Choose lingerie for {lead} to see you in this week', needs: [P(1)] },
+      { label: 'Write the fantasy you haven’t told {lead} yet', needs: [T(1)] },
+      { label: 'Describe how you’d like to worship {lead} tonight, in detail', needs: [T(1)] },
+      { label: 'Five scenes for {lead} to choose from next time', needs: [T(5, 'scenes')] },
+      { label: 'Pick a new toy for {lead} to use on you, and send the link', needs: [P(1)] },
+      { label: 'A new rule for yourself, for {lead} to approve', needs: [T(1)] },
+      { label: 'Plan a night out where you wear something only {lead} knows about', needs: [T(1, 'the plan')] },
+      { label: 'A video: why {lead} is in charge', needs: [V(1)] },
+      { label: 'Plan an evening of service for {lead}, start to finish', needs: [T(1, 'the plan')] },
+      { label: 'Ten ways you’ll spoil {lead} this month', needs: [T(10)] },
+      { label: 'The story of your favourite scene with {lead}, from your side', needs: [T(1)] },
+      { label: 'A letter to {lead} about the first time you knelt', needs: [T(1)] },
     ],
   },
   errands: {
@@ -214,6 +338,23 @@ const KINK: Record<SectionKind, Record<string, Idea[]>> = {
       { label: 'Memorise a new rule and recite it', needs: [A(1)] },
       { label: 'A posing set', needs: [P(5, 'poses')] },
       { label: 'Makeup practice: one full look', needs: [P(2, 'before & after')] },
+    ],
+    'Devotion acts': [
+      { label: 'Orgasm on {lead}’s shoes, lick it clean, then polish 4 pairs', needs: [V(1), P(4, 'each pair')] },
+      { label: 'Worship {lead}’s shoes: kiss each one and say thank you', needs: [V(1)] },
+      { label: 'Edge for ten minutes while praising {lead} out loud', needs: [V(1)], minutes: 10 },
+      { label: 'Kneel at {lead}’s side of the bed and recite your devotion', needs: [V(1)] },
+      { label: 'Kiss {lead}’s photo and thank them for every rule', needs: [V(1)] },
+      { label: 'Present yourself and say why you serve {lead}', needs: [V(1)] },
+      { label: '“{lead}’s property” on your thigh in lipstick', needs: [P(1)] },
+      { label: 'Something of {lead}’s worn under your clothes for the next block', needs: [P(1)] },
+      { label: 'A devotional altar: {lead}’s photo, a candle and your collar', needs: [P(1)] },
+      { label: 'Write a confession of your desire for {lead}, then read it on your knees', needs: [V(1)] },
+      { label: 'Beg to serve {lead} more, on video', needs: [V(1)] },
+      { label: 'Plug in, then a curtsy for {lead}', needs: [V(1)] },
+      { label: 'Chastity check: the lock, and a thank-you', needs: [P(1, 'the lock'), A(1, 'thank you')] },
+      { label: 'Clean {lead}’s heels with your tongue', needs: [V(1)] },
+      { label: 'Thank {lead} for each rule, one at a time, kneeling', needs: [A(1)] },
     ],
   },
   play: {
@@ -327,3 +468,35 @@ export function builtInIdeas(): MenuSection[] {
   };
   return cleanMenu(raw).sections;
 }
+
+/**
+ * Quick demands the lead can send while a scene runs: tap, adjust, send.
+ * Most come with a short countdown that starts right away.
+ */
+export interface DemandIdea { group: string; label: string; param?: string; needs: Proof[]; minutes?: number }
+const D = (group: string, label: string, needs: Proof[], minutes?: number, param?: string): DemandIdea => ({ group, label, needs, ...(minutes ? { minutes } : {}), ...(param ? { param } : {}) });
+
+export function demandIdeas(): DemandIdea[] {
+  return [
+    D('Right now', 'A photo, right now', [P(1)], 5),
+    D('Right now', 'A video, right now', [V(1)], 5),
+    D('Right now', 'A voice note, right now', [A(1)], 5),
+    D('Right now', 'Show me where you are and what you’re wearing', [P(2)], 5),
+    D('Right now', 'Check in: how are you doing?', [T(1)], 5),
+    D('Redo', 'Redo it, properly', [P(1)], 30),
+    D('Redo', 'A better photo: closer, more light', [P(2)], 10),
+    D('Redo', 'Show me the detail you missed', [P(1)], 10),
+    D('Correction', 'Self-spank ___ per cheek, counting aloud', [V(1)], 5, 'how many'),
+    D('Correction', 'Kneel for ___ minutes, then report', [P(1), T(1)], 15, 'mins'),
+    D('Correction', 'Corner time, ___ minutes', [P(1)], 15, 'mins'),
+    D('Correction', 'Write “I obey the first time” ___ times', [P(1, 'the page')], 20, 'how many'),
+    D('Correction', 'Clothespins for ___ minutes', [P(1)], 15, 'mins'),
+    D('Devotion', 'Lick ___ clean, on video', [V(1)], 5, 'what'),
+    D('Devotion', 'Kiss {lead}’s photo and give thanks', [V(1)], 5),
+    D('Devotion', 'Tell me why you belong to {lead}', [A(1)], 10),
+    D('Devotion', 'Edge once, then stop and report', [V(1), T(1)], 10),
+    D('Devotion', 'Change into ___ and show me', [P(2)], 15, 'what'),
+    D('Devotion', 'A pose for {lead}', [P(3)], 5),
+  ];
+}
+

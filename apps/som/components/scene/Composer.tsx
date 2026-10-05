@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/client/api';
-import { uploadMedia, type Progress } from '@/lib/client/upload';
+import { cantSend } from '@/lib/client/upload';
+import { dismissUpload, startUpload, usePendingUploads } from '@/lib/client/uploads';
 import { usePod } from '../Pod';
+import { useDraft } from '../useDraft';
 import { ErrorText } from '../ui';
 import type { EntryKind } from './useScene';
-
-interface Upload { id: string; name: string; p: Progress }
 
 /**
  * Add something to a scene or a task: a note (or a piece of writing), and
@@ -25,9 +25,11 @@ export function Composer({ sceneId, taskId, kind = 'comment', placeholder = 'Add
   onAdded: () => void;
 }) {
   const pod = usePod();
-  const [text, setText] = useState('');
+  const [text, setText, clearText] = useDraft(`note:${kind}:${sceneId}:${taskId ?? ''}`, '');
+  // One id per note, kept until it's sent: trying again never posts it twice.
+  const noteId = useRef(crypto.randomUUID());
   const [busy, setBusy] = useState(false);
-  const [uploads, setUploads] = useState<Upload[]>([]);
+  const uploads = usePendingUploads(sceneId, taskId ?? null);
   const [error, setError] = useState('');
   const writing = kind === 'writing';
   const [asList, setAsList] = useState(Boolean(list));
@@ -39,10 +41,11 @@ export function Composer({ sceneId, taskId, kind = 'comment', placeholder = 'Add
     setBusy(true);
     setError('');
     try {
-      const id = crypto.randomUUID();
+      const id = noteId.current;
       const body = asList && list ? { text: lines.join('\n'), items: lines.slice(0, 200) } : { text: t };
       await api(`/api/scenes/${sceneId}/entries`, { body: { id, kind, taskId: taskId ?? null, bodyEnc: await pod.seal(body, `entry:${id}`) } });
-      setText('');
+      noteId.current = crypto.randomUUID();
+      clearText();
       onAdded();
     } catch (err) {
       setError((err as Error).message);
@@ -52,16 +55,11 @@ export function Composer({ sceneId, taskId, kind = 'comment', placeholder = 'Add
   }
 
   function addFiles(files: FileList | File[] | null) {
+    setError('');
     for (const file of Array.from(files ?? [])) {
-      const id = crypto.randomUUID();
-      setUploads((u) => [...u, { id, name: file.name || 'recording', p: { sent: 0, total: file.size, state: 'preparing' } }]);
-      const update = (p: Progress) => setUploads((u) => u.map((x) => (x.id === id ? { ...x, p } : x)));
-      uploadMedia(file, { sceneId, taskId, key: pod.key, onProgress: update })
-        .then(() => {
-          setUploads((u) => u.filter((x) => x.id !== id));
-          onAdded();
-        })
-        .catch((err) => update({ sent: 0, total: file.size, state: 'error', error: (err as Error).message }));
+      const problem = cantSend(file);
+      if (problem) { setError(problem); continue; }
+      startUpload(file, { sceneId, taskId, key: pod.key }, onAdded);
     }
   }
 
@@ -107,7 +105,7 @@ export function Composer({ sceneId, taskId, kind = 'comment', placeholder = 'Add
                 </span>
               </div>
               <div className="mt-1 h-1.5 overflow-hidden rounded bg-line"><div className="h-full bg-follow transition-all" style={{ width: `${(u.p.sent / Math.max(1, u.p.total)) * 100}%` }} /></div>
-              {u.p.error && <p className="mt-1 text-stop">{u.p.error} <button type="button" className="underline" onClick={() => setUploads((x) => x.filter((y) => y.id !== u.id))}>Dismiss</button></p>}
+              {u.p.error && <p className="mt-1 text-stop">Not sent: {u.p.error} <button type="button" className="underline" onClick={() => dismissUpload(u.id)}>Dismiss</button></p>}
             </li>
           ))}
         </ul>

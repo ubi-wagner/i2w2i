@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { STATUS_LABEL } from '../Home';
-import { usePod } from '../Pod';
+import { SceneRoles, usePod } from '../Pod';
 import { clock, ErrorText, Sheet, Spinner } from '../ui';
 import { Builder } from './Builder';
+import { BeingBuilt, OfferView, ReadyView } from './Offer';
 import { Running } from './Running';
 import { TaskSheet } from './TaskSheet';
 import { useScene, type SceneData } from './useScene';
@@ -40,7 +41,7 @@ export function ScenePage({ id }: { id: string }) {
   if (!data) {
     return error ? (
       <div className="card space-y-3 text-center">
-        <p>{error === 'Not found' ? 'This scene isn’t here any more.' : error}</p>
+        <p>{error === 'Not found' ? 'This scene isn’t here any more.' : error === 'offline' ? 'No connection. Check your signal and try again.' : error}</p>
         <Link href="/" className="btn">Back to scenes</Link>
       </div>
     ) : <Spinner />;
@@ -54,21 +55,23 @@ export function ScenePage({ id }: { id: string }) {
   };
 
   return (
+    <SceneRoles switched={scene.switched}>
     <div className="space-y-5">
-      <header className="space-y-1">
-        <Link href="/" className="text-sm text-ink-soft">← Scenes</Link>
-        <div className="flex items-start justify-between gap-3">
-          <h1 className="font-display text-3xl text-lead-dark">{data.plan.title || 'Untitled scene'}</h1>
-          <span className={`mt-2 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${scene.paused_at ? 'bg-stop text-white' : 'bg-lead-light text-lead-dark'}`}>
-            {scene.paused_at ? 'Paused' : STATUS_LABEL[scene.status]}
-          </span>
-        </div>
-      </header>
+      <SceneHeader data={data} />
 
-      {error && <p className="text-sm text-warn" role="status">Offline? Showing what was last loaded.</p>}
+      {error === 'Not found' ? (
+        <div className="card space-y-3 text-center" role="status">
+          <p>This scene isn’t here any more (it was deleted).</p>
+          <Link href="/" className="btn">Back to scenes</Link>
+        </div>
+      ) : error && <p className="text-sm text-warn" role="status">{error === 'offline' ? 'Offline? Showing what was last loaded.' : `Couldn’t refresh: ${error}`}</p>}
+      {data.planBroken && <p className="card border-stop/40 text-sm text-stop">This scene’s plan couldn’t be opened on this phone, so it can’t be changed from here. Try your other phone, or unlock this one again.</p>}
       <PausedBanner data={data} reload={reload} />
       <DeleteRequest data={data} reload={reload} />
 
+      {scene.status === 'offered' && <OfferView data={data} reload={reload} />}
+      {scene.status === 'accepted' && (data.role === 'lead' ? <Builder data={data} reload={reload} /> : <BeingBuilt data={data} reload={reload} />)}
+      {scene.status === 'ready' && <ReadyView data={data} reload={reload} onOpen={setTaskId} />}
       {(scene.status === 'draft' || scene.status === 'proposed') && <Builder data={data} reload={reload} />}
       {scene.status === 'active' && <Running data={data} reload={reload} onOpen={setTaskId} />}
       {scene.status === 'inspection' && <Inspection data={data} reload={reload} onOpen={setTaskId} />}
@@ -83,6 +86,29 @@ export function ScenePage({ id }: { id: string }) {
         {task && <TaskSheet task={task} data={data} reload={reload} />}
       </Sheet>
     </div>
+    </SceneRoles>
+  );
+}
+
+/** A scene's name: its own, its roleplay's, or whose it is. */
+export function sceneName(plan: SceneData['plan'], scene: SceneData['scene'], nameOf: (id: string) => string): string {
+  return plan.title || plan.roleplay?.title || (scene.offered_by ? `A scene from ${nameOf(scene.offered_by)}` : 'Untitled scene');
+}
+
+function SceneHeader({ data }: { data: SceneData }) {
+  const pod = usePod();
+  const { scene } = data;
+  return (
+    <header className="space-y-1">
+      <Link href="/" className="text-sm text-ink-soft">← Scenes</Link>
+      <div className="flex items-start justify-between gap-3">
+        <h1 className="font-display text-3xl text-lead-dark">{sceneName(data.plan, scene, pod.nameOf)}</h1>
+        <span className={`mt-2 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${scene.paused_at ? 'bg-stop text-white' : 'bg-lead-light text-lead-dark'}`}>
+          {scene.paused_at ? 'Paused' : STATUS_LABEL[scene.status]}
+        </span>
+      </div>
+      {scene.switched && <p className="text-sm font-medium text-follow-dark">⇄ Switched: {pod.title('lead')} leads, {pod.title('follow')} follows</p>}
+    </header>
   );
 }
 
@@ -182,7 +208,7 @@ function DeleteScene({ data, reload }: { data: SceneData; reload: () => Promise<
   const [error, setError] = useState('');
   const solo = scene.status === 'draft' && scene.created_by === data.me;
   const voted = scene.delete_votes.includes(data.me);
-  const waitingOn = data.members.filter((m) => !scene.delete_votes.includes(m.account_id) && m.account_id !== data.me);
+  const waitingOn = data.members.filter((m) => !scene.delete_votes.includes(m.account_id) && m.account_id !== data.me && m.has_key);
 
   async function vote(agree: boolean) {
     setError('');

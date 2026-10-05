@@ -90,16 +90,35 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
   the phone (`lib/crypto.ts`) before any API call. The server stores and
   relays ciphertext; never add a route, log or notification that needs
   plaintext. Notifications say who did something, never what.
-- **Never commit a couple's own menu, ideas pack** or anything from their
-  scenes; those are imported in the app. Built-in ideas
-  (`lib/ideas-data.ts`) are generic, use `{lead}`/`{follow}` for titles,
-  and are **for pod members only**: import that file only from
-  `app/api/ideas`, never from anything that runs in the browser
-  (`npm run check:bundle` fails the build if they leak into `.next/static`).
+- **Never commit a couple's own menu, ideas pack, roleplays, profile lists**
+  or anything from their scenes; those are imported in the app. Built-in
+  ideas (`lib/ideas-data.ts`) and the built-in list to rate
+  (`lib/inventory-data.ts`, ids fixed forever) are generic, use
+  `{lead}`/`{follow}` for titles, and are **for pod members only**: import
+  them only from `app/api/ideas`, never from anything that runs in the
+  browser (`npm run check:bundle` fails the build if they leak into
+  `.next/static`).
+- **Roles are per scene.** A switched scene swaps lead and follow; the
+  server uses `sceneFor`/`sceneMembers`/`others(scene, …)` (scene roles),
+  the client wraps scenes in `SceneRoles`. Never check a pod role where a
+  scene role is meant.
 - **Deleting:** people delete their own content any time (bucket too); a
   whole scene needs every member's yes; an unsent draft is its author's.
 - **Pause** is a safety control: either can pause, only whoever paused
   resumes, and nothing moves while paused. Don't weaken it.
+- **Enthusiastic consent:** whoever is offered or asked for a scene can
+  always say "Not this time", no reason needed. Keep that path one tap.
+- **The day is two-hour blocks** (`lib/blocks.ts`): getting ready (30
+  min) or a 15-minute change-over, exactly two chores at home (errands
+  when out), then Devotion and For {lead}, 15 minutes each; 8 hours adds a
+  free hour and welcome home. Nothing twice in a day; check-ins at the end
+  of each block; demands any time. Keep the novelty: Fill it for me skips
+  what recent scenes used.
+- **Rewards are earned at the inspection.** A scene goes to aftercare only
+  from the inspection (roleplay scenes too); don't add a way to skip it
+  from a running scene. A roleplay itself isn't scored by the lead: each
+  partner gives quick loves and dislikes (kept in their profile), and one a
+  partner marked "not for me" can't be picked for them.
 - Nothing in `apps/som` imports from the family site or vice versa; the root
   build ignores `apps/`.
 

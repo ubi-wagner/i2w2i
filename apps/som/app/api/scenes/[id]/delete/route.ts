@@ -20,13 +20,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { scene } = found;
   const b = await body<{ agree?: unknown }>(req);
   const agree = b?.agree === true;
-  const votes = agree ? Array.from(new Set([...scene.delete_votes, me.id])) : scene.delete_votes.filter((v) => v !== me.id);
+  // The vote is changed in the database, so two at the same moment both count.
+  const [row] = agree
+    ? await sql<{ delete_votes: string[] }[]>`UPDATE som.scenes SET delete_votes = array_append(array_remove(delete_votes, ${me.id}::uuid), ${me.id}::uuid) WHERE id = ${id} RETURNING delete_votes`
+    : await sql<{ delete_votes: string[] }[]>`UPDATE som.scenes SET delete_votes = array_remove(delete_votes, ${me.id}::uuid) WHERE id = ${id} RETURNING delete_votes`;
+  if (!row) return bad('Not found', 404);
+  const votes = row.delete_votes;
   const solo = scene.status === 'draft' && scene.created_by === me.id;
-  const members = solo ? [me.id] : (await podMembers(scene.pod_id)).map((m) => m.account_id);
+  // Everyone who has joined the pod (an invite never opened doesn't hold it up).
+  const members = solo ? [me.id] : (await podMembers(scene.pod_id)).filter((m) => m.has_key).map((m) => m.account_id);
   const name = await nameOf(me.id);
   if (!agree || !allAgreed(votes, members)) {
-    await sql`UPDATE som.scenes SET delete_votes = ${votes} WHERE id = ${id}`;
-    if (agree) notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M', body: `${name} would like to delete a scene. It goes once you agree too.`, url: `/scene/${id}`, tag: `delete-${id}` });
+    if (agree) notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} would like to delete a scene. It goes once you agree too.`, url: `/scene/${id}`, tag: `delete-${id}` });
     return json({ deleted: false, votes });
   }
   const media = await sql<{ object_key: string; thumb_key: string | null; upload_id: string | null; status: string }[]>`
@@ -36,8 +41,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     await deleteObject(m.object_key).catch(() => {});
     if (m.thumb_key) await deleteObject(m.thumb_key).catch(() => {});
   }
-  await sql`DELETE FROM som.scenes WHERE id = ${id}`;
+  // Whoever's yes came last at the same moment as another's: deleted once, told once.
+  const [gone] = await sql`DELETE FROM som.scenes WHERE id = ${id} RETURNING 1`;
+  if (!gone) return json({ deleted: true });
   await audit(me.id, 'scene.delete', id);
-  if (!solo) notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M', body: 'A scene was deleted, as you both agreed.', url: '/', tag: `delete-${id}` });
+  if (!solo) notifySoon(await others(scene, me.id), { title: 'S-O-M', body: 'A scene was deleted, as you both agreed.', url: '/', tag: `delete-${id}` });
   return json({ deleted: true });
 }

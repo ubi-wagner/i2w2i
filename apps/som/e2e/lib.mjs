@@ -4,7 +4,7 @@
 // independent of each other.
 import { execSync } from 'node:child_process';
 import { createECDH, randomBytes } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { createServer } from 'node:https';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -133,27 +133,73 @@ export async function newPod(deviceName) {
   return { b, r, follow, lead, podId };
 }
 
-/** Sunny starts a scene from the menu and Kay starts it. Returns the scene id. */
+/**
+ * Picks something for one part of a block in the scene builder: block 1's
+ * "Two chores", say, and a menu item matching `label`.
+ */
+export async function pick(p, block, part, label) {
+  const group = p.getByRole('group', { name: new RegExp(`^Block ${block}: ${part}`) });
+  await group.getByRole('button', { name: /^\+ / }).click();
+  const sheet = p.locator('dialog[open]').last();
+  await sheet.getByRole('button', { name: label instanceof RegExp ? label : new RegExp(label) }).first().click();
+  await sheet.getByRole('button', { name: 'Done', exact: true }).click();
+}
+
+/** Sunny starts a scene from the menu (picks: [block, part, label]) and Kay starts it. Returns the scene id. */
 export async function runningScene(b, r, { title = `Scene ${RUN}`, picks = [], checkin = '' } = {}) {
   await b.goto(`${BASE}/`);
   await b.getByRole('button', { name: 'New scene' }).click();
   await b.waitForURL(/\/scene\//);
   const id = b.url().split('/').pop();
   await b.fill('#plan-title', title);
-  for (const [section, label] of picks) {
-    const header = b.getByRole('button', { name: new RegExp(`^${section}`) }).first();
-    if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
-    await b.getByRole('button', { name: new RegExp(label) }).first().click();
-  }
+  for (const [block, part, label] of picks) await pick(b, block, part, label);
   if (checkin) await b.selectOption('#plan-checkin', checkin);
   await b.getByText('Saved').waitFor({ timeout: 10000 });
   await b.getByRole('button', { name: `Send to ${TITLES.lead}` }).click();
   await b.getByText(`Sent to ${TITLES.lead}`).waitFor();
   await r.goto(`${BASE}/scene/${id}`);
-  await r.getByRole('button', { name: 'Start the scene' }).click();
   await r.getByRole('button', { name: 'Start now' }).click();
+  await r.locator('dialog[open]').getByRole('button', { name: 'Start now' }).click();
   await r.getByText(`${TITLES.follow}’s tasks`).waitFor();
   return id;
+}
+
+// ── Small phones ────────────────────────────────────────────────────────────
+/** The small phone the layout checks use (E2E_LAYOUT_DEVICE; default iPhone SE). */
+export const SMALL = process.env.E2E_LAYOUT_DEVICE ?? 'iPhone SE';
+const SHOTS = process.env.E2E_SHOTS;
+if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+let shot = 0;
+
+/**
+ * Checks the screen as it is: nothing wider than the screen, text boxes at
+ * 16px or more (so iPhones don't zoom in on them), and buttons big enough
+ * to tap. With E2E_SHOTS=<dir>, saves a screenshot there.
+ */
+export async function audit(p, name) {
+  await p.waitForTimeout(400);
+  const r = await p.evaluate(() => {
+    const shown = (el) => {
+      const b = el.getBoundingClientRect();
+      return b.width > 0 && b.height > 0 && getComputedStyle(el).visibility !== 'hidden' && !el.closest('.sr-only') && !el.closest('dialog:not([open])');
+    };
+    const label = (el) => (el.getAttribute('aria-label') || el.textContent || el.getAttribute('placeholder') || el.tagName).trim().replace(/\s+/g, ' ').slice(0, 40);
+    const wide = [...document.querySelectorAll('body *')].filter(shown).filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1);
+    const smallText = [...document.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea, select')]
+      .filter(shown).filter((el) => parseFloat(getComputedStyle(el).fontSize) < 16);
+    const smallTaps = [...document.querySelectorAll('.btn, .btn-follow, .btn-quiet, .btn-stop, .chip')]
+      .filter(shown).filter((el) => el.getBoundingClientRect().height < 36);
+    return {
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      wide: wide.slice(0, 4).map(label),
+      smallText: smallText.map(label),
+      smallTaps: smallTaps.map(label),
+    };
+  });
+  check(r.overflow <= 0 && !r.wide.length, `${name}: nothing wider than the screen${r.wide.length ? ` (${r.wide.join(' | ')})` : ''}`);
+  check(!r.smallText.length, `${name}: text boxes are 16px or more${r.smallText.length ? ` (${r.smallText.join(' | ')})` : ''}`);
+  check(!r.smallTaps.length, `${name}: buttons are big enough to tap${r.smallTaps.length ? ` (${r.smallTaps.join(' | ')})` : ''}`);
+  if (SHOTS) await p.screenshot({ path: `${SHOTS}/${String(++shot).padStart(2, '0')}-${name.replace(/[^\w]+/g, '-')}.png`, fullPage: true });
 }
 
 // ── Made in the browser: photos and a short video ───────────────────────────

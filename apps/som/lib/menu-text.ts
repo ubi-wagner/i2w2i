@@ -26,7 +26,7 @@ import { cleanMenu, cleanProofs, newId, proofText, SECTION_KINDS, type Menu, typ
 
 /** The word each section's heading starts with. */
 export const KIND_WORD: Record<SectionKind, string> = {
-  presentation: 'Presentation', domain: 'Domain', errands: 'Errands', tasks: 'Tasks', play: 'Play',
+  presentation: 'Presentation', changeover: 'Changeover', domain: 'Domain', errands: 'Errands', tasks: 'Tasks', wishes: 'Wishes', play: 'Play',
   arrival: 'Arrival', inspection: 'Inspection', outcomes: 'Outcomes', service: 'Service', aftercare: 'Aftercare',
 };
 
@@ -86,10 +86,12 @@ export interface ParsedMenu {
 }
 
 const KIND_HINTS: [SectionKind, RegExp][] = [
-  ['presentation', /present|canvas|getting ready/i],
+  ['changeover', /change-?overs?|between blocks/i],
+  ['presentation', /present|canvas|getting ready|\bprep\b/i],
   ['domain', /domain|chore|clean|maintenance|room/i],
   ['errands', /errand|public/i],
-  ['tasks', /praise|task bank|tribute|tasks?\b|writing/i],
+  ['wishes', /wish|for (the )?lead|for \{lead\}|for her|for him/i],
+  ['tasks', /praise|devotion|task bank|tribute|tasks?\b|writing/i],
   ['play', /play/i],
   ['arrival', /arriv|greeting/i],
   ['service', /service/i],

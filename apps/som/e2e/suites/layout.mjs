@@ -2,39 +2,8 @@
 // change it): nothing wider than the screen, text boxes at 16px or more (so
 // iPhones don't zoom in on them), and buttons big enough to tap. With
 // E2E_SHOTS=<dir>, saves a screenshot of each screen there.
-import { mkdirSync } from 'node:fs';
-import { BASE, check, finish, newPod, phone, TITLES } from '../lib.mjs';
+import { audit, BASE, check, finish, newPod, phone, pick, SMALL as DEVICE, TITLES } from '../lib.mjs';
 
-const DEVICE = process.env.E2E_LAYOUT_DEVICE ?? 'iPhone SE';
-const SHOTS = process.env.E2E_SHOTS;
-if (SHOTS) mkdirSync(SHOTS, { recursive: true });
-let n = 0;
-
-async function audit(p, name) {
-  await p.waitForTimeout(400);
-  const r = await p.evaluate(() => {
-    const shown = (el) => {
-      const b = el.getBoundingClientRect();
-      return b.width > 0 && b.height > 0 && getComputedStyle(el).visibility !== 'hidden' && !el.closest('.sr-only') && !el.closest('dialog:not([open])');
-    };
-    const label = (el) => (el.getAttribute('aria-label') || el.textContent || el.getAttribute('placeholder') || el.tagName).trim().replace(/\s+/g, ' ').slice(0, 40);
-    const wide = [...document.querySelectorAll('body *')].filter(shown).filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1);
-    const smallText = [...document.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea, select')]
-      .filter(shown).filter((el) => parseFloat(getComputedStyle(el).fontSize) < 16);
-    const smallTaps = [...document.querySelectorAll('.btn, .btn-follow, .btn-quiet, .btn-stop, .chip')]
-      .filter(shown).filter((el) => el.getBoundingClientRect().height < 36);
-    return {
-      overflow: document.documentElement.scrollWidth - window.innerWidth,
-      wide: wide.slice(0, 4).map(label),
-      smallText: smallText.map(label),
-      smallTaps: smallTaps.map(label),
-    };
-  });
-  check(r.overflow <= 0 && !r.wide.length, `${name}: nothing wider than the screen${r.wide.length ? ` (${r.wide.join(' | ')})` : ''}`);
-  check(!r.smallText.length, `${name}: text boxes are 16px or more${r.smallText.length ? ` (${r.smallText.join(' | ')})` : ''}`);
-  check(!r.smallTaps.length, `${name}: buttons are big enough to tap${r.smallTaps.length ? ` (${r.smallTaps.join(' | ')})` : ''}`);
-  if (SHOTS) await p.screenshot({ path: `${SHOTS}/${String(++n).padStart(2, '0')}-${name.replace(/[^\w]+/g, '-')}.png`, fullPage: true });
-}
 const sheet = (p) => p.locator('dialog[open]').last();
 const close = (p) => sheet(p).getByRole('button', { name: 'Close' }).first().click();
 
@@ -52,7 +21,7 @@ await audit(b, 'home');
 // The menu, its ideas, text editing and one item.
 await b.goto(`${BASE}/menu`);
 await audit(b, 'menu');
-await b.getByRole('button', { name: /^5\. Play break/ }).click();
+await b.getByRole('button', { name: /^\d+\. Play break/ }).click();
 await audit(b, 'menu section');
 await b.getByRole('button', { name: 'Ideas for Play break' }).click();
 await sheet(b).getByLabel('Search ideas').waitFor();
@@ -71,17 +40,19 @@ await b.getByRole('button', { name: 'New scene' }).click();
 await b.waitForURL(/\/scene\//);
 const id = b.url().split('/').pop();
 await b.fill('#plan-title', 'Layout check');
-const open = async (title) => {
-  const h = b.getByRole('button', { name: new RegExp(`^${title}`) }).first();
-  if ((await h.getAttribute('aria-expanded')) !== 'true') await h.click();
-};
-await open('Presentation'); await b.getByRole('button', { name: /Shower/ }).first().click();
-await open('Domain maintenance'); await b.getByLabel('Room 1', { exact: true }).selectOption('Kitchen'); await b.getByRole('button', { name: /Before & after photos/ }).first().click();
-await open('Praise & task bank'); await b.getByRole('button', { name: /Daily affirmations/ }).first().click();
-await b.getByLabel('Custom task', { exact: true }).fill('Outfit options');
-await b.getByRole('button', { name: '+ 📷 Photos' }).last().click();
-await open('Play break'); await b.getByRole('button', { name: /A dance, on video/ }).first().click();
-await open('Consequences|Arrival routine');
+await b.getByRole('button', { name: '4 hours' }).click();
+await pick(b, 1, 'Getting ready', 'Shower');
+await pick(b, 1, 'Two chores', 'Deep-clean the');
+await b.getByLabel('Deep-clean the ___: room').selectOption('Kitchen');
+await pick(b, 1, 'Devotion', 'Daily affirmations');
+await b.getByRole('group', { name: 'Block 2: Errands' }).getByRole('button', { name: /^\+ / }).click();
+await sheet(b).getByRole('button', { name: /Pick up flowers/ }).click();
+await sheet(b).getByRole('button', { name: '✍️ Write your own' }).click();
+await sheet(b).getByLabel('Your own: what to do').fill('Outfit options');
+await audit(b, 'picking for a block');
+await sheet(b).getByRole('button', { name: 'Add it' }).click();
+await sheet(b).getByRole('button', { name: 'Done', exact: true }).click();
+await b.getByRole('button', { name: /Arrival routine/ }).first().click();
 await b.selectOption('#plan-checkin', '30');
 await b.getByText('Saved').waitFor({ timeout: 10000 });
 await audit(b, 'scene builder');
@@ -95,9 +66,9 @@ await audit(r, 'home with a scene waiting');
 await r.goto(`${BASE}/scene/${id}`);
 await r.getByText('sent you this scene').waitFor();
 await audit(r, 'proposed scene');
-await r.getByRole('button', { name: 'Start the scene' }).click();
-await audit(r, 'start the scene?');
 await r.getByRole('button', { name: 'Start now' }).click();
+await audit(r, 'start the scene?');
+await sheet(r).getByRole('button', { name: 'Start now' }).click();
 await r.getByText(`${TITLES.follow}’s tasks`).waitFor();
 
 // Running.
@@ -113,7 +84,9 @@ await audit(b, 'check in');
 await close(b);
 await r.reload();
 await audit(r, 'running (lead)');
-await r.locator('#arrival').getByRole('button', { name: '20 min' }).click();
+await r.getByRole('button', { name: /On my way/ }).click();
+await audit(r, 'on my way?');
+await sheet(r).getByRole('button', { name: '20 min' }).click();
 await b.reload();
 await b.locator('#arrival').getByText('until arrival').waitFor();
 await audit(b, 'on the way');
@@ -121,12 +94,14 @@ await b.getByRole('button', { name: 'Pause' }).click();
 await b.getByText('You paused the scene').waitFor();
 await audit(b, 'paused');
 await b.getByRole('button', { name: 'Resume' }).click();
+await b.getByText('You paused the scene').waitFor({ state: 'detached' });
 
-// Inspection, aftercare, record.
+// Inspection, aftercare, record (once Kay's phone has seen the resume).
+await r.reload();
 await r.getByRole('button', { name: 'Start the inspection' }).click();
 await r.getByText('Scorecard').first().waitFor();
 await audit(r, 'scorecard');
-for (const cat of ['Presentation', 'Task completion', 'Quality of work', 'Attitude']) await r.getByRole('radiogroup', { name: cat }).getByRole('radio', { name: '4' }).click();
+for (const cat of ['Presentation', 'Task completion', 'Quality of work', 'Attitude']) await r.getByRole('radiogroup', { name: cat, exact: true }).getByRole('radio', { name: '4' }).click();
 await r.getByRole('button', { name: /Massage/ }).click();
 await r.getByRole('button', { name: `Share with ${TITLES.follow}` }).click();
 await r.getByRole('region', { name: 'Results' }).waitFor();

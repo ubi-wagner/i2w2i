@@ -40,8 +40,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const name = await nameOf(me.id);
   const url = `/scene/${id}#task-${taskId}`;
-  if (next === 'submitted') notifySoon(await others(scene.pod_id, me.id, 'lead'), { title: 'S-O-M', body: `${name} sent something for review.`, url, tag: `task-${taskId}` });
-  if (next === 'approved') notifySoon(await others(scene.pod_id, me.id, 'follow'), { title: 'S-O-M', body: `${name} approved a task. ✓`, url, tag: `task-${taskId}` });
-  if (next === 'returned') notifySoon(await others(scene.pod_id, me.id, 'follow'), { title: 'S-O-M', body: `${name} sent a task back.`, url, tag: `task-${taskId}` });
+  if (next === 'submitted') notifySoon(await others(scene, me.id, 'lead'), { title: 'S-O-M', body: `${name} sent something for review.`, url, tag: `task-${taskId}` });
+  if (next === 'approved') notifySoon(await others(scene, me.id, 'follow'), { title: 'S-O-M', body: `${name} approved a task. ✓`, url, tag: `task-${taskId}` });
+  if (next === 'returned') notifySoon(await others(scene, me.id, 'follow'), { title: 'S-O-M', body: `${name} sent a task back.`, url, tag: `task-${taskId}` });
   return json({ status: next, dueAt });
 }

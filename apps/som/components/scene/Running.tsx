@@ -1,47 +1,59 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { uploadMedia } from '@/lib/client/upload';
 import { proofText } from '@/lib/menu';
 import { arrivalChecklist, CHECKIN_CHOICES } from '@/lib/plan';
 import { usePod } from '../Pod';
-import { ErrorText, Section, Sheet } from '../ui';
+import { useDraft } from '../useDraft';
+import { clock, ErrorText, Section, Sheet } from '../ui';
 import { Composer } from './Composer';
 import { Checklist, done, KIND_ICON, LastCheckin, MOODS, ProgressBar, TaskChip, Timeline, useLocalTicks } from './parts';
+import { DayList } from './Day';
+import { LeadBar } from './Lead';
+import { RoleplayCard } from './Roleplay';
 import { mmss, useCountdown, type SceneData, type TaskView } from './useScene';
 
-const ARRIVAL_CHOICES = [5, 10, 15, 20, 30, 45, 60, 90, 120];
 
 /** The scene while it runs: tasks, review, check-ins, "on my way" and notes. */
 export function Running({ data, reload, onOpen }: { data: SceneData; reload: () => Promise<void>; onOpen: (taskId: string) => void }) {
   const pod = usePod();
   const { scene, role, tasks } = data;
   const review = tasks.filter((t) => t.status === 'submitted');
+  const demands = tasks.filter((t) => t.body.kind === 'demand' && (t.status === 'todo' || t.status === 'started' || t.status === 'returned'));
   const lead = role === 'lead';
 
   return (
     <div className="space-y-6">
+      {lead && <LeadBar data={data} reload={reload} />}
       {!lead && <ArrivalCard data={data} />}
+      {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} open />}
+      {!lead && demands.length > 0 && (
+        <section className="card space-y-1 border-follow/50 bg-follow-light" aria-label="Demands">
+          <p className="eyebrow text-follow-dark">⚡ From {pod.title('lead')}</p>
+          {demands.map((t) => <TaskRow key={t.id} t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} />)}
+        </section>
+      )}
       {lead && review.length > 0 && (
         <section className="card space-y-2 border-follow/50 bg-follow-light" aria-label="Waiting for review">
           <p className="eyebrow text-follow-dark">For review</p>
           {review.map((t) => <TaskRow key={t.id} t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} />)}
         </section>
       )}
-      {!lead && scene.checkin_minutes && <CheckinCard data={data} reload={reload} />}
+      {!lead && (scene.checkin_minutes || scene.checkin_blocks) && <CheckinCard data={data} reload={reload} />}
 
-      <Section title={lead ? `${pod.title('follow')}’s tasks` : 'Your tasks'} eyebrow="Running">
-        <div className="card space-y-3">
-          <ProgressBar tasks={tasks} />
-          <ul className="divide-y divide-line">
-            {tasks.map((t) => <li key={t.id}><TaskRow t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} /></li>)}
-          </ul>
-        </div>
-      </Section>
+      {(tasks.length > 0 || !data.plan.roleplay) && (
+        <Section title={lead ? `${pod.title('follow')}’s tasks` : 'Your tasks'} eyebrow="Running">
+          <div className="card space-y-3">
+            <ProgressBar tasks={tasks} />
+            <DayList plan={data.plan} scene={scene} tasks={tasks} base={scene.started_at} skew={data.skew}
+              row={(t) => <TaskRow t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} />} />
+          </div>
+        </Section>
+      )}
 
       {lead && <LeadCheckins data={data} reload={reload} />}
-      {lead && <OnMyWay data={data} reload={reload} />}
 
       <Notes data={data} reload={reload} />
 
@@ -78,7 +90,8 @@ function CheckinCard({ data, reload }: { data: SceneData; reload: () => Promise<
       <div>
         <p className="eyebrow text-lead">Check-in</p>
         <p className="font-medium">
-          {scene.paused_at ? 'Paused' : left === null ? `Every ${scene.checkin_minutes} minutes` : due ? `Due now: ${pod.title('lead')} is waiting` : `Next in ${mmss(left)}`}
+          {scene.paused_at ? 'Paused' : left === null ? (scene.checkin_minutes ? `Every ${scene.checkin_minutes} minutes` : 'No more block ends today')
+            : due ? `Due now: ${pod.title('lead')} is waiting` : scene.checkin_minutes ? `Next in ${mmss(left)}` : `End of this block, ${clock(scene.next_checkin_at!)}`}
         </p>
       </div>
       <button type="button" className={due ? 'btn-stop' : 'btn'} onClick={() => setOpen(true)}>Check in</button>
@@ -92,8 +105,12 @@ function CheckinCard({ data, reload }: { data: SceneData; reload: () => Promise<
 function CheckinForm({ sceneId, onDone }: { sceneId: string; onDone: () => Promise<void> }) {
   const pod = usePod();
   const [mood, setMood] = useState<string>('');
-  const [text, setText] = useState('');
+  const [text, setText, clearText] = useDraft(`checkin:${sceneId}`, '');
   const [files, setFiles] = useState<File[]>([]);
+  // One check-in, however many tries: the note is posted once and each file sent once.
+  const checkinId = useRef(crypto.randomUUID());
+  const posted = useRef(false);
+  const sent = useRef(new Set<File>());
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -109,15 +126,21 @@ function CheckinForm({ sceneId, onDone }: { sceneId: string; onDone: () => Promi
     setBusy(true);
     setError('');
     try {
-      const id = crypto.randomUUID();
-      await api(`/api/scenes/${sceneId}/entries`, { body: { id, kind: 'checkin', bodyEnc: await pod.seal({ mood, text: text.trim() }, `entry:${id}`) } });
-      for (const [i, f] of files.entries()) {
-        setStatus(`Sending ${i + 1} of ${files.length}…`);
-        await uploadMedia(f, { sceneId, entryId: id, key: pod.key });
+      const id = checkinId.current;
+      if (!posted.current) {
+        await api(`/api/scenes/${sceneId}/entries`, { body: { id, kind: 'checkin', bodyEnc: await pod.seal({ mood, text: text.trim() }, `entry:${id}`) } });
+        posted.current = true;
       }
+      const left = files.filter((f) => !sent.current.has(f));
+      for (const [i, f] of left.entries()) {
+        setStatus(`Sending ${i + 1} of ${left.length}…`);
+        await uploadMedia(f, { sceneId, entryId: id, key: pod.key });
+        sent.current.add(f);
+      }
+      clearText();
       await onDone();
     } catch (err) {
-      setError((err as Error).message);
+      setError(`${(err as Error).message}${posted.current ? ' Your check-in went; tap again to send the rest.' : ''}`);
       setBusy(false);
     }
   }
@@ -156,7 +179,7 @@ function LeadCheckins({ data, reload }: { data: SceneData; reload: () => Promise
   async function change(v: string) {
     setError('');
     try {
-      await api(`/api/scenes/${scene.id}/checkins`, { method: 'PUT', body: { minutes: v ? Number(v) : null } });
+      await api(`/api/scenes/${scene.id}/checkins`, { method: 'PUT', body: v === 'blocks' ? { minutes: null, blocks: true } : { minutes: v ? Number(v) : null } });
       await reload();
     } catch (err) {
       setError((err as Error).message);
@@ -168,41 +191,14 @@ function LeadCheckins({ data, reload }: { data: SceneData; reload: () => Promise
         <div>
           <p className="eyebrow text-lead">Check-ins</p>
           <LastCheckin entries={data.entries} />
-          {left !== null && <p className={`text-sm ${left <= 0 ? 'font-semibold text-stop' : 'text-ink-soft'}`}>{left > 0 ? `Next due in ${mmss(left)}` : `Due now; ${pod.title('follow')} has been asked.`}</p>}
+          {left !== null && <p className={`text-sm ${left <= 0 ? 'font-semibold text-stop' : 'text-ink-soft'}`}>{left > 0 ? `Next due ${clock(scene.next_checkin_at!)}, in ${mmss(left)}` : `Due now; ${pod.title('follow')} has been asked.`}</p>}
         </div>
       </div>
-      <select className="input" aria-label="How often" value={scene.checkin_minutes ?? ''} onChange={(e) => change(e.target.value)}>
-        <option value="">No check-ins</option>
+      <select className="input" aria-label="How often" value={scene.checkin_minutes ?? (scene.checkin_blocks ? 'blocks' : '')} onChange={(e) => change(e.target.value)}>
+        {scene.checkin_at.length > 0 && <option value="blocks">At the end of each block</option>}
         {CHECKIN_CHOICES.map((m) => <option key={m} value={m}>Every {m} minutes</option>)}
+        <option value="">No check-ins</option>
       </select>
-      <ErrorText>{error}</ErrorText>
-    </section>
-  );
-}
-
-function OnMyWay({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
-  const { scene } = data;
-  const left = useCountdown(scene.arrival_at, data.skew);
-  const [error, setError] = useState('');
-  const coming = left !== null && left > 0;
-  async function go(minutes: number) {
-    setError('');
-    try {
-      await api(`/api/scenes/${scene.id}/arrival`, { body: { minutes } });
-      await reload();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-  return (
-    <section className="card space-y-3" id="arrival">
-      <div>
-        <p className="eyebrow text-lead">On my way</p>
-        <p className="text-sm text-ink-soft">{coming ? `You’re arriving in ${mmss(left)}. Change it:` : 'Tell them you’re coming; they get a countdown and the arrival routine.'}</p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {ARRIVAL_CHOICES.map((m) => <button key={m} type="button" className="chip" onClick={() => go(m)}>{m < 60 ? `${m} min` : `${m / 60} h`.replace('1.5 h', '1½ h')}</button>)}
-      </div>
       <ErrorText>{error}</ErrorText>
     </section>
   );
@@ -228,7 +224,7 @@ export function ArrivalCard({ data }: { data: SceneData }) {
 }
 
 export function Notes({ data, reload, title = 'Notes' }: { data: SceneData; reload: () => Promise<void>; title?: string }) {
-  const entries = data.entries.filter((e) => !e.task_id && (e.kind === 'comment' || e.kind === 'checkin'));
+  const entries = data.entries.filter((e) => !e.task_id && (e.kind === 'comment' || e.kind === 'checkin' || e.kind === 'praise'));
   const media = data.media.filter((m) => !m.task_id);
   return (
     <Section title={title} eyebrow="Between you">
@@ -240,6 +236,7 @@ export function Notes({ data, reload, title = 'Notes' }: { data: SceneData; relo
   );
 }
 
+/** The end of the running part: the inspection, where the follow's work (a roleplay too) is scored and rewarded. */
 function StartInspection({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
   const [error, setError] = useState('');
   const open = data.tasks.filter((t) => !['approved', 'skipped'].includes(t.status)).length;
@@ -252,9 +249,11 @@ function StartInspection({ data, reload }: { data: SceneData; reload: () => Prom
       setError((err as Error).message);
     }
   }
+  const paused = Boolean(data.scene.paused_at);
   return (
     <div className="space-y-2">
-      <button type="button" className="btn w-full" onClick={go}>Start the inspection</button>
+      <button type="button" className="btn w-full" disabled={paused} onClick={go}>Start the inspection</button>
+      {paused && <p className="text-center text-sm text-ink-soft">Paused: the inspection waits until it’s resumed.</p>}
       <ErrorText>{error}</ErrorText>
     </div>
   );

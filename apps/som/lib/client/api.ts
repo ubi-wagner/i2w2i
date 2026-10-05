@@ -8,12 +8,18 @@ export class ApiError extends Error {
 
 /** JSON in, JSON out; throws ApiError with the server's message. */
 export async function api<T = Record<string, unknown>>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
-  const res = await fetch(path, {
-    method: opts.method ?? (opts.body === undefined ? 'GET' : 'POST'),
-    headers: opts.body === undefined ? undefined : { 'content-type': 'application/json' },
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-    cache: 'no-store',
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: opts.method ?? (opts.body === undefined ? 'GET' : 'POST'),
+      headers: opts.body === undefined ? undefined : { 'content-type': 'application/json' },
+      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      cache: 'no-store',
+    });
+  } catch {
+    // No network (or the app was put away mid-request): say so plainly.
+    throw new ApiError('No connection. Check your signal and try again.', 0, {});
+  }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     if (res.status === 401 && typeof window !== 'undefined' && !location.pathname.startsWith('/login') && !location.pathname.startsWith('/join')) {

@@ -70,3 +70,17 @@ export function timeAgo(d: string | Date): string {
 export function clock(d: string | Date): string {
   return new Date(d).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
+
+/** A card that opens and closes; one open at a time (`open` holds the open one's id). */
+export function Collapsible({ id, title, summary, open, setOpen, children }: { id: string; title: string; summary: string; open: string | null; setOpen: (v: string | null) => void; children: React.ReactNode }) {
+  const isOpen = open === id;
+  return (
+    <section className="card p-0">
+      <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : id)}>
+        <span className="font-display text-lg text-lead-dark">{title}</span>
+        <span className="text-sm text-ink-soft">{summary} {isOpen ? '▴' : '▾'}</span>
+      </button>
+      {isOpen && <div className="space-y-3 border-t border-line px-4 py-4">{children}</div>}
+    </section>
+  );
+}

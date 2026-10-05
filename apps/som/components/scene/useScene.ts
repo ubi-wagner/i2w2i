@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '@/lib/client/api';
+import { api, ApiError } from '@/lib/client/api';
 import type { MediaRow } from '@/lib/client/media';
 import { cleanProofs } from '@/lib/menu';
 import { cleanPlan, type Plan, type TaskDraft } from '@/lib/plan';
@@ -17,11 +17,20 @@ export interface SceneRow {
   plan_enc: string;
   checkin_minutes: number | null;
   next_checkin_at: string | null;
+  /** Check-ins at the end of each block (minutes from the start), and whether they're on. */
+  checkin_at: number[];
+  checkin_blocks: boolean;
   arrival_at: string | null;
   paused_at: string | null;
   paused_by: string | null;
   started_at: string | null;
   closed_at: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  change_request: { by: string; startsAt: string | null; endsAt: string | null } | null;
+  reply_enc: string | null;
+  switched: boolean;
+  offered_by: string | null;
   close_votes: string[];
   delete_votes: string[];
   created_at: string;
@@ -39,7 +48,7 @@ export interface TaskView {
   body: TaskDraft;
 }
 
-export type EntryKind = 'comment' | 'writing' | 'checkin' | 'scores' | 'outcomes' | 'aftercare' | 'reflection';
+export type EntryKind = 'comment' | 'writing' | 'checkin' | 'scores' | 'outcomes' | 'aftercare' | 'reflection' | 'praise';
 
 export interface EntryView {
   id: string;
@@ -61,6 +70,8 @@ export interface SceneData {
   entries: EntryView[];
   media: MediaRow[];
   plan: Plan;
+  /** The plan couldn't be opened on this phone: shown empty, and never saved over. */
+  planBroken?: boolean;
   /** Server clock minus this phone's, for countdowns. */
   skew: number;
 }
@@ -80,6 +91,9 @@ function taskBody(t: TaskDraft): TaskDraft {
   return { ...t, checklist: Array.isArray(t.checklist) ? t.checklist : [], needs: cleanProofs(t.needs) };
 }
 
+/** A task this phone couldn't decrypt: shown as such, never breaking the page. */
+const UNREADABLE: TaskDraft = { kind: 'tasks', title: 'A task this phone couldn’t open', details: 'It may have been made with a different key. Try your other phone, or unlock this one again.', checklist: [], needs: [] };
+
 /** Loads a scene, decrypts it on the phone, and keeps it fresh while it's on screen. */
 export function useScene(id: string) {
   const pod = usePod();
@@ -96,15 +110,17 @@ export function useScene(id: string) {
   const load = useCallback(async () => {
     try {
       const r = await api<Raw>(`/api/scenes/${id}`);
+      // Each piece opens on its own: one that can't be read never hides the rest.
       const [plan, tasks, entries] = await Promise.all([
-        open(r.scene.plan_enc, `plan:${id}`).then(cleanPlan),
-        Promise.all(r.tasks.map(async ({ body_enc, ...t }) => ({ ...t, body: taskBody(await open<TaskDraft>(body_enc, `task:${t.id}`)) }))),
+        open(r.scene.plan_enc, `plan:${id}`).then(cleanPlan).catch(() => null),
+        Promise.all(r.tasks.map(async ({ body_enc, ...t }) => ({ ...t, body: await open<TaskDraft>(body_enc, `task:${t.id}`).then(taskBody).catch(() => UNREADABLE) }))),
         Promise.all(r.entries.map(async ({ body_enc, ...e }) => ({ ...e, body: await open(body_enc, `entry:${e.id}`).catch(() => null) }))),
       ]);
-      setData({ scene: r.scene, role: r.role, me: r.me, members: r.members, tasks, entries, media: r.media, plan, skew: new Date(r.now).getTime() - Date.now() });
+      setData({ scene: r.scene, role: r.role, me: r.me, members: r.members, tasks, entries, media: r.media, plan: plan ?? cleanPlan({}), ...(plan ? {} : { planBroken: true }), skew: new Date(r.now).getTime() - Date.now() });
       setError('');
     } catch (err) {
-      setError((err as Error).message);
+      // Deleted (by both of you) while open: say so rather than "offline".
+      setError(err instanceof ApiError && err.status === 404 ? 'Not found' : err instanceof ApiError && err.status === 0 ? 'offline' : (err as Error).message);
     }
   }, [id, open]);
 

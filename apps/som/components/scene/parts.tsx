@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { mediaMeta, type MediaRow } from '@/lib/client/media';
-import type { Proof, SectionKind } from '@/lib/menu';
-import { noProof, proofProgress, type ProofCounts } from '@/lib/plan';
+import { SECTION_KINDS, type Proof } from '@/lib/menu';
+import { noProof, proofProgress, type ProofCounts, type TaskKind } from '@/lib/plan';
 import type { TaskStatus } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { clock, timeAgo } from '../ui';
@@ -24,9 +24,14 @@ const TASK_TONE: Record<TaskStatus, string> = {
   skipped: 'bg-paper-sunk text-ink-faint line-through',
 };
 
-export const KIND_ICON: Record<SectionKind, string> = {
-  presentation: '✨', domain: '🧽', errands: '🛍️', tasks: '✍️', play: '⏱️', arrival: '🚪', inspection: '📋', outcomes: '⚖️', service: '🍽️', aftercare: '🤍',
+export const KIND_ICON: Record<TaskKind, string> = {
+  presentation: '✨', changeover: '👗', domain: '🧽', errands: '🛍️', tasks: '🙇', wishes: '💝', play: '⏱️', arrival: '🚪', inspection: '📋', outcomes: '⚖️', service: '🍽️', aftercare: '🤍', demand: '⚡',
 };
+
+/** "Getting ready", "Chores", "For Captain Kay"… or "Demand". */
+export function kindTitle(kind: TaskKind, lead: string): string {
+  return kind === 'demand' ? 'Demand' : (SECTION_KINDS.find((k) => k.kind === kind)?.title ?? '').replace('{lead}', lead);
+}
 
 export const NEED_LABEL = { photo: '📷 Photo', video: '🎥 Video', audio: '🎙️ Voice', text: '✍️ Words' } as const;
 
@@ -109,11 +114,12 @@ function EntryBubble({ e, mine, media, reload }: { e: EntryView; mine: boolean; 
     }
   }
   const text: string = e.body?.text ?? '';
-  const tone = e.kind === 'checkin' ? 'border-lead/30 bg-lead-light' : mine ? 'border-follow/25 bg-follow-light' : 'border-line bg-paper-raised';
+  const tone = e.kind === 'praise' ? 'border-warn/40 bg-warn-light' : e.kind === 'checkin' ? 'border-lead/30 bg-lead-light' : mine ? 'border-follow/25 bg-follow-light' : 'border-line bg-paper-raised';
   return (
     <div className={`space-y-2 rounded-2xl border px-3.5 py-2.5 ${tone} ${busy ? 'opacity-50' : ''}`}>
       {e.kind === 'checkin' && <p className="text-sm font-semibold text-lead-dark">Check-in {moodLabel(e.body?.mood)}</p>}
       {e.kind === 'writing' && <p className="eyebrow text-follow">Writing</p>}
+      {e.kind === 'praise' && <p className="eyebrow text-warn">✨ Praise</p>}
       {e.body === null && <p className="text-sm italic text-ink-soft">Couldn’t open this one.</p>}
       {Array.isArray(e.body?.items) ? (
         <ol className="list-decimal space-y-0.5 pl-5">{(e.body.items as string[]).map((it, i) => <li key={i} className="break-words">{it}</li>)}</ol>

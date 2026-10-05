@@ -22,16 +22,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const url = `/scene/${id}`;
   if (b?.paused === true) {
     if (scene.paused_at) return json({ paused: true });
-    await sql`UPDATE som.scenes SET paused_at = now(), paused_by = ${me.id}, updated_at = now() WHERE id = ${id}`;
+    // Two pauses at the same moment: the first one counts (and only its maker resumes).
+    const [won] = await sql`UPDATE som.scenes SET paused_at = now(), paused_by = ${me.id}, updated_at = now() WHERE id = ${id} AND paused_at IS NULL RETURNING 1`;
+    if (!won) return json({ paused: true });
     await pauseTimers(id);
-    notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M · Paused', body: `${name} paused the scene.`, url, tag: `pause-${id}` });
+    notifySoon(await others(scene, me.id), { title: 'S-O-M · Paused', body: `${name} paused the scene.`, url, tag: `pause-${id}` });
     return json({ paused: true });
   }
   if (!scene.paused_at) return json({ paused: false });
   if (scene.paused_by && scene.paused_by !== me.id) return bad('Only the person who paused can resume.', 403);
   await sql`UPDATE som.scenes SET paused_at = NULL, paused_by = NULL, updated_at = now() WHERE id = ${id}`;
-  if (scene.status === 'active') await resumeTimers(id, scene.paused_at, scene.checkin_minutes);
+  if (scene.status === 'active') await resumeTimers(id, scene.paused_at);
   await restoreArrival(id);
-  notifySoon(await others(scene.pod_id, me.id), { title: 'S-O-M', body: `${name} resumed the scene.`, url, tag: `pause-${id}` });
+  notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} resumed the scene.`, url, tag: `pause-${id}` });
   return json({ paused: false });
 }

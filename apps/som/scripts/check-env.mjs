@@ -22,6 +22,11 @@ const bucket = env.AWS_S3_BUCKET_NAME || env.AWS_S3_BUCKET || env.BUCKET;
 if (prod && !bucket && env.STORAGE_DRIVER !== 'local') {
   problems.push('No storage bucket: connect S-O-M’s own Railway bucket (AWS_S3_BUCKET_NAME, AWS_ENDPOINT_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)');
 }
+if (prod && bucket && env.STORAGE_DRIVER !== 'local') {
+  // A bucket name alone isn't enough: uploads would fail mid-scene instead of at boot.
+  if (!(env.AWS_ENDPOINT_URL || env.ENDPOINT)) problems.push('The bucket has no endpoint: set AWS_ENDPOINT_URL (or ENDPOINT) from S-O-M’s Railway bucket');
+  if (!(env.AWS_ACCESS_KEY_ID || env.ACCESS_KEY_ID) || !(env.AWS_SECRET_ACCESS_KEY || env.SECRET_ACCESS_KEY)) problems.push('The bucket has no keys: set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from S-O-M’s Railway bucket');
+}
 if (prod && (env.STORAGE_DRIVER === 'local' || !bucket) && (!env.APP_SECRET || env.APP_SECRET.length < 32)) {
   problems.push('Local storage signs its upload links with APP_SECRET: set 32+ random characters');
 }
