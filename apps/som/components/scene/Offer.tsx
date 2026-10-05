@@ -690,7 +690,14 @@ export function ReadyView({ data, reload, onOpen }: { data: SceneData; reload: (
         {state === 'ok' && left !== null && left <= 0 && <p className="font-semibold text-lead-dark">It’s time.</p>}
         {state === 'over' && <p className="font-semibold text-warn">This time has passed.</p>}
         {reply && <CapacityLine reply={reply} />}
+        {(role === 'follow' || data.plan.roleplay) && state !== 'over' && (
+          <div className="space-y-1 pt-1">
+            <button type="button" className="btn-follow min-h-14 w-full text-lg" disabled={busy || state === 'early'} onClick={() => act('start')}>Start the scene</button>
+            {state === 'early' && <p className="text-sm text-lead-dark">You can start from {opensAt}.</p>}
+          </div>
+        )}
       </section>
+      <ErrorText>{error}</ErrorText>
       {data.plan.note && <p className="card whitespace-pre-wrap">“{data.plan.note}”</p>}
       <AheadList data={data} />
       {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} />}
@@ -706,14 +713,7 @@ export function ReadyView({ data, reload, onOpen }: { data: SceneData; reload: (
           </button>
         )} />
       </section>}
-      <ErrorText>{error}</ErrorText>
       <div className="grid gap-2">
-        {(role === 'follow' || data.plan.roleplay) && state !== 'over' && (
-          <>
-            <button type="button" className="btn-follow min-h-14 text-lg" disabled={busy || state === 'early'} onClick={() => act('start')}>Start the scene</button>
-            {state === 'early' && <p className="text-center text-sm text-ink-soft">You can start from {opensAt}.</p>}
-          </>
-        )}
         {role === 'follow' && state === 'over' && <p className="text-center text-sm text-ink-soft">{pod.title('lead')} can take it back and offer a new time, or either of you can call it off.</p>}
         {role === 'lead' && state !== 'over' && !data.plan.roleplay && <p className="text-center text-sm text-ink-soft">{pod.title('follow')} starts it; you’ll hear when.</p>}
         {role === 'lead' && <button type="button" className={state === 'over' ? 'btn' : 'btn-quiet'} disabled={busy} onClick={() => act('unsend')}>{state === 'over' ? 'Take it back to offer a new time' : 'Take it back to change it'}</button>}

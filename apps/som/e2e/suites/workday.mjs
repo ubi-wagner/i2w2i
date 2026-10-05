@@ -35,6 +35,11 @@ await r.waitForURL(/\/scene\//);
 const id = r.url().split('/').pop();
 await r.getByText('Your offer').waitFor();
 await r.getByText(`Waiting for ${TITLES.follow} to answer.`).waitFor();
+// Every screen says whose turn it is, what's needed now and what comes next.
+const whatNow = async (p) => (await p.getByRole('region', { name: 'What now' }).innerText()).toLowerCase();
+const step = async (p) => (await p.getByRole('region', { name: 'What now' }).locator('[aria-current=step]').innerText()).trim();
+check((await whatNow(r)).includes(`waiting for ${TITLES.follow.toLowerCase()}`) && (await whatNow(r)).includes('next:') && await step(r) === 'Plan & agree',
+  'Kay’s offer says, at the top, that it’s waiting for Sunny, what happens next, and which step it’s on');
 check(!!await pushTo('sunny', /offered you a scene/), 'Sunny hears she’s been offered a scene');
 let [scene] = await db`SELECT status, starts_at, ends_at FROM som.scenes WHERE id = ${id}`;
 check(scene.status === 'offered' && hours(scene) === 8 && scene.starts_at > new Date(), 'the offer is a window of 8 hours, in the future');
@@ -45,9 +50,12 @@ await b.goto(`${BASE}/`);
 const offerCard = b.getByRole('link', { name: new RegExp(`A scene from ${TITLES.lead}`) });
 await offerCard.waitFor();
 check((await offerCard.innerText()).includes('8 hours'), 'Sunny’s home shows the offer with its day, times and length');
+check((await offerCard.innerText()).includes('Your turn: answer it'), '…and that it’s her turn to answer it');
 await audit(b, 'home with an offer');
 await offerCard.click();
 await b.getByText(`${TITLES.lead} offers you a scene`).waitFor();
+check((await whatNow(b)).includes('your turn') && (await whatNow(b)).includes(`${TITLES.lead.toLowerCase()} builds it and sends it`),
+  'the offer says it’s her turn, and that once she accepts Kay builds it and sends it');
 check((await b.getByText('Big day at work. Make me proud.').count()) === 1, 'Sunny reads Kay’s note (decrypted on her phone)');
 check((await b.getByRole('radio', { name: /Normal/ }).getAttribute('aria-checked')) === 'true', 'she says how much she can take on (normal unless she changes it)');
 await audit(b, 'an offer');
@@ -73,6 +81,7 @@ await r.getByText(`Agreed with ${TITLES.follow}`).waitFor();
 check(!!await pushTo('sunny', /agreed to your change/), 'Sunny hears Kay agreed');
 [scene] = await db`SELECT status, starts_at, ends_at, change_request, reply_enc FROM som.scenes WHERE id = ${id}`;
 check(scene.status === 'accepted' && hours(scene) === 4 && scene.change_request === null && /^j1\./.test(scene.reply_enc), 'the scene is agreed for 4 hours; her capacity and note are stored encrypted');
+check((await whatNow(r)).includes('your turn') && (await whatNow(r)).includes('now build it') && await step(r) === 'Build & send', 'once agreed, Kay’s screen says it’s her turn to build it, then send it');
 await r.getByText('Capacity: Light').waitFor();
 await r.getByRole('region', { name: 'Block 1: Home' }).waitFor();
 check((await r.getByRole('region', { name: /^Block 2/ }).count()) === 0 && (await r.getByRole('region', { name: 'Free time at the end' }).innerText()).includes('2. Free time'),
@@ -81,6 +90,7 @@ check((await r.getByRole('region', { name: /^Block 2/ }).count()) === 0 && (awai
 await b.reload();
 await b.getByText(`${TITLES.lead} is building your scene`).waitFor();
 check((await b.getByText('Capacity: Light').count()) === 1, 'meanwhile Sunny sees it’s being built, to her capacity');
+check((await whatNow(b)).includes(`waiting for ${TITLES.lead.toLowerCase()}`) && (await whatNow(b)).includes('notification when it’s sent'), '…that it’s with Kay, and that she’ll hear when it’s sent');
 
 // ── Windows don't overlap; an offer's time can pass ─────────────────────────
 await r.goto(`${BASE}/`);
@@ -139,10 +149,11 @@ await r.getByText(`${TITLES.follow} starts it; you’ll hear when.`).waitFor();
 await b.goto(`${BASE}/`);
 const coming = b.getByRole('link', { name: /Ready to start/ });
 await coming.waitFor();
-check((await coming.innerText()).includes('4 hours'), 'Sunny’s home shows the scene coming up, with its window');
+check((await coming.innerText()).includes('4 hours') && (await coming.innerText()).includes('you start it at the time'), 'Sunny’s home shows the scene coming up, with its window, and that she starts it');
 await coming.click();
 await b.getByRole('timer').waitFor();
 check(/Starts in \d+ h \d+ min/.test(await b.getByRole('timer').innerText()), 'the ready screen counts down to the start');
+check((await whatNow(b)).includes('coming up') && (await whatNow(b)).includes('you start it yourself') && await step(b) === 'Start', '…and says she starts it herself, and from when');
 const list = b.getByRole('region', { name: 'The tasks' });
 check((await list.getByText(LAUNDRY).count()) === 1 && (await list.getByRole('listitem').count()) === filled, `Sunny can read all ${filled} tasks before she starts`);
 check((await list.getByRole('region', { name: /^Block 1\. Home/ }).innerText()).includes('–'), '…block by block, with the times');

@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { STATUS_LABEL } from '../Home';
 import { SceneRoles, usePod } from '../Pod';
 import { clock, ErrorText, Sheet, Spinner } from '../ui';
 import { Builder } from './Builder';
 import { BeingBuilt, OfferView, ReadyView } from './Offer';
+import { NextStep } from './NextStep';
 import { Notes, Running } from './Running';
 import { TaskSheet } from './TaskSheet';
 import { useScene, type SceneData } from './useScene';
@@ -29,6 +30,15 @@ export function ScenePage({ id }: { id: string }) {
     window.addEventListener('hashchange', fromHash);
     return () => window.removeEventListener('hashchange', fromHash);
   }, []);
+
+  // A new stage (yours or your partner's doing): back to the top, where it
+  // says what's needed now; otherwise you're left looking at the old buttons.
+  const status = data?.scene.status;
+  const lastStatus = useRef(status);
+  useEffect(() => {
+    if (lastStatus.current && status && lastStatus.current !== status) window.scrollTo(0, 0);
+    lastStatus.current = status;
+  }, [status]);
 
   // Aftercare and the record are calmer: "us" colours.
   const us = data?.scene.status === 'aftercare' || data?.scene.status === 'closed';
@@ -68,6 +78,8 @@ export function ScenePage({ id }: { id: string }) {
       {data.planBroken && <p className="card border-stop/40 text-sm text-stop">This scene’s plan couldn’t be opened on this phone, so it can’t be changed from here. Try your other phone, or unlock this one again.</p>}
       <PausedBanner data={data} reload={reload} />
       <DeleteRequest data={data} reload={reload} />
+      {/* Where it stands, what's yours to do now and what comes next (the pause banner says it while paused). */}
+      {error !== 'Not found' && !scene.paused_at && <NextStep data={data} />}
 
       {scene.status === 'offered' && <OfferView data={data} reload={reload} />}
       {scene.status === 'accepted' && (data.role === 'lead' ? <Builder data={data} reload={reload} /> : <BeingBuilt data={data} reload={reload} />)}

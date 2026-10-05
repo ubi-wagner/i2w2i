@@ -131,6 +131,11 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
   only that a scene is a roleplay (`scenes.roleplay`, set when it's asked
   for, never which one) and enforces both. One a partner marked "not for
   me" can't be picked for them.
+- **Never leave anyone guessing.** Every scene screen starts with what's
+  needed now, whose turn it is and what comes next (`NextStep` in
+  `components/scene/NextStep.tsx`); home cards say whose turn it is
+  (`turnFor` in `components/Home.tsx`). Change a stage or what it asks
+  for, update both.
 - Nothing in `apps/som` imports from the family site or vice versa; the root
   build ignores `apps/`.
 

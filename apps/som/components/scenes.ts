@@ -9,7 +9,7 @@ import { usePod } from './Pod';
 export interface SceneListRow {
   id: string; status: SceneStatus; plan_enc: string; created_by: string; created_at: string; started_at: string | null; closed_at: string | null;
   paused_at: string | null; delete_votes: string[]; tasks: number; done: number; waiting: number;
-  starts_at: string | null; ends_at: string | null; switched: boolean; offered_by: string | null; change_requested: boolean;
+  starts_at: string | null; ends_at: string | null; switched: boolean; roleplay: boolean; close_votes: string[]; offered_by: string | null; change_requested: boolean;
 }
 export type ListedScene = SceneListRow & { plan: Plan | null };
 

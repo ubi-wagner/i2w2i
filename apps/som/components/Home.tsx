@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { emptyPlan, roleplayHistory } from '@/lib/plan';
-import type { SceneStatus } from '@/lib/rules';
+import { sceneRole, type Role, type SceneStatus } from '@/lib/rules';
 import { NotifyToggle } from './NotifyToggle';
 import { AskRoleplay, lengthText, NewOffer, when as whenText } from './scene/Offer';
 import { usePod } from './Pod';
@@ -13,7 +13,7 @@ import { useScenes, type ListedScene } from './scenes';
 import { ErrorText, Section, Spinner, timeAgo } from './ui';
 
 export const STATUS_LABEL: Record<SceneStatus, string> = {
-  draft: 'Draft', offered: 'Offered', accepted: 'Accepted', proposed: 'Waiting to start', ready: 'Ready to start',
+  draft: 'Draft', offered: 'Offered', accepted: 'Accepted', proposed: 'Proposed', ready: 'Ready to start',
   active: 'Running', inspection: 'Inspection', aftercare: 'Aftercare', closed: 'Closed',
 };
 
@@ -133,8 +133,40 @@ export function Home() {
   );
 }
 
+/** Whose move it is on a scene, in a few words ("mine": it's yours to do now). */
+function turnFor(s: ListedScene, pod: ReturnType<typeof usePod>): { mine: boolean; text: string } | null {
+  const me = pod.account.id;
+  const lead = sceneRole(pod.role, s.switched) === 'lead';
+  const nameIn = (r: Role) => {
+    const m = pod.members.find((x) => x.account_id !== me && sceneRole(x.role, s.switched) === r) ?? pod.members.find((x) => x.account_id !== me);
+    return m ? pod.nameOf(m.account_id) : 'your partner';
+  };
+  const other = nameIn(lead ? 'follow' : 'lead');
+  const passed = ['offered', 'accepted', 'ready'].includes(s.status) && s.ends_at !== null && new Date(s.ends_at).getTime() <= Date.now();
+  if (passed) return { mine: s.offered_by === me || lead, text: s.offered_by === me || lead ? 'Its time passed: offer a new one, or call it off' : `Its time passed: ${other} can offer a new one` };
+  if (s.paused_at) return { mine: false, text: 'Paused: nothing moves until it’s resumed' };
+  switch (s.status) {
+    case 'draft': return s.created_by === me ? { mine: true, text: 'Your draft: not sent yet' } : { mine: false, text: `${pod.nameOf(s.created_by)}’s draft, not sent yet` };
+    case 'proposed': return lead ? { mine: true, text: 'Your turn: look at it, then start it or give it a time' } : { mine: false, text: `With ${other} to look at` };
+    case 'offered':
+      if (s.offered_by === me) return s.change_requested ? { mine: true, text: `Your turn: ${other} asked for a change` } : { mine: false, text: `Waiting for ${other} to answer` };
+      return { mine: true, text: s.roleplay ? 'Your turn: read it and answer' : 'Your turn: answer it' };
+    case 'accepted': return lead ? { mine: true, text: `Your turn: build it and send it to ${other}` } : { mine: false, text: `${other} is building it` };
+    case 'ready':
+      if (s.roleplay) return { mine: false, text: 'It’s on: either of you starts it at the time' };
+      return lead ? { mine: false, text: `Sent: ${other} starts it at the time` } : { mine: true, text: 'Sent to you: you start it at the time' };
+    case 'active':
+      if (s.roleplay) return { mine: lead, text: lead ? 'Playing now: you end it with aftercare' : 'Playing now' };
+      return lead ? { mine: s.waiting > 0, text: s.waiting ? `Running: ${s.waiting} to review` : `Running: ${other} is on the tasks` } : { mine: true, text: 'Running: your tasks' };
+    case 'inspection': return lead ? { mine: true, text: 'Your turn: inspect it' } : { mine: false, text: `${other} is inspecting it` };
+    case 'aftercare': return s.close_votes.includes(me) ? { mine: false, text: `Aftercare: waiting for ${other} to be back to us` } : { mine: true, text: 'Aftercare: tap I’m back to us when you’re ready' };
+    case 'closed': return null;
+  }
+}
+
 function SceneCard({ s, big = false }: { s: ListedScene; big?: boolean }) {
   const pod = usePod();
+  const turn = turnFor(s, pod);
   const when = s.closed_at ?? s.started_at ?? s.created_at;
   // An offer or a plan whose window has gone by without starting.
   const passed = ['offered', 'accepted', 'ready'].includes(s.status) && s.ends_at !== null && new Date(s.ends_at).getTime() <= Date.now();
@@ -149,7 +181,7 @@ function SceneCard({ s, big = false }: { s: ListedScene; big?: boolean }) {
       {s.starts_at && ['offered', 'accepted', 'ready'].includes(s.status) && (
         <p className="font-medium text-lead-dark">{whenText(s.starts_at, s.ends_at)} <span className="font-normal text-ink-soft">({lengthText(s.starts_at, s.ends_at)})</span></p>
       )}
-      {s.change_requested && <p className="text-sm font-medium text-follow-dark">Change asked for</p>}
+      {turn && <p className={`text-sm ${turn.mine ? 'font-semibold text-lead' : 'text-ink-soft'}`}>{turn.mine ? '👉 ' : ''}{turn.text}</p>}
       {(s.switched || s.plan?.roleplay) && (
         <p className="text-sm font-medium text-follow-dark">{[s.plan?.roleplay && '🎭 Roleplay', s.switched && '⇄ Switched'].filter(Boolean).join(' · ')}</p>
       )}

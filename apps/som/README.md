@@ -57,6 +57,14 @@ leaves them. The server stores ciphertext and can't read it.
 
 ## How a scene runs
 
+**Always clear whose move it is.** Every scene opens with a **What now**
+card: your turn or who it's waiting for, what's needed now, what happens
+next (and that you'll get a notification), and the steps (Plan & agree ›
+Build & send › Start › Do it › Inspection › Aftercare; a roleplay is Plan &
+agree › Start › Play it › Aftercare). Each card on the home screen says the
+same in a line ("👉 Your turn: answer it", "Waiting for Sunny to answer").
+When a scene moves on, the page goes back to the top so the new step shows.
+
 There are two ways in:
 
 - **Either of you offers (or asks for) a window of time**: the lead's
