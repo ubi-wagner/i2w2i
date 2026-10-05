@@ -26,6 +26,10 @@ export interface Plan {
   checkinMinutes: number | null;
   /** The roleplay this scene is, copied from the menu when it was picked. */
   roleplay: Roleplay | null;
+  /** The arrival routine as it was when the scene was started or sent: later menu changes don't touch it. */
+  arrival?: string[];
+  /** What the follow needs to get or have ready beforehand (equipment, new clothes…), one thing each. */
+  ahead: string[];
 }
 
 export const CHECKIN_CHOICES = [15, 30, 45, 60, 90, 120];
@@ -50,6 +54,7 @@ export function emptyPlan(menu: Menu, hours?: number, capacity?: Capacity | null
     note: '',
     checkinMinutes: null,
     roleplay: null,
+    ahead: [],
   };
 }
 
@@ -78,6 +83,7 @@ export function cleanPlan(raw: unknown): Plan {
     items.forEach((id) => placed.add(id));
     return [{ kind: b.kind as BlockKind, items }];
   });
+  const arrival = (Array.isArray(r.arrival) ? r.arrival : []).map((x) => str(x, 200)).filter(Boolean).slice(0, 40);
   const every = r.checkinMinutes === 0 ? 0 : typeof r.checkinMinutes === 'number' && CHECKIN_CHOICES.includes(r.checkinMinutes) ? r.checkinMinutes : null;
   return {
     v: 1,
@@ -89,6 +95,8 @@ export function cleanPlan(raw: unknown): Plan {
     note: str(r.note, 2000),
     checkinMinutes: every,
     roleplay: cleanRoleplay(r.roleplay),
+    ...(arrival.length ? { arrival } : {}),
+    ahead: (Array.isArray(r.ahead) ? r.ahead : []).map((x) => str(x, 200)).filter(Boolean).slice(0, 30),
   };
 }
 
@@ -120,18 +128,63 @@ export function tidyPlan(menu: Menu, plan: Plan): Plan {
  */
 export function placeLoose(menu: Menu, plan: Plan): Plan {
   const next = cleanPlan(structuredClone(plan));
+  if (!next.blocks.length) return next;
   const items = planItems(menu, next);
   const placed = new Set(next.blocks.flatMap((b) => b.items));
   const timed = schedule(next.blocks.map((b) => b.kind));
-  for (const id of Object.keys(next.picks)) {
+  const slots = (i: number) => slotsFor(next.blocks[i]!.kind, timed[i]?.first ?? false);
+  const loose = [...Object.keys(next.picks), ...next.customs.map((c) => c.id)];
+  for (const id of loose) {
     const kind = items.get(id)?.kind;
     if (!kind || kind === 'arrival' || placed.has(id)) continue;
-    const at = next.blocks.findIndex((b, i) => slotsFor(b.kind, timed[i]?.first ?? false).some((s) => s.kind === kind && b.items.filter((x) => items.get(x)?.kind === kind).length < s.max));
-    if (at < 0) continue;
+    const count = (i: number) => next.blocks[i]!.items.filter((x) => items.get(x)?.kind === kind).length;
+    // A part with room for it; else any part of its kind (over its count, to trim); else the last block. Nothing is dropped.
+    let at = next.blocks.findIndex((_, i) => slots(i).some((s) => s.kind === kind && count(i) < s.max));
+    if (at < 0) at = next.blocks.findIndex((_, i) => slots(i).some((s) => s.kind === kind));
+    if (at < 0) at = next.blocks.length - 1;
     next.blocks[at]!.items.push(id);
     placed.add(id);
   }
   return next;
+}
+
+/**
+ * A plan saved before blocks existed (rooms, a story assignment, a writing
+ * prompt, a task of your own), made into this version: each becomes one of
+ * this scene's own items, the evidence picked for rooms goes onto every
+ * room as before, and "no check-ins" stays none. Nothing is lost; the
+ * builder then puts it all into blocks (placeLoose). Newer plans pass
+ * straight through.
+ */
+export function upgradePlan(menu: Menu, raw: unknown): Plan {
+  const plan = cleanPlan(raw);
+  const r = (raw ?? {}) as Record<string, unknown>;
+  if (Array.isArray(r.blocks)) return plan;
+  const items = planItems(menu, plan);
+  // In that version, what was picked under Domain was the evidence for every room.
+  const evidence = Object.keys(plan.picks).map((id) => items.get(id)).filter((i): i is PlanItem => i?.kind === 'domain');
+  const evidenceNeeds = evidence.flatMap((e) => e.needs ?? []).map((n) => ({ ...n }));
+  const picks = Object.fromEntries(Object.entries(plan.picks).filter(([id]) => items.get(id)?.kind !== 'domain'));
+  const customs: CustomItem[] = [];
+  const roomNotes = str(r.roomNotes, 1000);
+  (Array.isArray(r.rooms) ? r.rooms : []).slice(0, 20).forEach((x, i) => {
+    const room = str((x as { room?: unknown })?.room, 60);
+    if (!room) return;
+    const details = [str((x as { note?: unknown })?.note, 600), roomNotes, evidence.length ? `Evidence: ${evidence.map((e) => e.label).join('; ')}` : ''];
+    customs.push({ id: `old-room-${i}`, kind: 'domain', label: `Clean: ${room}`, details: details.filter(Boolean).join('\n\n'), needs: evidenceNeeds.length ? evidenceNeeds : one('photo') });
+  });
+  const st = (r.story ?? {}) as Record<string, unknown>;
+  if (st.on === true) {
+    const lines = [['Players', st.players], ['Setting', st.setting], ['Story arc & tags', st.arc], ['Director’s note', st.note]]
+      .map(([k, v]) => (str(v, 1000) ? `${k}: ${str(v, 1000)}` : '')).filter(Boolean);
+    customs.push({ id: 'old-story', kind: 'tasks', label: 'Short story assignment', details: lines.join('\n'), needs: one('text') });
+  }
+  const prompt = str(r.customPrompt, 1000);
+  if (prompt) customs.push({ id: 'old-prompt', kind: 'tasks', label: 'Writing prompt', details: prompt, needs: one('text') });
+  const ct = (r.customTask ?? {}) as Record<string, unknown>;
+  const ctTitle = str(ct.title, 160);
+  if (ctTitle) customs.push({ id: 'old-task', kind: 'tasks', label: ctTitle, details: str(ct.details, 1000), needs: cleanProofs(ct.needs) });
+  return { ...plan, picks, customs: [...plan.customs, ...customs].slice(0, 40), checkinMinutes: r.checkinMinutes == null ? 0 : plan.checkinMinutes };
 }
 
 /**
@@ -247,6 +300,7 @@ export function proofComplete(needs: Proof[], sent: ProofCounts): boolean {
 
 /** The arrival checklist the lead picked (shown when they're on the way). */
 export function arrivalChecklist(menu: Menu, plan: Plan): string[] {
+  if (plan.arrival?.length) return plan.arrival;
   return picked(menu, plan, 'arrival').map((p) => withParam(p.item.label, p.param, p.item.param));
 }
 

@@ -114,6 +114,10 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
   free hour and welcome home. Nothing twice in a day; check-ins at the end
   of each block; demands any time. Keep the novelty: Fill it for me skips
   what recent scenes used.
+- **Both see the whole scene before it's agreed:** the answerer of an
+  offer sees the staged scene (`SceneSummary`: what to get ready, what to
+  wear, every block and task with its proof). Plans from older versions
+  are upgraded on load (`upgradePlan`), never dropped.
 - **Rewards are earned at the inspection.** A scene goes to aftercare only
   from the inspection (roleplay scenes too); don't add a way to skip it
   from a running scene. A roleplay itself isn't scored by the lead: each

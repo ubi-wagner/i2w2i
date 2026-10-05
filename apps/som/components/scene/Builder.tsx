@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
 import { blocksForWindow, BLOCK_NAME, isWork, slotLabel, slotsFor, type BlockKind, type SlotSpec } from '@/lib/blocks';
 import { newId, proofText, section, type MenuItem, type Proof } from '@/lib/menu';
-import { autoFill, blocksFor, cleanPlan, CHECKIN_CHOICES, pacingFor, pacingOf, picked, placeLoose, planCheckins, planItems, planToTasks, recentlyUsed, tidyPlan, withParam, type Plan, type PlanItem } from '@/lib/plan';
+import { arrivalChecklist, autoFill, blocksFor, cleanPlan, CHECKIN_CHOICES, pacingFor, pacingOf, picked, placeLoose, planCheckins, planItems, planToTasks, recentlyUsed, tidyPlan, withParam, type Plan, type PlanItem } from '@/lib/plan';
 import { sceneTransition } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ProofEditor } from '../ProofEditor';
@@ -15,6 +15,7 @@ import { RoleplayCard } from './Roleplay';
 import { LimitsNote } from '../Profiles';
 import { recentPlans, useScenes } from '../scenes';
 import { blockTime, timedBlocks, windowMinutes } from './Day';
+import { SceneSummary } from './Summary';
 import { KIND_ICON } from './parts';
 import type { SceneData } from './useScene';
 
@@ -26,6 +27,14 @@ function reshape(p: Plan, kinds: BlockKind[]) {
 }
 
 const placedAny = (p: Plan) => p.blocks.some((b) => b.items.length);
+
+/** A staged day's hours, from 8:30 for as long as its blocks run (an offer starts from these). */
+function dayHours(timed: { end: number }[]): { from: string; until: string } {
+  const mins = Math.min(Math.max(timed.length ? timed[timed.length - 1]!.end : 120, 15), 15 * 60);
+  const end = 8 * 60 + 30 + mins;
+  const hh = (n: number) => String(n).padStart(2, '0');
+  return { from: '08:30', until: `${hh(Math.floor(end / 60) % 24)}:${hh(end % 60)}` };
+}
 
 /** Drafting a scene, block by block: tap to pick from the menu. Saves as you go. */
 export function Builder({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
@@ -41,6 +50,9 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
   const [confirming, setConfirm] = useState<'start' | 'send' | null>(null);
   const [offering, setOffering] = useState(false);
   const [picking, setPicking] = useState<{ block: number; slot: SlotSpec } | null>(null);
+  const [whole, setWhole] = useState(false);
+  // The beforehand list as typed (blank lines and all); the plan keeps the lines.
+  const [aheadText, setAheadText] = useState(data.plan.ahead.join('\n'));
   // Edits are numbered; a save covers the edits made before it began. One
   // save at a time, so a quick second edit never races the first.
   const planRef = useRef(stored);
@@ -121,12 +133,18 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
     setPlan((p) => {
       const c = structuredClone(p);
       fn(c);
+      delete c.arrival; // a draft's routine follows the menu until it's started or sent
       return tidyPlan(pod.menu, cleanPlan(c));
     });
     edits.current += 1;
     setSaving('idle');
     setError('');
   };
+
+  const aheadJoined = stored.ahead.join('\n');
+  useEffect(() => {
+    if (document.activeElement?.id !== 'plan-ahead') setAheadText(aheadJoined);
+  }, [aheadJoined]);
 
   // Novelty: Fill it for me steers away from what the last few scenes used.
   const { scenes: listed } = useScenes();
@@ -171,7 +189,9 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
         return { id, ord, bodyEnc: await pod.seal(t, `task:${id}`), minutes: t.minutes ?? null };
       }));
       const checkins = planCheckins(plan, windowMinutes(scene));
-      await api(`/api/scenes/${scene.id}/action`, { body: { action, tasks, planEnc: await pod.seal(plan, `plan:${scene.id}`), checkinMinutes: checkins.every, checkinAt: checkins.at } });
+      // The arrival routine is kept with the scene as it is now, so a later menu change can't alter it.
+      const kept = { ...plan, arrival: arrivalChecklist(pod.menu, { ...plan, arrival: undefined }) };
+      await api(`/api/scenes/${scene.id}/action`, { body: { action, tasks, planEnc: await pod.seal(kept, `plan:${scene.id}`), checkinMinutes: checkins.every, checkinAt: checkins.at } });
       setConfirm(null);
       await reload();
     } catch (err) {
@@ -255,6 +275,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
           </div>
         )}
         {editable && avoid.size > 0 && <p className="text-xs text-ink-soft">New first: it skips what your last few scenes used, while there’s something else.</p>}
+        <button type="button" className="btn-quiet w-full" onClick={() => setWhole(true)}>See the whole scene</button>
       </div>
 
       {plan.blocks.map((b, i) => (
@@ -269,6 +290,13 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
       )}
 
       <Arrival plan={plan} edit={edit} editable={editable} />
+
+      <section className="card space-y-2">
+        <label className="label mb-0" htmlFor="plan-ahead">🛒 For {follow} to get ready beforehand</label>
+        <p className="text-xs text-ink-soft">Equipment, new clothes, anything to buy or find before the day. One per line; {follow} sees it before saying yes.</p>
+        <textarea id="plan-ahead" className="input" rows={3} disabled={!editable} value={aheadText} maxLength={4000} placeholder={'A locking collar\nBlack stockings, size M'}
+          onChange={(e) => { const v = e.target.value; setAheadText(v); edit((p) => { p.ahead = v.split('\n').map((x) => x.trim()).filter(Boolean); }); }} />
+      </section>
 
       <div className="card space-y-3">
         <div>
@@ -327,9 +355,17 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
           <button type="button" className="btn w-full" onClick={() => go(confirming ?? 'start')}>{confirming === 'send' ? 'Send it' : 'Start now'}</button>
         </div>
       </Sheet>
+      <Sheet open={whole} onClose={() => setWhole(false)} title="The whole scene" wide>
+        <div className="space-y-4">
+          <p className="text-sm text-ink-soft">{scene.status === 'draft' || scene.status === 'proposed' ? `This is what ${role === 'lead' ? follow : lead} sees before saying yes.` : 'As it stands now.'}</p>
+          <SceneSummary data={data} plan={plan} showRoleplay />
+          {canOffer && <button type="button" className="btn w-full" onClick={() => { setWhole(false); setOffering(true); }}>{scene.status === 'accepted' ? 'Change the time' : 'Offer it'}</button>}
+        </div>
+      </Sheet>
       <Sheet open={offering} onClose={() => setOffering(false)} title={scene.status === 'accepted' ? 'Change the time' : `Offer it to ${follow}`}>
+        {scene.status !== 'accepted' && tasks.length > 0 && <p className="mb-3 text-sm text-ink-soft">{follow} sees the whole scene ({tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}{plan.ahead.length ? `, ${plan.ahead.length} to get ready beforehand` : ''}) before saying yes.</p>}
         <OfferForm
-          initial={{ startsAt: scene.starts_at, endsAt: scene.ends_at }}
+          initial={scene.starts_at ? { startsAt: scene.starts_at, endsAt: scene.ends_at } : { hours: dayHours(timed) }}
           submit={scene.status === 'accepted' ? 'Send the new time' : 'Send the offer'}
           noteLabel={`A note for ${follow} (optional)`}
           onSubmit={async ({ start, end, note }) => {

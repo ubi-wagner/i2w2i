@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cleanMenu, itemsById, proofText, section, SECTION_KINDS, starterMenu, type Menu } from '@/lib/menu';
-import { arrivalChecklist, autoFill, cleanPlan, emptyPlan, noProof, picked, pacingForHours, placeLoose, planCheckins, planToTasks, proofComplete, proofProgress, recentlyUsed, roleplayHistory, tidyPlan, withParam, type Plan } from '@/lib/plan';
+import { arrivalChecklist, autoFill, cleanPlan, emptyPlan, noProof, picked, pacingForHours, placeLoose, planCheckins, upgradePlan, planToTasks, proofComplete, proofProgress, recentlyUsed, roleplayHistory, tidyPlan, withParam, type Plan } from '@/lib/plan';
 import { allAgreed, canDelete, overlaps, sceneRole, sceneTransition, startState, taskTransition, windowProblem } from '@/lib/rules';
 
 const find = (menu: Menu, label: string) => [...itemsById(menu).values()].find((x) => x.item.label === label)!.item;
@@ -87,9 +87,13 @@ describe('plan → tasks', () => {
     expect(planToTasks(menu, plan({ picks: { gone12345: {} }, blocks: [{ kind: 'home', items: ['gone12345'] }] }))).toEqual([]);
   });
 
-  it('lists the arrival routine picked', () => {
+  it('lists the arrival routine picked; once kept with a started scene, menu changes don’t touch it', () => {
     const door = find(menu, 'Meet at the door with a drink');
     expect(arrivalChecklist(menu, plan({ picks: { [door.id]: {} } }))).toEqual(['Meet at the door with a drink']);
+    const kept = plan({ picks: { [door.id]: {} }, arrival: ['Meet at the door with a drink'] });
+    const changed = cleanMenu({ ...menu, sections: menu.sections.map((s) => (s.kind === 'arrival' ? { ...s, groups: [] } : s)) });
+    expect(arrivalChecklist(changed, kept)).toEqual(['Meet at the door with a drink']);
+    expect(cleanPlan(kept).arrival).toEqual(['Meet at the door with a drink']);
   });
 
   it('cleans plans: bad ids dropped, each thing in one block, check-ins only from the choices', () => {
@@ -120,6 +124,35 @@ describe('plan → tasks', () => {
     expect(p.blocks[0]!.items.sort()).toEqual([shower.id, note.id, fridge.id].sort());
     expect(Object.keys(p.picks)).toContain(door.id);
     expect(planToTasks(menu, p).map((t) => t.title)).toEqual(['Getting ready', 'Clean the refrigerator, inside and out', 'Write a love note']);
+  });
+
+  it('a plan from before blocks comes over whole: rooms (with their evidence), story, prompt, own task; nothing dropped', () => {
+    const m = cleanMenu({ ...menu, sections: menu.sections.map((s) => (s.kind === 'domain'
+      ? { ...s, groups: [{ id: 'ev', title: 'Evidence', items: [{ id: 'ba', label: 'Before & after photos of each room', needs: [{ kind: 'photo', count: 2, label: 'before & after' }] }] }] } : s)) });
+    const shower = find(m, 'Shower');
+    const note = find(m, 'Write a love note');
+    const door = find(m, 'Meet at the door with a drink');
+    const old = {
+      v: 1, title: 'Friday', pacing: 'p2', checkinMinutes: null,
+      picks: { [shower.id]: {}, ba: {}, [note.id]: {}, [door.id]: {} },
+      rooms: [{ room: 'Kitchen', note: 'Baseboards too' }, { room: '', note: '' }, { room: 'Office', note: '' }],
+      roomNotes: 'Lemon spray',
+      story: { on: true, players: 'R & B', setting: 'Cabin', arc: 'slow burn', note: '' },
+      customPrompt: 'Why I love Sundays',
+      customTask: { title: 'Iron the shirts', details: 'All five', needs: [{ kind: 'photo', count: 5 }] },
+    };
+    const up = upgradePlan(m, old);
+    expect(up.checkinMinutes).toBe(0);
+    expect(up.picks.ba).toBeUndefined();
+    expect(up.customs.map((c) => c.label)).toEqual(['Clean: Kitchen', 'Clean: Office', 'Short story assignment', 'Writing prompt', 'Iron the shirts']);
+    expect(up.customs[0]).toMatchObject({ kind: 'domain', details: 'Baseboards too\n\nLemon spray\n\nEvidence: Before & after photos of each room', needs: [{ kind: 'photo', count: 2, label: 'before & after' }] });
+    // Into one 2-hour block: nothing is dropped, even past a part's count.
+    const placed = tidyPlan(m, placeLoose(m, { ...up, blocks: [{ kind: 'home', items: [] }] }));
+    const titles = planToTasks(m, placed).map((t) => t.title);
+    expect(titles).toEqual(expect.arrayContaining(['Getting ready', 'Clean: Kitchen', 'Clean: Office', 'Write a love note', 'Short story assignment', 'Writing prompt', 'Iron the shirts']));
+    expect(arrivalChecklist(m, placed)).toEqual(['Meet at the door with a drink']);
+    // A plan made with blocks passes straight through.
+    expect(upgradePlan(m, placed)).toEqual(cleanPlan(placed));
   });
 
   it('check-ins: at the end of each block with something in it, every so often, or none', () => {
