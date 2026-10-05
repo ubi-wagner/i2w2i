@@ -9,7 +9,7 @@ import { SceneRoles, usePod } from '../Pod';
 import { clock, ErrorText, Sheet, Spinner } from '../ui';
 import { Builder } from './Builder';
 import { BeingBuilt, OfferView, ReadyView } from './Offer';
-import { Running } from './Running';
+import { Notes, Running } from './Running';
 import { TaskSheet } from './TaskSheet';
 import { useScene, type SceneData } from './useScene';
 import { Aftercare, Inspection, Record } from './Wrapup';
@@ -77,6 +77,8 @@ export function ScenePage({ id }: { id: string }) {
       {scene.status === 'inspection' && <Inspection data={data} reload={reload} onOpen={setTaskId} />}
       {scene.status === 'aftercare' && <Aftercare data={data} reload={reload} />}
       {scene.status === 'closed' && <Record data={data} reload={reload} onOpen={setTaskId} />}
+      {/* Before it starts, talk it over here; the same notes carry on into the scene. */}
+      {(scene.status === 'offered' || scene.status === 'accepted' || scene.status === 'ready') && <Notes data={data} reload={reload} title="Talk it over" />}
 
       <DeleteScene data={data} reload={reload} />
 

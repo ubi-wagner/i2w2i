@@ -61,8 +61,8 @@ There are two ways in:
 
 - **Either of you offers (or asks for) a window of time**: the lead's
   workday, say, or the follow asking for a scene. **Offer {follow} a
-  scene** / **Ask {lead} for a scene** on the home screen: who leads, what
-  kind (tasks, or one of your roleplays), today, tomorrow or another day,
+  scene** / **Ask {lead} for a scene** on the home screen (a Select-O-Matic
+  scene, built from the menu): who leads, today, tomorrow or another day,
   from and until (2, 4 or 8 hours in one tap), and a note. The other one
   answers: accept, ask for a change, or **not this time**. Windows
   don't overlap another offered or planned scene, and an offer whose time
@@ -119,8 +119,17 @@ picker: anything from that menu section (nothing twice in a day), or
 block (or every so often, or none), and the lead can send a **demand**
 (a photo or a quick act, with proof) any time.
 
+**Roleplays are asked for on their own.** **🎭 Ask for a roleplay** on the
+home screen, kept apart from Select-O-Matic scenes: pick any roleplay (each
+says who leads it), a day and a note. It's a nudge: the other reads all of
+it, you **talk it over** in the notes on the scene, and their yes, whichever
+of you it comes from, means it's on: there's nothing to build. They can
+also ask for a change or say not this time. Agreed roleplays wait under
+**Roleplays** on the home screen. Any scene can be talked over the same way
+before it starts; the notes carry on into the scene.
+
 **Templates, and something new each time.** A new offer starts from
-your last one: its hours, who leads, tasks or a roleplay. **Save as a
+your last one of its kind: its hours and who leads. **Save as a
 template** keeps that shape under a name (Workday, Saturday switch…) to
 set in one tap next time; never what's in it, because novelty matters.
 **Fill it for me** picks things your last five scenes didn't use while
@@ -133,9 +142,8 @@ Menu page.
 leads when you offer or ask. In a switched scene everything follows the
 switch (the lead's controls, demands, praise, who's notified of what), and
 it uses the **switch titles** from the menu (or your names). A roleplay
-says who leads it, so picking one led by the usual follow switches the
-scene. A roleplay accepted by the one who'll lead it needs no building:
-it's on.
+says who leads it, so asking for one led by the usual follow switches the
+scene.
 
 **Roleplays** live on the Menu page: a title, who leads, where, intensity,
 what to wear, the setup, the action and the aftercare. Add them one by
@@ -295,8 +303,8 @@ npm run e2e     # against a running build; see e2e/run.mjs for the settings it n
 The end-to-end suites run two phones through pairing, a whole scene, a
 workday (offer a window, ask for a change of time and capacity, agree, no
 overlaps, expiry, fill, send, start in the window, demands, praise, redo, on
-my way, per-task scores), a switched roleplay (asked for by the usual lead,
-accepted by the usual follow, run with the roles swapped, straight to
+my way, per-task scores), a switched roleplay (asked for on its own by the
+usual lead, talked over in the notes, accepted by the usual follow, run with the roles swapped, straight to
 loves and dislikes from both at the inspection, rewards as usual; a
 roleplay marked "not for me" can't be picked; and a request turned down),
 templates and novelty (the last offer remembered, a template applied, a

@@ -132,10 +132,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return json({ status: next });
     }
     case 'accept_send': {
-      // The lead accepts a scene that needs no building (a roleplay): it's sent as they accept.
+      // A roleplay needs no building: a yes from either of you means it's on.
+      // Only the one who'll lead it can send tasks with it.
       if (passed) return bad('This offer’s time has passed.', 409);
       const tasks = taskList(b?.tasks ?? [], true);
       if (!tasks) return bad('That doesn’t look like a task list.');
+      if (tasks.length && role !== 'lead') return bad('Only whoever leads it can send tasks.', 403);
       const ok = await sql.begin(async (tx) => {
         const [s] = await tx`UPDATE som.scenes SET status = 'ready', updated_at = now(), change_request = NULL, ${checkins}
                               WHERE id = ${id} AND status = ${scene.status} RETURNING 1`;

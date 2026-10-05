@@ -106,6 +106,11 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
   whole scene needs every member's yes; an unsent draft is its author's.
 - **Pause** is a safety control: either can pause, only whoever paused
   resumes, and nothing moves while paused. Don't weaken it.
+- **Roleplays are asked for on their own** (🎭 Ask for a roleplay), apart
+  from Select-O-Matic scenes: one roleplay, a day, a note. It's a nudge:
+  the other reads all of it, you talk it over in the scene's notes, and a
+  yes from either of you means it's on (nothing to build). Don't fold it
+  back into the scene offer.
 - **Enthusiastic consent:** whoever is offered or asked for a scene can
   always say "Not this time", no reason needed. Keep that path one tap.
 - **The day is two-hour blocks** (`lib/blocks.ts`): getting ready (30

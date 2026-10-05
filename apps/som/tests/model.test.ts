@@ -292,10 +292,11 @@ describe('offering a scene', () => {
     expect(sceneTransition('active', 'cancel', 'lead')).toBeNull();
   });
 
-  it('a lead accepting a scene that needs no building sends it as they accept', () => {
+  it('a roleplay asked for is on as soon as the other says yes, whoever leads it', () => {
     expect(sceneTransition('offered', 'accept_send', 'lead')).toBe('ready');
-    expect(sceneTransition('offered', 'accept_send', 'follow')).toBeNull();
+    expect(sceneTransition('offered', 'accept_send', 'follow')).toBe('ready');
     expect(sceneTransition('offered', 'accept_send', 'lead', true)).toBeNull();
+    expect(sceneTransition('offered', 'accept_send', 'follow', true)).toBeNull();
   });
 
   it('aftercare comes after the inspection, never straight from the scene (rewards are earned there)', () => {

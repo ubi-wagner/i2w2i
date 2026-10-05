@@ -7,7 +7,7 @@ import { api } from '@/lib/client/api';
 import { emptyPlan, roleplayHistory } from '@/lib/plan';
 import type { SceneStatus } from '@/lib/rules';
 import { NotifyToggle } from './NotifyToggle';
-import { lengthText, NewOffer, when as whenText } from './scene/Offer';
+import { AskRoleplay, lengthText, NewOffer, when as whenText } from './scene/Offer';
 import { usePod } from './Pod';
 import { useScenes, type ListedScene } from './scenes';
 import { ErrorText, Section, Spinner, timeAgo } from './ui';
@@ -24,7 +24,7 @@ export function Home() {
   const [busy, setBusy] = useState(false);
   const [err, setError] = useState('');
   const error = err || loadError;
-  const [offering, setOffering] = useState(false);
+  const [offering, setOffering] = useState<'scene' | 'roleplay' | null>(null);
 
   async function newScene() {
     setBusy(true);
@@ -41,16 +41,23 @@ export function Home() {
   const partner = pod.members.find((m) => m.account_id !== pod.account.id);
   const other = pod.role === 'lead' ? 'follow' : 'lead';
   const running = scenes?.filter((s) => ['active', 'inspection', 'aftercare'].includes(s.status)) ?? [];
+  // Roleplays asked for are kept apart from Select-O-Matic scenes (anything to answer comes first, either kind).
+  const isRoleplay = (s: ListedScene) => Boolean(s.plan?.roleplay);
   const toAnswer = scenes?.filter((s) => s.status === 'offered' && s.offered_by !== pod.account.id) ?? [];
-  const myOffers = scenes?.filter((s) => s.status === 'offered' && s.offered_by === pod.account.id) ?? [];
-  const upcoming = (scenes?.filter((s) => s.status === 'accepted' || s.status === 'ready') ?? [])
-    .sort((a, b) => (a.starts_at ?? '').localeCompare(b.starts_at ?? ''));
+  const myOffers = scenes?.filter((s) => s.status === 'offered' && s.offered_by === pod.account.id && !isRoleplay(s)) ?? [];
+  const byStart = (a: ListedScene, b: ListedScene) => (a.starts_at ?? '').localeCompare(b.starts_at ?? '');
+  const upcoming = (scenes?.filter((s) => (s.status === 'accepted' || s.status === 'ready') && !isRoleplay(s)) ?? []).sort(byStart);
+  const roleplays = (scenes?.filter((s) => isRoleplay(s) && ((s.status === 'offered' && s.offered_by === pod.account.id) || s.status === 'accepted' || s.status === 'ready')) ?? []).sort(byStart);
   const proposed = scenes?.filter((s) => s.status === 'proposed') ?? [];
   const lead = pod.role === 'lead';
-  // A new offer starts from your last one; roleplays show how often (and when) they've been played.
-  const last = useMemo(() => {
-    const s = (scenes ?? []).filter((x) => x.offered_by === pod.account.id && x.starts_at && x.ends_at).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-    return s ? { startsAt: s.starts_at!, endsAt: s.ends_at!, leads: s.switched ? 'follow' as const : 'lead' as const, kind: s.plan?.roleplay ? 'roleplay' as const : 'tasks' as const, id: s.id } : null;
+  // A new offer starts from your last one of its kind; roleplays show how often (and when) they've been played.
+  const [last, lastRoleplay] = useMemo(() => {
+    const latest = (rp: boolean) => {
+      const s = (scenes ?? []).filter((x) => x.offered_by === pod.account.id && x.starts_at && x.ends_at && Boolean(x.plan?.roleplay) === rp)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      return s ? { startsAt: s.starts_at!, endsAt: s.ends_at!, leads: s.switched ? 'follow' as const : 'lead' as const, id: s.id } : null;
+    };
+    return [latest(false), latest(true)] as const;
   }, [scenes, pod.account.id]);
   const history = useMemo(() => roleplayHistory(scenes ?? []), [scenes]);
   const drafts = scenes?.filter((s) => s.status === 'draft') ?? [];
@@ -79,9 +86,12 @@ export function Home() {
       {!scenes ? <Spinner /> : (
         <>
           {running.map((s) => <SceneCard key={s.id} s={s} big />)}
-          <button type="button" className={`${lead ? 'btn' : 'btn-follow'} w-full min-h-14 text-lg`} onClick={() => setOffering(true)}>
-            {lead ? `Offer ${pod.title('follow')} a scene` : `Ask ${pod.title('lead')} for a scene`}
-          </button>
+          <div className="grid gap-2">
+            <button type="button" className={`${lead ? 'btn' : 'btn-follow'} w-full min-h-14 text-lg`} onClick={() => setOffering('scene')}>
+              {lead ? `Offer ${pod.title('follow')} a scene` : `Ask ${pod.title('lead')} for a scene`}
+            </button>
+            <button type="button" className="btn-quiet w-full min-h-12" onClick={() => setOffering('roleplay')}>🎭 Ask for a roleplay</button>
+          </div>
           {toAnswer.length > 0 && (
             <Section title="To answer" eyebrow="Offers">
               {toAnswer.map((s) => <SceneCard key={s.id} s={s} big />)}
@@ -95,6 +105,11 @@ export function Home() {
           {upcoming.length > 0 && (
             <Section title="Coming up" eyebrow="Agreed">
               {upcoming.map((s) => <SceneCard key={s.id} s={s} />)}
+            </Section>
+          )}
+          {roleplays.length > 0 && (
+            <Section title="Roleplays" eyebrow="🎭 Asked for and agreed">
+              {roleplays.map((s) => <SceneCard key={s.id} s={s} />)}
             </Section>
           )}
           {proposed.length > 0 && (
@@ -112,7 +127,8 @@ export function Home() {
           )}
         </>
       )}
-      {scenes && <NewOffer key={last?.id ?? 'none'} open={offering} onClose={() => setOffering(false)} last={last} history={history} />}
+      {scenes && <NewOffer key={`scene-${last?.id ?? 'none'}`} open={offering === 'scene'} onClose={() => setOffering(null)} last={last} />}
+      {scenes && <AskRoleplay key={`roleplay-${lastRoleplay?.id ?? 'none'}`} open={offering === 'roleplay'} onClose={() => setOffering(null)} last={lastRoleplay} history={history} />}
     </div>
   );
 }

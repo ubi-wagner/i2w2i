@@ -51,8 +51,8 @@ export function sceneTransition(status: SceneStatus, action: SceneAction, role: 
       return null;
     case 'accept':
       return status === 'offered' && !offerer ? 'accepted' : null;
-    case 'accept_send': // the lead accepts a scene that needs no building (a roleplay)
-      return status === 'offered' && !offerer && lead ? 'ready' : null;
+    case 'accept_send': // a roleplay asked for: whichever of you answers, a yes means it's on
+      return status === 'offered' && !offerer ? 'ready' : null;
     case 'request_change':
       return status === 'offered' && !offerer ? 'offered' : null;
     case 'decline':
