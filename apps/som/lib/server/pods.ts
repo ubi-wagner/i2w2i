@@ -47,6 +47,8 @@ export interface SceneRow {
   reply_enc: string | null;
   /** The one who usually follows leads this scene. */
   switched: boolean;
+  /** A roleplay asked for: no inspection, scores or rewards. Set when it's made. */
+  roleplay: boolean;
   /** Who made the offer on the table (the other one answers it). */
   offered_by: string | null;
   close_votes: string[];

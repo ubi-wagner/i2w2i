@@ -1,11 +1,11 @@
 // Switching, on two small phones. Kay (who usually leads) adds roleplays to
-// the menu and asks Sunny for one where Sunny leads; Sunny accepts and it's
-// on. In that scene everything follows the switch: Sunny has the lead's
-// controls and sends a demand, Kay gets it; at the inspection (there's no
-// skipping it) Sunny scores and rewards as usual, both say what they loved
-// and didn't about the roleplay, and its own aftercare shows at the end.
-// A roleplay Kay marked "not for me" can't be asked for. Then Sunny asks Kay for a scene and Kay says
-// not this time. Every new screen is checked on the small phone; nothing
+// the menu and asks Sunny for one where Sunny leads; they talk it over,
+// Sunny accepts and it's on. In that scene everything follows the switch:
+// Sunny has the lead's controls and sends a demand, Kay gets it. A roleplay
+// has no inspection, scores or rewards: Sunny ends it straight into
+// aftercare, which starts with the roleplay's own, and both say what they
+// loved and didn't. A roleplay Kay marked "not for me" can't be asked for.
+// Then Sunny asks Kay for a scene and Kay says not this time. Every new screen is checked on the small phone; nothing
 // readable reaches the database or a notification.
 import { audit, BASE, call, check, databaseText, db, finish, newPod, pushService, pushTo, pushes, SMALL, TITLES } from '../lib.mjs';
 
@@ -133,50 +133,40 @@ await r.reload();
 await r.getByRole('region', { name: 'Demands' }).getByText('A photo, right now').waitFor();
 check(true, 'Kay sees the demand at the top of her screen');
 
-// ── The inspection: rewards as usual; the roleplay gets loves and dislikes ──
-check((await b.getByRole('button', { name: 'Straight to aftercare' }).count()) === 0, 'there’s no skipping the inspection: it’s where rewards are earned');
-check((await call(b, `/api/scenes/${id}/action`, 'POST', { action: 'aftercare' })).status === 409, '…not even around the screen');
-await b.getByRole('button', { name: 'Start the inspection' }).click();
+// ── No inspection: straight into aftercare, where both say what they loved ─
+check((await b.getByRole('button', { name: 'Start the inspection' }).count()) === 0, 'a roleplay has no inspection: no scores, no rewards');
+check((await call(b, `/api/scenes/${id}/action`, 'POST', { action: 'inspect' })).status === 409, '…and the server refuses one');
+check((await call(r, `/api/scenes/${id}/action`, 'POST', { action: 'aftercare' })).status === 409, 'only Sunny, who leads it, ends it');
+await b.getByRole('button', { name: 'Time for aftercare' }).click();
+await b.getByText('Back to us').first().waitFor();
+check((await b.getByText('Tea on the couch, feet up.').count()) === 1, 'Sunny ends it straight into aftercare, which starts with the roleplay’s own');
+check(!!await pushTo('kay', /Time for aftercare/), 'Kay hears it’s aftercare');
+check((await b.getByRole('region', { name: 'Results' }).count()) === 0 && (await b.getByText('The scorecard and tasks').count()) === 0, 'no scorecard and no rewards');
 const feelings = (p) => p.getByRole('region', { name: 'Loves and dislikes' });
 await feelings(b).getByRole('radio', { name: /Love it/ }).click();
 await feelings(b).getByLabel('What you loved').fill('The pace, and the clipboard.');
 await feelings(b).getByRole('button', { name: 'Save words' }).click();
 await feelings(b).getByText('Saved', { exact: true }).waitFor();
-check((await b.getByRole('radiogroup', { name: 'Score for the roleplay' }).count()) === 0, 'the roleplay isn’t scored by the lead: each of you says what you loved and didn’t');
-await b.getByRole('button', { name: 'all 4s' }).click();
-await b.getByText('1 of 1 scored').waitFor();
-for (const cat of ['Presentation', 'Task completion', 'Quality of work', 'Attitude']) await b.getByRole('radiogroup', { name: cat, exact: true }).getByRole('radio', { name: '4' }).click();
-await b.getByRole('button', { name: /Movie pick/ }).click();
-await audit(b, 'inspecting a roleplay');
-await b.getByRole('button', { name: 'Share with Kay' }).click();
-await b.getByRole('region', { name: 'Results' }).waitFor();
-check(!!await pushTo('kay', /Inspection time/), 'Kay hears it’s inspection time');
-
-await r.reload();
+await audit(b, 'aftercare after a roleplay');
+await r.goto(`${BASE}/scene/${id}`);
 await feelings(r).getByRole('radio', { name: /Love it/ }).click();
 await feelings(r).getByLabel('What you didn’t love').fill('The apron was itchy.');
 await feelings(r).getByRole('button', { name: 'Save words' }).click();
 await feelings(r).getByText('Saved', { exact: true }).waitFor();
 const sunnySays = await r.getByRole('group', { name: 'Sir’s loves and dislikes' }).innerText();
-check(sunnySays.includes('❤️ Love it') && sunnySays.includes('The pace, and the clipboard.'), 'Kay sees what Sunny loved');
-const rtext = await r.getByRole('region', { name: 'Results' }).innerText();
-check(rtext.includes('Movie pick') && rtext.includes('20'), 'Kay still gets her scorecard (20 / 25) and her reward');
+check(sunnySays.includes('❤️ Love it') && sunnySays.includes('The pace, and the clipboard.'), 'in aftercare each says what they loved and didn’t; Kay sees what Sunny loved');
 await audit(r, 'loves and dislikes');
 await b.reload();
 const kaySays = await b.getByRole('group', { name: 'Kay’s loves and dislikes' }).innerText();
 check(kaySays.includes('❤️ Love it') && kaySays.includes('The apron was itchy.'), '…and Sunny what Kay didn’t');
-await b.getByRole('button', { name: 'Time for aftercare' }).click();
-await b.getByText('Back to us').first().waitFor();
-check((await b.getByText('Tea on the couch, feet up.').count()) === 1, 'aftercare starts with the roleplay’s own aftercare');
-check(!!await pushTo('kay', /Time for aftercare/), 'Kay hears it’s aftercare');
-await audit(b, 'aftercare after a roleplay');
 await b.getByRole('button', { name: 'I’m back to us' }).click();
 await b.getByText('You’re back to us').waitFor();
 await r.reload();
 await r.getByRole('button', { name: 'I’m back to us' }).click();
 await r.getByText(/tasks approved/).waitFor({ timeout: 10000 });
 [scene] = await db`SELECT status FROM som.scenes WHERE id = ${id}`;
-check(scene.status === 'closed' && (await r.getByRole('region', { name: 'Roleplay' }).count()) === 1, 'when both are back to us it closes, and the record shows the roleplay');
+check(scene.status === 'closed' && (await r.getByRole('region', { name: 'Roleplay' }).count()) === 1 && (await r.getByRole('region', { name: 'Results' }).count()) === 0,
+  'when both are back to us it closes; the record shows the roleplay, and no scorecard');
 
 // ── Sunny asks Kay for a scene; Kay says not this time ──────────────────────
 await b.goto(`${BASE}/us`);
@@ -208,7 +198,7 @@ check(pushes.every((m) => !m.error), 'every notification decrypts on the phone i
 const leaks = pushes.filter((m) => /night shift|breakfast|late for her|tea on|Sir|photo/i.test(`${m.title} ${m.body}`));
 check(leaks.length === 0, `notifications never say what’s in the scene${leaks.length ? `: ${JSON.stringify(leaks)}` : ''}`);
 const all = await databaseText();
-const found = ['The night shift', 'Breakfast service', 'start at nine', 'late for her shift', 'Tea on the couch', 'Your turn, tomorrow', 'clipboard (Sunny)', '"switchTitles"', '"roleplay"', 'The pace, and the clipboard', 'apron was itchy', '"loved"'].filter((w) => all.includes(w));
+const found = ['The night shift', 'Breakfast service', 'start at nine', 'late for her shift', 'Tea on the couch', 'Your turn, tomorrow', 'clipboard (Sunny)', '"switchTitles"', '"roleplay":{', '"setup":', 'The pace, and the clipboard', 'apron was itchy', '"loved"'].filter((w) => all.includes(w));
 check(found.length === 0, `nothing readable in the database${found.length ? `: ${found.join(', ')}` : ''}`);
 const errors = [...b.errors, ...r.errors];
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);

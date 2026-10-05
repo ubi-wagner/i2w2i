@@ -33,9 +33,10 @@ export function sceneRole(podRole: Role, switched: boolean): Role {
 /**
  * The scene's next status for an action by this role (in the scene), or
  * null if it isn't allowed. `offerer`: whether they made the offer on the
- * table (the other one answers it).
+ * table (the other one answers it). `roleplay`: a roleplay scene, which
+ * has no inspection.
  */
-export function sceneTransition(status: SceneStatus, action: SceneAction, role: Role, offerer = false): SceneStatus | null {
+export function sceneTransition(status: SceneStatus, action: SceneAction, role: Role, offerer = false, roleplay = false): SceneStatus | null {
   const lead = role === 'lead';
   switch (action) {
     case 'edit':
@@ -68,10 +69,12 @@ export function sceneTransition(status: SceneStatus, action: SceneAction, role: 
     case 'start':
       // The lead starts a draft or proposal now; a sent scene is started by either.
       return ((status === 'draft' || status === 'proposed') && lead) || status === 'ready' ? 'active' : null;
-    case 'inspect':
-      return status === 'active' && lead ? 'inspection' : null;
-    case 'aftercare': // only after the inspection: the scorecard is where rewards are earned
-      return status === 'inspection' && lead ? 'aftercare' : null;
+    case 'inspect': // a roleplay has none: no scores, no rewards
+      return status === 'active' && lead && !roleplay ? 'inspection' : null;
+    case 'aftercare':
+      // A scene only after its inspection (the scorecard is where rewards are
+      // earned); a roleplay straight from playing it.
+      return lead && status === (roleplay ? 'active' : 'inspection') ? 'aftercare' : null;
     case 'close':
       return status === 'aftercare' ? 'closed' : null;
   }

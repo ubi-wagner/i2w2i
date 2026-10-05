@@ -251,7 +251,7 @@ const presetFrom = (last?: { startsAt: string; endsAt: string } | null): Preset 
 /** A new scene offered for a window. If it can't be (that time is taken, say), no stray draft is left. */
 async function offerScene(pod: ReturnType<typeof usePod>, plan: Plan, w: { start: Date; end: Date }, switched: boolean): Promise<string> {
   const id = crypto.randomUUID();
-  await api(`/api/pods/${pod.pod.id}/scenes`, { body: { id, planEnc: await pod.seal(plan, `plan:${id}`) } });
+  await api(`/api/pods/${pod.pod.id}/scenes`, { body: { id, planEnc: await pod.seal(plan, `plan:${id}`), roleplay: Boolean(plan.roleplay) } });
   try {
     await api(`/api/scenes/${id}/action`, { body: { action: 'offer', startsAt: w.start.toISOString(), endsAt: w.end.toISOString(), switched } });
   } catch (err) {

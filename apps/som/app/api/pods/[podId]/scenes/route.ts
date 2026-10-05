@@ -21,14 +21,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ podId: s
   return json({ scenes });
 }
 
-/** A new draft: the phone picked its id and encrypted its plan. */
+/** A new draft: the phone picked its id and encrypted its plan, and says if it's a roleplay asked for. */
 export async function POST(req: Request, { params }: { params: Promise<{ podId: string }> }) {
   const me = await guard(req);
   if (me instanceof Response) return me;
   const { podId } = await params;
   if (!isUuid(podId) || !(await podRole(me.id, podId))) return bad('Not found', 404);
-  const b = await body<{ id?: unknown; planEnc?: unknown }>(req);
+  const b = await body<{ id?: unknown; planEnc?: unknown; roleplay?: unknown }>(req);
   if (!isUuid(b?.id) || !isCipher(b?.planEnc, 'j1', 200_000)) return bad('That doesn’t look like a scene.');
-  await sql`INSERT INTO som.scenes (id, pod_id, created_by, plan_enc) VALUES (${b!.id as string}, ${podId}, ${me.id}, ${b!.planEnc as string})`;
+  if (b?.roleplay != null && typeof b.roleplay !== 'boolean') return bad('That doesn’t look like a scene.');
+  await sql`INSERT INTO som.scenes (id, pod_id, created_by, plan_enc, roleplay) VALUES (${b!.id as string}, ${podId}, ${me.id}, ${b!.planEnc as string}, ${b?.roleplay === true})`;
   return json({ ok: true });
 }

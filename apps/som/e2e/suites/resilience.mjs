@@ -111,6 +111,7 @@ await audit(r, 'paused, lead');
 await b.getByRole('button', { name: 'Resume' }).click();
 await b.getByText('You paused the scene').waitFor({ state: 'detached' });
 await b.getByText('Your tasks').waitFor();
+check((await call(r, `/api/scenes/${run}/action`, 'POST', { action: 'aftercare' })).status === 409, 'a scene from the menu never skips its inspection (only a roleplay does)');
 
 // ── A retried note or demand arrives once ───────────────────────────────────
 const noteId = crypto.randomUUID();

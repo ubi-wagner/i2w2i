@@ -19,7 +19,7 @@ leaves them. The server stores ciphertext and can't read it.
 | The menu, the pod's name and titles | Usernames and account names (needed to sign in) |
 | Scene plans, tasks, notes, writing, check-ins | Who is in a pod and which role they have |
 | Offer notes; the follow's capacity and note when answering; demands and praise | An offered scene's window: day, from and until (for reminders and so offers don't overlap) |
-| Roleplays, switch titles, profiles (ratings and notes) | Whether a scene is switched and who offered it (it decides who may do what) |
+| Roleplays, switch titles, profiles (ratings and notes) | Whether a scene is switched, whether it's a roleplay (not which one) and who offered it (it decides who may do what) |
 | Scorecards (overall and per task), consequences, rewards, aftercare, reflections | A scene's stage, and when things happened |
 | Photos, videos, voice notes, files (and their thumbnails, names, sizes in the file) | Encrypted file sizes, check-in times, countdown times |
 
@@ -148,15 +148,16 @@ scene.
 **Roleplays** live on the Menu page: a title, who leads, where, intensity,
 what to wear, the setup, the action and the aftercare. Add them one by
 one, import a text file, or edit them all as text. In a roleplay scene the
-card is at the top while it runs (tasks and demands are optional); the
-inspection works as usual (scorecard and rewards: there's no skipping it,
-it's where rewards are earned), and aftercare starts with the roleplay's
-own.
+card is at the top while it runs (demands are optional). A roleplay has no
+inspection, scores or rewards: whoever leads it ends it straight into
+aftercare (**Time for aftercare**), which starts with the roleplay's own,
+and there you each say what you loved and didn't. (Roleplay scenes from
+before this keep their inspection.)
 
 **Loves and dislikes.** Each of you says how you feel about a roleplay
 with one tap (❤️ Love it, 👍 It's OK, 👎 Not for me) and, if you like, a few
 words: what you loved and what you didn't. Do it from the Menu before
-you've tried one, at the inspection after playing it (you each see the
+you've tried one, in aftercare after playing it (you each see the
 other's), or later in the record. They're kept in your profiles: the
 roleplay list shows how each of you feels, the picker puts the ones you
 both love first, one your partner said isn't for them can't be picked,
@@ -191,7 +192,7 @@ Then:
    the arrival routine and reminders).
 3. **Pause**: either of you, any time. Everything stops, the inspection and
    aftercare included. Only whoever paused can resume.
-4. **Inspection** (the lead): every task that was set (demands too) with
+4. **Inspection** (the lead; not for a roleplay): every task that was set (demands too) with
    what was sent for it, scored 1–5 ("the rest: all 4s" for speed), then
    the overall 1–5 scorecard, notes, consequences, rewards and service,
    shared with the follow, who sees the score for each task.
@@ -304,8 +305,8 @@ The end-to-end suites run two phones through pairing, a whole scene, a
 workday (offer a window, ask for a change of time and capacity, agree, no
 overlaps, expiry, fill, send, start in the window, demands, praise, redo, on
 my way, per-task scores), a switched roleplay (asked for on its own by the
-usual lead, talked over in the notes, accepted by the usual follow, run with the roles swapped, straight to
-loves and dislikes from both at the inspection, rewards as usual; a
+usual lead, talked over in the notes, accepted by the usual follow, run with the roles swapped, ended
+straight into aftercare with loves and dislikes from both, no inspection, scores or rewards; a
 roleplay marked "not for me" can't be picked; and a request turned down),
 templates and novelty (the last offer remembered, a template applied, a
 fill that avoids the last scene's picks, never-played roleplays first), profiles (ratings, notes, the

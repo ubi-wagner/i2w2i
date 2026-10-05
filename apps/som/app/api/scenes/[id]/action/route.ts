@@ -62,7 +62,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const action = b?.action as SceneAction;
   if (!ACTIONS.includes(action)) return bad('Unknown action.');
   const offerer = scene.offered_by === me.id;
-  const next = sceneTransition(scene.status, action, role, offerer);
+  const next = sceneTransition(scene.status, action, role, offerer, scene.roleplay);
   if (!next) return bad('That can’t be done now.', 409);
   const name = await nameOf(me.id);
   const url = `/scene/${id}`;

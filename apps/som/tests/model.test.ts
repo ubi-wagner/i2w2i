@@ -305,6 +305,14 @@ describe('offering a scene', () => {
     expect(sceneTransition('inspection', 'aftercare', 'follow')).toBeNull();
   });
 
+  it('a roleplay has no inspection, scores or rewards: the lead ends it straight into aftercare', () => {
+    expect(sceneTransition('active', 'inspect', 'lead', false, true)).toBeNull();
+    expect(sceneTransition('active', 'aftercare', 'lead', false, true)).toBe('aftercare');
+    expect(sceneTransition('active', 'aftercare', 'follow', false, true)).toBeNull();
+    expect(sceneTransition('inspection', 'aftercare', 'lead', false, true)).toBeNull();
+    expect(sceneTransition('aftercare', 'close', 'follow', false, true)).toBe('closed');
+  });
+
   it('switching swaps who leads in that scene', () => {
     expect(sceneRole('lead', false)).toBe('lead');
     expect(sceneRole('lead', true)).toBe('follow');
