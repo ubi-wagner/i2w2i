@@ -19,19 +19,28 @@ export default async function Dashboard() {
     <>
       <Header user={user} />
       <main className="mx-auto max-w-5xl space-y-8 px-4 py-8">
-        <h1 className="text-2xl font-semibold">Hi {user.display_name.split(' ')[0]}</h1>
+        <div>
+          <h1 className="text-2xl font-semibold">Hi {user.display_name.split(' ')[0]}</h1>
+          <p className="text-stone-600">{hasEvents ? 'Your events and the family’s albums.' : 'Your family apps.'}</p>
+        </div>
         <InstallCard />
         {!apps.length && <div className="card text-stone-600">Nothing has been shared with you yet. Ask the person who invited you, or Eric.</div>}
         {hasEvents && (
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-semibold">Your events</h2>
-              {canCreate && <Link href="/events/new" className="btn py-1.5 text-sm">New event</Link>}
+              {canCreate && <Link href="/events/new" className="btn btn-sm">+ New event</Link>}
             </div>
             <EventCards
               ctx={userCtx(user)}
               limit={6}
-              empty={<div className="card text-stone-600">{canCreate ? 'No events yet. Create the first one.' : 'You’re not on any events yet.'}</div>}
+              empty={(
+                <div className="rounded-2xl border border-dashed border-stone-300 bg-white/60 px-6 py-10 text-center">
+                  <p className="font-medium">{canCreate ? 'No events yet' : 'You’re not on any events yet'}</p>
+                  <p className="mt-1 text-sm text-stone-600">{canCreate ? 'Make one for a party, a shower or a wedding: a page for guests, QR cards for the tables and a shared album.' : 'When someone adds you to an event, it shows here.'}</p>
+                  {canCreate && <Link href="/events/new" className="btn mt-4">Create your first event</Link>}
+                </div>
+              )}
             />
           </section>
         )}

@@ -105,7 +105,7 @@ export function DeleteAlbumButton({ eventId, albumId, title, then }: { eventId: 
   return (
     <button
       type="button"
-      className="text-red-700 hover:underline"
+      className="btn-danger"
       disabled={pending}
       onClick={() => {
         if (!confirm(`Delete the album “${title}”? Its photos stay on the event.`)) return;

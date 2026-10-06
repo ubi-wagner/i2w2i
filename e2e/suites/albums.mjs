@@ -85,7 +85,7 @@ await tilesIn(grid).nth(0).click();
 const chips = host.getByRole('group', { name: 'Albums' });
 await chips.waitFor();
 for (let i = 0; i < 3 && (await chips.getByRole('button', { name: '✓ Ceremony' }).count()); i++) {
-  await host.getByRole('button', { name: 'Next →' }).click();
+  await host.getByRole('button', { name: 'Next', exact: true }).click();
 }
 await chips.getByRole('button', { name: '+ Ceremony' }).click();
 await host.getByText('Posted to the album.').waitFor();

@@ -110,7 +110,7 @@ export default async function PeopleTab({ params }: { params: Promise<{ id: stri
                       <input type="hidden" hidden name="event_id" value={id} />
                       <input type="hidden" hidden name="guest_id" value={g.id} />
                       <label className="flex items-center gap-1 text-stone-600"><input type="checkbox" name="hide_uploads" /> hide their uploads</label>
-                      <button className="text-red-700 hover:underline">Remove</button>
+                      <button className="btn-danger">Remove</button>
                     </form>
                   )}
                 </li>

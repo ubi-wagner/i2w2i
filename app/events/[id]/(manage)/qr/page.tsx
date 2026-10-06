@@ -41,7 +41,7 @@ export default async function QrTab({ params }: { params: Promise<{ id: string }
             return (
               <li key={c.id} className="flex flex-wrap items-start gap-4 rounded-xl border border-stone-200 p-4">
                 {qrs[i] ? (
-                  <div className="h-28 w-28 shrink-0" dangerouslySetInnerHTML={{ __html: qrs[i]! }} />
+                  <div className="h-28 w-28 shrink-0 rounded-lg border border-stone-200 bg-white p-1.5" dangerouslySetInnerHTML={{ __html: qrs[i]! }} />
                 ) : (
                   <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded bg-stone-100 text-center text-xs text-stone-500">QR turned off</div>
                 )}
@@ -55,11 +55,11 @@ export default async function QrTab({ params }: { params: Promise<{ id: string }
                   {links[i] && <CopyText text={links[i]!} />}
                   {!c.qr_revoked_at && (
                     <div className="flex flex-wrap gap-2 pt-1">
-                      <Link className="btn-secondary py-1 text-sm" href={`/events/${id}/codes/${c.id}`}>Print card</Link>
-                      <Link className="btn-secondary py-1 text-sm" href={`/events/${id}/poster/${c.id}`}>Print poster</Link>
+                      <Link className="btn-secondary btn-sm" href={`/events/${id}/codes/${c.id}`}>Print card</Link>
+                      <Link className="btn-secondary btn-sm" href={`/events/${id}/poster/${c.id}`}>Print poster</Link>
                     </div>
                   )}
-                  <div className="flex flex-wrap gap-3 pt-1">
+                  <div className="-ml-2.5 flex flex-wrap gap-1 pt-1">
                     {[
                       typed && !c.code_revoked_at && ['revoke_code', 'Turn off typed code'],
                       typed && c.code_revoked_at && ['restore_code', 'Turn typed code back on'],
@@ -70,7 +70,7 @@ export default async function QrTab({ params }: { params: Promise<{ id: string }
                         <input type="hidden" hidden name="event_id" value={id} />
                         <input type="hidden" hidden name="code_id" value={c.id} />
                         <input type="hidden" hidden name="action" value={action} />
-                        <button className="text-stone-600 hover:underline">{label}</button>
+                        <button className={action.startsWith('restore') ? 'btn-ghost' : 'btn-danger'}>{label}</button>
                       </form>
                     ))}
                   </div>
@@ -90,8 +90,8 @@ export default async function QrTab({ params }: { params: Promise<{ id: string }
             <p className="text-stone-600">No code in it: for people already on the event, or once the event is published to the family or to anyone with the link. Guests at the event need a guest code instead. Albums you make public have their own link and QR on their page (Albums tab).</p>
             <CopyText text={albumUrl(event.slug)} />
             <div className="flex flex-wrap gap-2">
-              <Link href={`/events/${id}/card`} className="btn-secondary py-1 text-sm">Album card</Link>
-              <Link href={`/events/${id}/poster/album`} className="btn-secondary py-1 text-sm">Album poster</Link>
+              <Link href={`/events/${id}/card`} className="btn-secondary btn-sm">Album card</Link>
+              <Link href={`/events/${id}/poster/album`} className="btn-secondary btn-sm">Album poster</Link>
             </div>
           </div>
         </div>

@@ -32,7 +32,7 @@ export default async function InfoTab({ params }: { params: Promise<{ id: string
                   <form action={removeLink}>
                     <input type="hidden" hidden name="event_id" value={id} />
                     <input type="hidden" hidden name="link_id" value={l.id} />
-                    <button className="text-stone-500 hover:underline">Remove</button>
+                    <button className="btn-danger">Remove</button>
                   </form>
                 </li>
               ))}

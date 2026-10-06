@@ -32,12 +32,17 @@ export function MemberRow({ eventId, member, canEdit, you, resetSlot }: {
   const role = state.role ?? member.role;
   const label = ROLES.find(([v]) => v === role)?.[1] ?? role;
   return (
-    <li className="flex flex-wrap items-center justify-between gap-2 py-3">
-      <span>
-        <b className="font-medium">{member.display_name}</b>{you && <span className="text-stone-500"> (you)</span>}{' '}
-        <span className="font-mono text-sm text-stone-500">{member.username}</span>
+    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3">
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-light text-sm font-semibold text-brand-dark" aria-hidden="true">
+          {member.display_name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate font-medium">{member.display_name}{you && <span className="font-normal text-stone-500"> (you)</span>}</span>
+          <span className="block truncate font-mono text-xs text-stone-500">{member.username}</span>
+        </span>
       </span>
-      <span className="flex flex-wrap items-center gap-3 text-sm">
+      <span className="flex flex-wrap items-center gap-2 text-sm">
         {canEdit && !you ? (
           <form action={action} className="flex items-center gap-2">
             <input type="hidden" hidden name="event_id" value={eventId} />
@@ -48,7 +53,7 @@ export function MemberRow({ eventId, member, canEdit, you, resetSlot }: {
               defaultValue={role}
               disabled={pending}
               aria-label={`${member.display_name}’s role`}
-              className="rounded-full border border-stone-300 bg-white px-3 py-1"
+              className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 font-medium"
               onChange={(e) => e.currentTarget.form?.requestSubmit()}
             >
               <RoleOptions />
@@ -56,13 +61,13 @@ export function MemberRow({ eventId, member, canEdit, you, resetSlot }: {
             <span role="status" className={state.error ? 'text-red-600' : 'text-green-700'}>{pending ? 'Saving…' : state.error ?? state.message ?? ''}</span>
           </form>
         ) : (
-          <span className="rounded-full bg-stone-100 px-3 py-1">{label}</span>
+          <span className="badge bg-stone-100 px-3 py-1 text-sm text-stone-700">{label}</span>
         )}
         {canEdit && !you && (
           <form action={remove} onSubmit={(e) => { if (!confirm(`Take ${member.display_name} off this event? Their account stays, and anything they added stays.`)) e.preventDefault(); }}>
             <input type="hidden" hidden name="event_id" value={eventId} />
             <input type="hidden" hidden name="user_id" value={member.user_id} />
-            <button className="text-stone-500 hover:underline" disabled={removing}>Remove</button>
+            <button className="btn-danger" disabled={removing}>Remove</button>
             {removed.error && <span className="ml-2 text-red-600">{removed.error}</span>}
           </form>
         )}
@@ -128,10 +133,11 @@ export function HostInviteForm({ eventId }: { eventId: string }) {
 export function ResetPasswordButton({ userId }: { userId: string }) {
   const [state, action, pending] = useActionState<PeopleState, FormData>(resetMemberPassword, {});
   return (
-    <div className="w-full space-y-2">
+    // Lined up under the person's name, past their initials.
+    <div className="w-full space-y-2 pl-12">
       <form action={action}>
         <input type="hidden" hidden name="user_id" value={userId} />
-        <button className="text-sm text-brand hover:underline" disabled={pending}>Reset password</button>
+        <button className="btn-ghost -ml-2.5 text-brand-dark" disabled={pending}>Reset password</button>
       </form>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       {state.credentials && state.url && !pending && <CredentialsShare credentials={state.credentials} url={state.url} reset />}

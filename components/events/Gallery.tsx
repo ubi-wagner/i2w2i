@@ -73,6 +73,8 @@ export function Gallery({ items, empty, downloadUrl, moderation, albums, comment
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Result>({});
   const downloadForm = useRef<HTMLFormElement>(null);
+  // Where a swipe on the open photo started.
+  const swipe = useRef<number | null>(null);
   const now = useNow();
   const item = open === null ? null : items[open];
 
@@ -343,19 +345,45 @@ export function Gallery({ items, empty, downloadUrl, moderation, albums, comment
 
       {item && (
         <FullScreen label={`${item.kind === 'photo' ? 'Photo' : 'Video'} from ${item.uploaderName}`}>
-          <div className="flex shrink-0 items-center justify-between gap-2 px-3 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] text-sm">
-            <span className="truncate">
-              {item.uploaderName} · {new Date(item.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-              {open !== null && <span className="text-stone-400"> · {open + 1} of {items.length}</span>}
-            </span>
-            <button type="button" onClick={() => setOpen(null)} className="rounded px-3 py-1 text-lg" aria-label="Close">✕</button>
+          <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{item.uploaderName}</p>
+              <p className="truncate text-xs text-white/60">
+                {new Date(item.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                {open !== null && <> · {open + 1} of {items.length}</>}
+              </p>
+            </div>
+            <button type="button" onClick={() => setOpen(null)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-lg hover:bg-white/20" aria-label="Close">✕</button>
           </div>
-          <div className="flex min-h-0 grow items-center justify-center px-2" onClick={() => setOpen(null)}>
+          <div
+            className="relative flex min-h-0 grow items-center justify-center px-2"
+            onClick={() => setOpen(null)}
+            onTouchStart={(e) => { swipe.current = e.touches[0]?.clientX ?? null; }}
+            onTouchEnd={(e) => {
+              const from = swipe.current;
+              const to = e.changedTouches[0]?.clientX;
+              swipe.current = null;
+              if (from === null || to === undefined || Math.abs(to - from) < 50) return;
+              setOpen((i) => (i === null ? i : Math.min(items.length - 1, Math.max(0, i + (to < from ? 1 : -1)))));
+            }}
+          >
             {item.kind === 'photo' ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.src} alt={item.caption || ''} className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
+              <img src={item.src} alt={item.caption || ''} className="max-h-full max-w-full rounded-sm object-contain" onClick={(e) => e.stopPropagation()} />
             ) : (
               <FramedVideo src={item.src} poster={item.poster} overlay={item.overlay as Overlay | null} className="max-h-[60vh] max-w-full" />
+            )}
+            {open !== null && open > 0 && (
+              <button type="button" aria-label="Previous" onClick={(e) => { e.stopPropagation(); setOpen((i) => (i ?? 1) - 1); }}
+                className="absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25">
+                <Glyph name="left" />
+              </button>
+            )}
+            {open !== null && open < items.length - 1 && (
+              <button type="button" aria-label="Next" onClick={(e) => { e.stopPropagation(); setOpen((i) => (i ?? 0) + 1); }}
+                className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25">
+                <Glyph name="right" />
+              </button>
             )}
           </div>
           <div className="max-h-[50vh] shrink-0 space-y-2 overflow-y-auto pb-[env(safe-area-inset-bottom)] pt-2">
@@ -418,13 +446,12 @@ export function Gallery({ items, empty, downloadUrl, moderation, albums, comment
               <p className="px-4 text-center text-sm text-amber-200">Only you and the hosts can see this until they add it to the album.</p>
             )}
             {commentsSlug && <Comments slug={commentsSlug} uploadId={item.id} />}
-            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 px-3 pb-3 text-sm">
-              <button type="button" disabled={open === 0} onClick={() => setOpen((i) => (i ?? 1) - 1)} className="px-2 py-1 disabled:opacity-30">← Prev</button>
-              {item.originalUrl && <a href={item.originalUrl} className="underline">Download original</a>}
+            <div className="flex flex-wrap items-center justify-center gap-2 px-3 pb-3">
+              {item.originalUrl && <a href={item.originalUrl} className="viewer-btn"><Glyph name="download" />Download original</a>}
               {albums?.current && !item.pending && (
                 <>
-                  <button type="button" className="underline" onClick={async () => setNote(await albums.current!.setCover({ eventId: albums.eventId, albumId: albums.current!.id, uploadId: item.id }))}>Use as album cover</button>
-                  <button type="button" className="underline" onClick={async () => { setNote(await albums.fileInto({ eventId: albums.eventId, albumId: albums.current!.id, uploadIds: [item.id], add: false })); }}>Take out of this album</button>
+                  <button type="button" className="viewer-btn" onClick={async () => setNote(await albums.current!.setCover({ eventId: albums.eventId, albumId: albums.current!.id, uploadId: item.id }))}><Glyph name="cover" />Use as album cover</button>
+                  <button type="button" className="viewer-btn" onClick={async () => { setNote(await albums.fileInto({ eventId: albums.eventId, albumId: albums.current!.id, uploadIds: [item.id], add: false })); }}><Glyph name="out" />Take out of this album</button>
                 </>
               )}
               {moderation && (
@@ -436,7 +463,6 @@ export function Gallery({ items, empty, downloadUrl, moderation, albums, comment
                   <ModForm moderation={moderation} id={item.id} action="delete" label="Delete" />
                 </>
               )}
-              <button type="button" disabled={open === items.length - 1} onClick={() => setOpen((i) => (i ?? 0) + 1)} className="px-2 py-1 disabled:opacity-30">Next →</button>
             </div>
           </div>
         </FullScreen>
@@ -458,7 +484,10 @@ function ModForm({ moderation, id, action, label, onDone }: { moderation: NonNul
       <input type="hidden" hidden name="event_id" value={moderation.eventId} />
       <input type="hidden" hidden name="upload_id" value={id} />
       <input type="hidden" hidden name="action" value={action} />
-      <button className={action === 'delete' ? 'text-red-300 underline' : action === 'approve' ? 'rounded-full bg-green-600 px-3 py-1 font-medium text-white' : 'underline'}>{label}</button>
+      <button className={action === 'delete' ? 'viewer-btn text-red-300 hover:bg-red-500/20' : action === 'approve' ? 'viewer-btn bg-green-600 font-medium hover:bg-green-500' : 'viewer-btn'}>
+        <Glyph name={({ hide: 'hide', show: 'show', feature: 'star', unfeature: 'star', delete: 'trash' } as Record<string, GlyphName>)[action] ?? 'check'} />
+        {label}
+      </button>
     </form>
   );
 }
@@ -547,5 +576,28 @@ function NewAlbumChip({ onMake }: { onMake: (title: string) => Promise<void> }) 
       <button className="rounded-full bg-white px-3 py-1 font-medium text-stone-900 disabled:opacity-50" disabled={busy || !title.trim()}>Make</button>
       <button type="button" className="px-1.5 text-stone-300" aria-label="Cancel new album" onClick={() => { setOpen(false); setTitle(''); }}>✕</button>
     </form>
+  );
+}
+
+type GlyphName = 'left' | 'right' | 'download' | 'cover' | 'out' | 'hide' | 'show' | 'star' | 'trash' | 'check';
+const GLYPHS: Record<GlyphName, React.ReactNode> = {
+  left: <path d="M15 5l-7 7 7 7" />,
+  right: <path d="M9 5l7 7-7 7" />,
+  download: <><path d="M12 4v11M7 10l5 5 5-5" /><path d="M5 19h14" /></>,
+  cover: <><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M4 15l4-4 4 4 3-3 5 5" /></>,
+  out: <><circle cx="12" cy="12" r="8" /><path d="M8 12h8" /></>,
+  hide: <><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z" /><path d="M4 4l16 16" /></>,
+  show: <><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z" /><circle cx="12" cy="12" r="2.5" /></>,
+  star: <path d="M12 4l2.4 5 5.5.7-4 3.8 1 5.4L12 16.3 7.1 18.9l1-5.4-4-3.8 5.5-.7Z" />,
+  trash: <><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></>,
+  check: <path d="M5 12l5 5 9-10" />,
+};
+
+/** Small line icons for the photo viewer's buttons. */
+function Glyph({ name }: { name: GlyphName }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {GLYPHS[name]}
+    </svg>
   );
 }

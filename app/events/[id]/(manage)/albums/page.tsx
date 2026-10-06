@@ -27,39 +27,43 @@ export default async function AlbumsTab({ params }: { params: Promise<{ id: stri
       </section>
 
       {albums.length > 0 && (
-        <section className="card space-y-3">
+        <section className="space-y-3">
           <h2 className="text-lg font-semibold">Your albums ({albums.length})</h2>
-          <ol className="divide-y divide-stone-100">
+          <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {albums.map((a, i) => (
-              <li key={a.id} className="flex flex-wrap items-center gap-4 py-3">
-                <Link href={`/events/${id}/albums/${a.id}`} className="block h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-stone-200">
+              <li key={a.id} className="flex flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+                <Link href={`/events/${id}/albums/${a.id}`} className="group relative block aspect-[4/3] overflow-hidden bg-stone-100">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-xs text-stone-500">No photos</span>}
+                  {a.cover ? <img src={a.cover} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" /> : <span className="flex h-full items-center justify-center text-sm text-stone-500">No photos yet</span>}
+                  <span className="absolute left-3 top-3 flex gap-1.5">
+                    <span className={`badge shadow-sm ${a.published ? 'bg-green-100 text-green-800' : 'bg-white/90 text-stone-700'}`}>{a.published ? 'Published' : 'Draft'}</span>
+                    {a.public && <span className="badge bg-sky-100 text-sky-800 shadow-sm">Public</span>}
+                  </span>
                 </Link>
-                <div className="min-w-0 grow">
-                  <p className="font-semibold">
-                    <Link href={`/events/${id}/albums/${a.id}`} className="hover:underline">{a.title}</Link>{' '}
-                    <span className={`ml-1 rounded-full px-2 py-0.5 text-xs ${a.published ? 'bg-green-100 text-green-800' : 'bg-stone-100 text-stone-600'}`}>{a.published ? 'Published' : 'Draft'}</span>
-                    {a.public && <span className="ml-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800">Public</span>}
-                  </p>
-                  <p className="text-sm text-stone-600">{countLabel(a.photos, a.videos)}{a.description ? ` · ${a.description}` : ''}</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
-                    <Link href={`/events/${id}/albums/${a.id}`} className="text-brand hover:underline">Edit &amp; add photos</Link>
-                    {a.published && <Link href={`/album/${event.slug}/a/${a.slug}`} className="text-brand hover:underline">View</Link>}
+                <div className="flex grow flex-col gap-2 p-4">
+                  <div>
+                    <p className="font-semibold"><Link href={`/events/${id}/albums/${a.id}`} className="hover:underline">{a.title}</Link></p>
+                    <p className="text-sm text-stone-600">{countLabel(a.photos, a.videos)}{a.description ? ` · ${a.description}` : ''}</p>
+                  </div>
+                  <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-stone-100 pt-2">
+                    <Link href={`/events/${id}/albums/${a.id}`} className="btn-ghost text-brand-dark">Edit &amp; add photos</Link>
+                    {a.published && <Link href={`/album/${event.slug}/a/${a.slug}`} className="btn-ghost">View</Link>}
                     <form action={publishAlbum}>
                       <input type="hidden" hidden name="event_id" value={id} />
                       <input type="hidden" hidden name="album_id" value={a.id} />
                       <input type="hidden" hidden name="publish" value={a.published ? '' : 'on'} />
-                      <button className={a.published ? 'text-stone-600 hover:underline' : 'font-medium text-green-800 hover:underline'}>{a.published ? 'Unpublish' : 'Publish'}</button>
+                      <button className={a.published ? 'btn-ghost' : 'btn-ghost text-green-800 hover:bg-green-50'}>{a.published ? 'Unpublish' : 'Publish'}</button>
                     </form>
-                    {(['up', 'down'] as const).map((dir) => (
-                      <form key={dir} action={moveAlbum}>
-                        <input type="hidden" hidden name="event_id" value={id} />
-                        <input type="hidden" hidden name="album_id" value={a.id} />
-                        <input type="hidden" hidden name="dir" value={dir} />
-                        <button className="text-stone-500 disabled:opacity-30" disabled={dir === 'up' ? i === 0 : i === albums.length - 1} aria-label={`Move ${a.title} ${dir}`}>{dir === 'up' ? '↑' : '↓'}</button>
-                      </form>
-                    ))}
+                    <span className="ml-auto flex items-center">
+                      {(['up', 'down'] as const).map((dir) => (
+                        <form key={dir} action={moveAlbum}>
+                          <input type="hidden" hidden name="event_id" value={id} />
+                          <input type="hidden" hidden name="album_id" value={a.id} />
+                          <input type="hidden" hidden name="dir" value={dir} />
+                          <button className="btn-ghost px-2" disabled={dir === 'up' ? i === 0 : i === albums.length - 1} aria-label={`Move ${a.title} ${dir}`} title={dir === 'up' ? 'Earlier in the list' : 'Later in the list'}>{dir === 'up' ? '↑' : '↓'}</button>
+                        </form>
+                      ))}
+                    </span>
                     <DeleteAlbumButton eventId={id} albumId={a.id} title={a.title} />
                   </div>
                 </div>

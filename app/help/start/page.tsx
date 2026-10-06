@@ -21,11 +21,11 @@ export default function StartHelp() {
           <p className="text-base text-stone-600">Want a password you’ll remember? Change it on your <Link href="/account" className="text-brand underline">account page</Link> (tap your name at the top).</p>
         </Step>
         <Step n={3} title="Look, and add your own" shots={[
-          { src: 'start-photo.webp', alt: 'A photo open full screen with Next and close buttons' },
+          { src: 'start-photo.webp', alt: 'A photo open full screen, with arrows to the next one and a close button' },
           { src: 'start-albums.webp', alt: 'Albums on the event page: Ceremony and Dinner & toasts' },
           { src: 'start-slideshow.webp', alt: 'The Slideshow choices: how often, order, fade and border' },
         ]}>
-          <p>Tap any photo to see it big. Tap <K>Next →</K> for the next one, and <K>✕</K> to go back.</p>
+          <p>Tap any photo to see it big. Swipe, or tap the arrows at the sides, for the next one, and <K>✕</K> to go back.</p>
           <p>If the hosts have made albums (Ceremony, Reception…), tap <K>View albums</K> at the top to look through one part of the day at a time. <b>All photos</b> has everything. <K>Slideshow</K> plays them full screen; tap the screen to stop.</p>
           <p>To add yours, tap <K>Add photos &amp; videos</K> and choose as many as you like. They say <b>Waiting</b> until one of the hosts adds them to the album.</p>
         </Step>
