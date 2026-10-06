@@ -46,6 +46,8 @@ export function Slideshow({ slides, title }: { slides: Slide[]; title: string })
   const [asking, setAsking] = useState(false);
   const [playing, setPlaying] = useState<SlideSettings | null>(null);
   const [settings, setSettings] = useState<SlideSettings>(SLIDE_DEFAULTS);
+  // Full screen arrives a moment after it's asked for.
+  const entering = useRef<Promise<void> | null>(null);
   useEffect(() => setSettings(loadSettings()), []);
   if (!slides.length) return null;
 
@@ -55,7 +57,7 @@ export function Slideshow({ slides, title }: { slides: Slide[]; title: string })
     // Asked for in the tap itself, which browsers require. Phones without it
     // (iPhone) get the whole window instead.
     const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
-    if (root.requestFullscreen) root.requestFullscreen().catch(() => {});
+    if (root.requestFullscreen) entering.current = root.requestFullscreen().catch(() => {});
     else root.webkitRequestFullscreen?.();
     setPlaying(settings);
   }
@@ -77,7 +79,7 @@ export function Slideshow({ slides, title }: { slides: Slide[]; title: string })
           <p className="text-center text-sm text-stone-500">To stop, tap the screen or press Esc.</p>
         </div>
       </Sheet>
-      {playing && createPortal(<Player slides={slides} settings={playing} onDone={() => setPlaying(null)} />, document.body)}
+      {playing && createPortal(<Player slides={slides} settings={playing} entering={entering.current} onDone={() => setPlaying(null)} />, document.body)}
     </>
   );
 }
@@ -100,7 +102,7 @@ function Choice<V extends string | number>({ legend, name, options, value, onCha
   );
 }
 
-function Player({ slides, settings, onDone }: { slides: Slide[]; settings: SlideSettings; onDone: () => void }) {
+function Player({ slides, settings, entering, onDone }: { slides: Slide[]; settings: SlideSettings; entering: Promise<void> | null; onDone: () => void }) {
   const router = useRouter();
   const ids = slides.map((s) => s.id);
   const [list, setList] = useState(() => playOrder(ids, settings.order));
@@ -117,7 +119,10 @@ function Player({ slides, settings, onDone }: { slides: Slide[]; settings: Slide
   function exit() {
     if (exiting.current) return;
     exiting.current = true;
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    const leave = () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); };
+    leave();
+    // Stopped before full screen had arrived: leave it once it does.
+    entering?.then(leave);
     onDone();
   }
 

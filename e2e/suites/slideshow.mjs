@@ -23,7 +23,8 @@ const idOf = async (name) => (await db`SELECT id FROM events.uploads WHERE event
 const show = (p) => p.getByRole('dialog', { name: 'Slideshow', exact: true });
 const player = (p) => p.locator('[role=dialog][aria-label=Slideshow][data-slides]');
 const shownId = (p) => player(p).locator('img[data-current]').evaluate((img) => img.getAttribute('src'));
-const fullscreen = (p) => p.evaluate(() => Boolean(document.fullscreenElement));
+// Full screen comes and goes a moment after it's asked for.
+const fullscreen = (p, want = true) => p.waitForFunction((w) => Boolean(document.fullscreenElement) === w, want, { timeout: 5000 }).then(() => true, () => false);
 const pick = (p, label) => show(p).locator('label', { hasText: new RegExp(`^${label}$`) }).click();
 
 // A host starts it from All photos: the settings, then full screen
@@ -65,7 +66,7 @@ check(await fullscreen(host), '…without leaving full screen');
 // Esc goes back to the album
 await host.keyboard.press('Escape');
 await player(host).waitFor({ state: 'detached' });
-check(!(await fullscreen(host)), 'Esc leaves full screen and goes back to the album');
+check(await fullscreen(host, false), 'Esc leaves full screen and goes back to the album');
 check(await host.getByRole('heading', { name: 'All photos' }).isVisible(), '…right where it was');
 check(await host.evaluate(() => getComputedStyle(document.body).overflow !== 'hidden' && getComputedStyle(document.documentElement).overflow !== 'hidden'), '…and the page scrolls again');
 
@@ -89,7 +90,7 @@ check(seen.size === 3, `shuffle shows every photo (${seen.size} of 3)`);
 check((await player(host).locator('img').count()) === 1, 'with no fade, one photo at a time');
 await player(host).click({ position: { x: 20, y: 20 } });
 await player(host).waitFor({ state: 'detached' });
-check(!(await fullscreen(host)), 'a tap on the screen goes back too');
+check(await fullscreen(host, false), 'a tap on the screen goes back too');
 
 // A named album plays just its own photos, for guests too
 await db`INSERT INTO events.albums (event_id, slug, title, published_at, created_by)
