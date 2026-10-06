@@ -2,11 +2,11 @@ import 'server-only';
 import { sceneRole, type Role, type SceneStatus } from '../rules';
 import { sql } from './db';
 
-export interface Member { account_id: string; role: Role; display_name: string; username: string; has_key: boolean; invited: boolean }
+export interface Member { account_id: string; role: Role; display_name: string; username: string; has_key: boolean; invited: boolean; /** Who made their sign-in: only they (or an admin) can reset it. */ added_by: string | null }
 
 export async function podMembers(podId: string): Promise<Member[]> {
   return sql<Member[]>`
-    SELECT m.account_id, m.role, a.display_name, a.username, (m.key_backup IS NOT NULL) AS has_key, (m.invite IS NOT NULL) AS invited
+    SELECT m.account_id, m.role, a.display_name, a.username, (m.key_backup IS NOT NULL) AS has_key, (m.invite IS NOT NULL) AS invited, a.created_by AS added_by
       FROM som.members m JOIN som.accounts a ON a.id = m.account_id
      WHERE m.pod_id = ${podId} AND a.is_active
      ORDER BY m.role, a.display_name`;
@@ -47,6 +47,8 @@ export interface SceneRow {
   reply_enc: string | null;
   /** The one who usually follows leads this scene. */
   switched: boolean;
+  /** A roleplay asked for: no inspection, scores or rewards. Set when it's made. */
+  roleplay: boolean;
   /** Who made the offer on the table (the other one answers it). */
   offered_by: string | null;
   close_votes: string[];

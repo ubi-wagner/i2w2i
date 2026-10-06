@@ -106,6 +106,11 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
   whole scene needs every member's yes; an unsent draft is its author's.
 - **Pause** is a safety control: either can pause, only whoever paused
   resumes, and nothing moves while paused. Don't weaken it.
+- **Roleplays are asked for on their own** (🎭 Ask for a roleplay), apart
+  from Select-O-Matic scenes: one roleplay, a day, a note. It's a nudge:
+  the other reads all of it, you talk it over in the scene's notes, and a
+  yes from either of you means it's on (nothing to build). Don't fold it
+  back into the scene offer.
 - **Enthusiastic consent:** whoever is offered or asked for a scene can
   always say "Not this time", no reason needed. Keep that path one tap.
 - **The day is two-hour blocks** (`lib/blocks.ts`): getting ready (30
@@ -118,11 +123,19 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
   offer sees the staged scene (`SceneSummary`: what to get ready, what to
   wear, every block and task with its proof). Plans from older versions
   are upgraded on load (`upgradePlan`), never dropped.
-- **Rewards are earned at the inspection.** A scene goes to aftercare only
-  from the inspection (roleplay scenes too); don't add a way to skip it
-  from a running scene. A roleplay itself isn't scored by the lead: each
-  partner gives quick loves and dislikes (kept in their profile), and one a
-  partner marked "not for me" can't be picked for them.
+- **Rewards are earned at the inspection.** A Select-O-Matic scene goes to
+  aftercare only from the inspection; don't add a way to skip it from a
+  running scene. **Roleplays skip the inspection, scoring and rewards:**
+  whoever leads one ends it straight into aftercare, where each partner
+  gives quick loves and dislikes (kept in their profile). The server knows
+  only that a scene is a roleplay (`scenes.roleplay`, set when it's asked
+  for, never which one) and enforces both. One a partner marked "not for
+  me" can't be picked for them.
+- **Never leave anyone guessing.** Every scene screen starts with what's
+  needed now, whose turn it is and what comes next (`NextStep` in
+  `components/scene/NextStep.tsx`); home cards say whose turn it is
+  (`turnFor` in `components/Home.tsx`). Change a stage or what it asks
+  for, update both.
 - Nothing in `apps/som` imports from the family site or vice versa; the root
   build ignores `apps/`.
 

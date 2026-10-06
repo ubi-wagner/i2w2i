@@ -292,16 +292,25 @@ describe('offering a scene', () => {
     expect(sceneTransition('active', 'cancel', 'lead')).toBeNull();
   });
 
-  it('a lead accepting a scene that needs no building sends it as they accept', () => {
+  it('a roleplay asked for is on as soon as the other says yes, whoever leads it', () => {
     expect(sceneTransition('offered', 'accept_send', 'lead')).toBe('ready');
-    expect(sceneTransition('offered', 'accept_send', 'follow')).toBeNull();
+    expect(sceneTransition('offered', 'accept_send', 'follow')).toBe('ready');
     expect(sceneTransition('offered', 'accept_send', 'lead', true)).toBeNull();
+    expect(sceneTransition('offered', 'accept_send', 'follow', true)).toBeNull();
   });
 
   it('aftercare comes after the inspection, never straight from the scene (rewards are earned there)', () => {
     expect(sceneTransition('active', 'aftercare', 'lead')).toBeNull();
     expect(sceneTransition('inspection', 'aftercare', 'lead')).toBe('aftercare');
     expect(sceneTransition('inspection', 'aftercare', 'follow')).toBeNull();
+  });
+
+  it('a roleplay has no inspection, scores or rewards: the lead ends it straight into aftercare', () => {
+    expect(sceneTransition('active', 'inspect', 'lead', false, true)).toBeNull();
+    expect(sceneTransition('active', 'aftercare', 'lead', false, true)).toBe('aftercare');
+    expect(sceneTransition('active', 'aftercare', 'follow', false, true)).toBeNull();
+    expect(sceneTransition('inspection', 'aftercare', 'lead', false, true)).toBeNull();
+    expect(sceneTransition('aftercare', 'close', 'follow', false, true)).toBe('closed');
   });
 
   it('switching swaps who leads in that scene', () => {

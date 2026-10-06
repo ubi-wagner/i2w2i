@@ -1,5 +1,5 @@
 // Templates and novelty, on two small phones. A new offer starts from your
-// last one (hours, who leads, tasks or a roleplay). Kay saves her workday as
+// last one of its kind (hours, who leads). Kay saves her workday as
 // a template, which sets the shape of the next one in a tap but never what's
 // in it. "Fill it for me" steers away from what the last scene used, and
 // roleplays never played come first, with how often and when the others
@@ -14,6 +14,11 @@ const pressed = async (l) => (await l.getAttribute('aria-pressed')) === 'true';
 const offerSheet = async () => {
   await r.goto(`${BASE}/`);
   await r.getByRole('button', { name: `Offer ${TITLES.follow} a scene` }).click();
+  await sheet(r).getByRole('button', { name: 'Tomorrow' }).waitFor();
+};
+const roleplaySheet = async () => {
+  await r.goto(`${BASE}/`);
+  await r.getByRole('button', { name: '🎭 Ask for a roleplay' }).click();
   await sheet(r).getByRole('button', { name: 'Tomorrow' }).waitFor();
 };
 
@@ -86,12 +91,10 @@ await r.getByText('Saved.').waitFor();
 await r.goto(`${BASE}/scene/${workday}`);
 await r.getByRole('button', { name: 'Take it back' }).click();
 await r.getByText('Draft').first().waitFor();
-await offerSheet();
-await sheet(r).getByRole('button', { name: `${TITLES.follow.split(' ')[0]} leads` }).click();
-await sheet(r).getByRole('button', { name: /A roleplay/ }).click();
+await roleplaySheet();
 check((await sheet(r).getByText('🆕 Not played yet').count()) === 2, 'roleplays never played say so');
 await sheet(r).getByRole('radio', { name: /Tea time/ }).click();
-await sheet(r).getByRole('button', { name: 'Send the request' }).click();
+await sheet(r).getByRole('button', { name: `Send it to ${TITLES.follow.split(' ')[0]}` }).click();
 await r.waitForURL(/\/scene\//);
 const tea = r.url().split('/').pop();
 await b.goto(`${BASE}/scene/${tea}`);
@@ -104,8 +107,10 @@ await r.getByText('A tray, two cups.').waitFor();
 check(true, 'Kay plays “Tea time” (Sunny leads)');
 
 await offerSheet();
-check(await pressed(sheet(r).getByRole('button', { name: `${TITLES.follow.split(' ')[0]} leads` })) && await pressed(sheet(r).getByRole('button', { name: /A roleplay/ })),
-  'the next offer remembers who led and that it was a roleplay');
+check(await pressed(sheet(r).getByRole('button', { name: 'I lead' })) && (await sheet(r).getByRole('radio').count()) === 0,
+  'a roleplay doesn’t change the next scene offer: it starts from the last scene (Kay leads), with no roleplays in it');
+await closeSheet(r);
+await roleplaySheet();
 const options = await sheet(r).getByRole('radio').allInnerTexts();
 check(options[0].includes('The night shift') && options[0].includes('🆕 Not played yet') && /Played 1× · last/.test(options[1] ?? ''),
   'the one never played comes first; the other says it was played once, and when');

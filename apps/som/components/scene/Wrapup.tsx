@@ -321,6 +321,8 @@ export function Aftercare({ data, reload }: { data: SceneData; reload: () => Pro
         <p className="text-ink-soft">The scene is over. Take your time.</p>
       </div>
       {data.plan.roleplay?.aftercare && <RoleplayCard rp={data.plan.roleplay} only="aftercare" />}
+      {/* A roleplay isn't scored: each of you says what you loved and didn't. */}
+      {data.plan.roleplay && <RoleplayFeelings rp={data.plan.roleplay} />}
       {groups.length > 0 && (
         <Section title="Shutdown & aftercare" eyebrow="Together">
           <div className="card space-y-4">
@@ -344,10 +346,12 @@ export function Aftercare({ data, reload }: { data: SceneData; reload: () => Pro
         </Section>
       )}
       <Reflections data={data} reload={reload} />
-      <details className="card">
-        <summary className="cursor-pointer font-medium">The scorecard and tasks</summary>
-        <div className="mt-4 space-y-4"><Results data={data} /><ProgressBar tasks={data.tasks} /></div>
-      </details>
+      {(!scene.roleplay || data.tasks.length > 0) && (
+        <details className="card">
+          <summary className="cursor-pointer font-medium">{scene.roleplay ? 'The tasks' : 'The scorecard and tasks'}</summary>
+          <div className="mt-4 space-y-4"><Results data={data} /><ProgressBar tasks={data.tasks} /></div>
+        </details>
+      )}
       <ErrorText>{error}</ErrorText>
       <div className="card space-y-3 text-center">
         {others.map((m) => <p key={m.account_id} className="text-sm text-ink-soft">{pod.nameOf(m.account_id)}: {scene.close_votes.includes(m.account_id) ? 'back to us ✓' : 'not yet'}</p>)}

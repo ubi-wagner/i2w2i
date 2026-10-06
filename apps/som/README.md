@@ -19,7 +19,7 @@ leaves them. The server stores ciphertext and can't read it.
 | The menu, the pod's name and titles | Usernames and account names (needed to sign in) |
 | Scene plans, tasks, notes, writing, check-ins | Who is in a pod and which role they have |
 | Offer notes; the follow's capacity and note when answering; demands and praise | An offered scene's window: day, from and until (for reminders and so offers don't overlap) |
-| Roleplays, switch titles, profiles (ratings and notes) | Whether a scene is switched and who offered it (it decides who may do what) |
+| Roleplays, switch titles, profiles (ratings and notes) | Whether a scene is switched, whether it's a roleplay (not which one) and who offered it (it decides who may do what) |
 | Scorecards (overall and per task), consequences, rewards, aftercare, reflections | A scene's stage, and when things happened |
 | Photos, videos, voice notes, files (and their thumbnails, names, sizes in the file) | Encrypted file sizes, check-in times, countdown times |
 
@@ -38,10 +38,29 @@ leaves them. The server stores ciphertext and can't read it.
   (when the browser can read the format, as iPhones and Android phones do),
   which drops location and camera details.
 - **Notifications** only say that something happened and who did it ("Sunny
-  sent something for review"), never what.
-- **Forgetting the passphrase.** If one of you forgets it, the other can make
-  you a new key link in Settings. If you both lose every phone *and* both
-  passphrases, the content can't be recovered by anyone, including the admin.
+  sent something for review"), never what. Each of you turns them on, on
+  each phone, from the home screen (on an iPhone, add the app to the Home
+  Screen first); **Send a test** checks they arrive. Who hears what:
+  - **Offers and answers:** an offer or request; accepted (or "it's on"), a
+    change asked for or agreed, not this time, taken back, called off; a
+    scene sent to look at, or "not now".
+  - **Before it starts:** the scene sent (to the one doing the tasks) or
+    taken back; a reminder to whoever leads, within the hour before an
+    agreed scene that isn't sent yet; "it starts now" to both.
+  - **While it runs:** proof sent for review (photos, video, writing: to
+    whoever leads); approved, sent back, let go or opened again (to the one
+    doing them); a demand, praise, a note or a photo sent on its own; check
+    in now, a missed check-in, time's up on a task; on my way, 5 minutes
+    away, arriving; paused and resumed.
+  - **After:** inspection time; the scorecard and rewards ready; time for
+    aftercare; a reflection (unless kept private); back to us and closed;
+    a request to delete a scene, and the delete.
+- **Forgetting the passphrase or the password.** Whoever added you (or an
+  admin) can make you a new key link, or reset your password, in Settings;
+  the sign-in screen says so. Only they see those buttons. A password reset
+  signs you out everywhere and doesn't change your vault passphrase. If you
+  both lose every phone *and* both passphrases, the content can't be
+  recovered by anyone, including the admin.
 - **Saved copies.** "Save to phone" saves a normal, decrypted copy into your
   phone's photos or files. What happens to it there is up to you.
 
@@ -57,12 +76,20 @@ leaves them. The server stores ciphertext and can't read it.
 
 ## How a scene runs
 
+**Always clear whose move it is.** Every scene opens with a **What now**
+card: your turn or who it's waiting for, what's needed now, what happens
+next (and that you'll get a notification), and the steps (Plan & agree ›
+Build & send › Start › Do it › Inspection › Aftercare; a roleplay is Plan &
+agree › Start › Play it › Aftercare). Each card on the home screen says the
+same in a line ("👉 Your turn: answer it", "Waiting for Sunny to answer").
+When a scene moves on, the page goes back to the top so the new step shows.
+
 There are two ways in:
 
 - **Either of you offers (or asks for) a window of time**: the lead's
   workday, say, or the follow asking for a scene. **Offer {follow} a
-  scene** / **Ask {lead} for a scene** on the home screen: who leads, what
-  kind (tasks, or one of your roleplays), today, tomorrow or another day,
+  scene** / **Ask {lead} for a scene** on the home screen (a Select-O-Matic
+  scene, built from the menu): who leads, today, tomorrow or another day,
   from and until (2, 4 or 8 hours in one tap), and a note. The other one
   answers: accept, ask for a change, or **not this time**. Windows
   don't overlap another offered or planned scene, and an offer whose time
@@ -119,8 +146,17 @@ picker: anything from that menu section (nothing twice in a day), or
 block (or every so often, or none), and the lead can send a **demand**
 (a photo or a quick act, with proof) any time.
 
+**Roleplays are asked for on their own.** **🎭 Ask for a roleplay** on the
+home screen, kept apart from Select-O-Matic scenes: pick any roleplay (each
+says who leads it), a day and a note. It's a nudge: the other reads all of
+it, you **talk it over** in the notes on the scene, and their yes, whichever
+of you it comes from, means it's on: there's nothing to build. They can
+also ask for a change or say not this time. Agreed roleplays wait under
+**Roleplays** on the home screen. Any scene can be talked over the same way
+before it starts; the notes carry on into the scene.
+
 **Templates, and something new each time.** A new offer starts from
-your last one: its hours, who leads, tasks or a roleplay. **Save as a
+your last one of its kind: its hours and who leads. **Save as a
 template** keeps that shape under a name (Workday, Saturday switch…) to
 set in one tap next time; never what's in it, because novelty matters.
 **Fill it for me** picks things your last five scenes didn't use while
@@ -133,22 +169,22 @@ Menu page.
 leads when you offer or ask. In a switched scene everything follows the
 switch (the lead's controls, demands, praise, who's notified of what), and
 it uses the **switch titles** from the menu (or your names). A roleplay
-says who leads it, so picking one led by the usual follow switches the
-scene. A roleplay accepted by the one who'll lead it needs no building:
-it's on.
+says who leads it, so asking for one led by the usual follow switches the
+scene.
 
 **Roleplays** live on the Menu page: a title, who leads, where, intensity,
 what to wear, the setup, the action and the aftercare. Add them one by
 one, import a text file, or edit them all as text. In a roleplay scene the
-card is at the top while it runs (tasks and demands are optional); the
-inspection works as usual (scorecard and rewards: there's no skipping it,
-it's where rewards are earned), and aftercare starts with the roleplay's
-own.
+card is at the top while it runs (demands are optional). A roleplay has no
+inspection, scores or rewards: whoever leads it ends it straight into
+aftercare (**Time for aftercare**), which starts with the roleplay's own,
+and there you each say what you loved and didn't. (Roleplay scenes from
+before this keep their inspection.)
 
 **Loves and dislikes.** Each of you says how you feel about a roleplay
 with one tap (❤️ Love it, 👍 It's OK, 👎 Not for me) and, if you like, a few
 words: what you loved and what you didn't. Do it from the Menu before
-you've tried one, at the inspection after playing it (you each see the
+you've tried one, in aftercare after playing it (you each see the
 other's), or later in the record. They're kept in your profiles: the
 roleplay list shows how each of you feels, the picker puts the ones you
 both love first, one your partner said isn't for them can't be picked,
@@ -183,7 +219,7 @@ Then:
    the arrival routine and reminders).
 3. **Pause**: either of you, any time. Everything stops, the inspection and
    aftercare included. Only whoever paused can resume.
-4. **Inspection** (the lead): every task that was set (demands too) with
+4. **Inspection** (the lead; not for a roleplay): every task that was set (demands too) with
    what was sent for it, scored 1–5 ("the rest: all 4s" for speed), then
    the overall 1–5 scorecard, notes, consequences, rewards and service,
    shared with the follow, who sees the score for each task.
@@ -295,9 +331,9 @@ npm run e2e     # against a running build; see e2e/run.mjs for the settings it n
 The end-to-end suites run two phones through pairing, a whole scene, a
 workday (offer a window, ask for a change of time and capacity, agree, no
 overlaps, expiry, fill, send, start in the window, demands, praise, redo, on
-my way, per-task scores), a switched roleplay (asked for by the usual lead,
-accepted by the usual follow, run with the roles swapped, straight to
-loves and dislikes from both at the inspection, rewards as usual; a
+my way, per-task scores), a switched roleplay (asked for on its own by the
+usual lead, talked over in the notes, accepted by the usual follow, run with the roles swapped, ended
+straight into aftercare with loves and dislikes from both, no inspection, scores or rewards; a
 roleplay marked "not for me" can't be picked; and a request turned down),
 templates and novelty (the last offer remembered, a template applied, a
 fill that avoids the last scene's picks, never-played roleplays first), profiles (ratings, notes, the

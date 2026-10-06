@@ -96,7 +96,8 @@ function Partner() {
                 <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-paper-sunk px-2 py-0.5 text-xs">{pod.title(m.role)}</span>
                 {!m.has_key && <span className="ml-2 rounded-full bg-warn-light px-2 py-0.5 text-xs text-warn">hasn’t opened their key link</span>}
               </span>
-              {m.account_id !== pod.account.id && (
+              {/* Only whoever added them (or an admin) can make them a key link or reset their password. */}
+              {m.account_id !== pod.account.id && (m.added_by === pod.account.id || pod.account.is_admin) && (
                 <span className="flex gap-3 text-sm">
                   <button type="button" className="text-lead underline" onClick={() => again(m.account_id, false)}>New key link</button>
                   <button type="button" className="text-lead underline" onClick={() => { if (confirm(`Reset ${m.display_name}’s password? They’re signed out everywhere until you pass on the new one.`)) void again(m.account_id, true); }}>Reset password</button>

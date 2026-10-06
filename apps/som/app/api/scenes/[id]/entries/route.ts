@@ -64,7 +64,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } else if (kind === 'comment') {
     notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `New note from ${name}.`, url, tag: `note-${id}` });
   } else if (kind === 'scores' || kind === 'outcomes') {
-    notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} finished the inspection.`, url, tag: `scene-${id}` });
+    notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} finished the inspection: your scorecard and rewards are ready.`, url, tag: `scene-${id}` });
+  } else if (kind === 'reflection' && !priv) {
+    notifySoon(await others(scene, me.id), { title: 'S-O-M', body: `${name} wrote a reflection.`, url, tag: `reflection-${id}` });
   }
   return json({ ok: true });
 }

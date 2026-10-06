@@ -2,7 +2,7 @@ import { bad, body, guard, isCipher, isUuid, json } from '@/lib/server/api';
 import { sql } from '@/lib/server/db';
 import { nameOf, others, podMembers, sceneFor } from '@/lib/server/pods';
 import { notifySoon } from '@/lib/server/push';
-import { cancelTimers, scheduleCheckin, scheduleSceneStart } from '@/lib/server/scheduler';
+import { cancelTimers, scheduleCheckin, scheduleSceneStart, scheduleSendReminder } from '@/lib/server/scheduler';
 import { allAgreed, sceneRole, sceneTransition, startState, windowProblem, type SceneAction } from '@/lib/rules';
 import { CHECKIN_CHOICES } from '@/lib/plan';
 
@@ -62,7 +62,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const action = b?.action as SceneAction;
   if (!ACTIONS.includes(action)) return bad('Unknown action.');
   const offerer = scene.offered_by === me.id;
-  const next = sceneTransition(scene.status, action, role, offerer);
+  const next = sceneTransition(scene.status, action, role, offerer, scene.roleplay);
   if (!next) return bad('That can’t be done now.', 409);
   const name = await nameOf(me.id);
   const url = `/scene/${id}`;
@@ -128,14 +128,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     case 'accept': {
       if (passed) return bad('This offer’s time has passed.', 409);
       if (!(await move(sql`change_request = NULL, reply_enc = coalesce(${replyEnc}, reply_enc)`))) return raced();
+      await scheduleSendReminder(id, scene.starts_at);
       tellOfferer(`${name} accepted.`);
       return json({ status: next });
     }
     case 'accept_send': {
-      // The lead accepts a scene that needs no building (a roleplay): it's sent as they accept.
+      // A roleplay needs no building: a yes from either of you means it's on.
+      // Only the one who'll lead it can send tasks with it.
       if (passed) return bad('This offer’s time has passed.', 409);
       const tasks = taskList(b?.tasks ?? [], true);
       if (!tasks) return bad('That doesn’t look like a task list.');
+      if (tasks.length && role !== 'lead') return bad('Only whoever leads it can send tasks.', 403);
       const ok = await sql.begin(async (tx) => {
         const [s] = await tx`UPDATE som.scenes SET status = 'ready', updated_at = now(), change_request = NULL, ${checkins}
                               WHERE id = ${id} AND status = ${scene.status} RETURNING 1`;
@@ -174,6 +177,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (typeof w === 'string') return bad(w, 409);
       const r = await takeWindow(w, (tx) => tx`change_request = NULL`);
       if (r !== 'ok') return r === 'clash' ? clashed() : raced();
+      await scheduleSendReminder(id, w.start);
       await tell(`${name} agreed to your change.`);
       return json({ status: next });
     }
@@ -218,7 +222,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return true;
       });
       if (!ok) return raced();
-      await cancelTimers(id, ['scene_start']);
+      // Its start reminder becomes a reminder to send it again.
+      await scheduleSendReminder(id, scene.starts_at);
       await tell(`${name} took the scene back to change it.`, 'follow');
       return json({ status: next });
     }

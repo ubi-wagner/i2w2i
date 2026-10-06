@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { blocksFor, cleanPlan, emptyPlan, pacingFor, placeLoose, type Plan } from '@/lib/plan';
-import { newId, proofText, type Roleplay } from '@/lib/menu';
+import { newId, proofText, type Roleplay, type Template } from '@/lib/menu';
 import { lovedByAll } from '@/lib/profile';
 import { useProfiles } from '../Profiles';
 import { feelLine } from '../RoleplayFeel';
@@ -228,19 +228,50 @@ export function OfferForm({ initial, submit, onSubmit, onSaveTemplate, noteLabel
   );
 }
 
+/** Starting from a saved template of this kind: its hours, who leads and the note. */
+function TemplateChips({ kind, active, name, onPick }: { kind: Template['kind']; active: string; name?: string; onPick: (t: Template) => void }) {
+  const pod = usePod();
+  const list = pod.menu.templates.filter((t) => t.kind === kind);
+  if (!list.length) return null;
+  return (
+    <section className="space-y-2">
+      <span className="label">Start from a template</span>
+      <div className="flex flex-wrap gap-2">
+        {list.map((t) => <button key={t.id} type="button" className="chip" aria-pressed={active.startsWith(t.id)} onClick={() => onPick(t)}>{t.name}</button>)}
+      </div>
+      {name && <p className="text-sm text-ink-soft">“{name}”: the shape is set; what’s in it is new.</p>}
+    </section>
+  );
+}
+
+type Preset = { key: string; hours?: { from: string; until: string }; note?: string; name?: string };
+const presetFrom = (last?: { startsAt: string; endsAt: string } | null): Preset =>
+  ({ key: 'last', hours: last ? { from: timeValue(new Date(last.startsAt)), until: timeValue(new Date(last.endsAt)) } : undefined });
+
+/** A new scene offered for a window. If it can't be (that time is taken, say), no stray draft is left. */
+async function offerScene(pod: ReturnType<typeof usePod>, plan: Plan, w: { start: Date; end: Date }, switched: boolean): Promise<string> {
+  const id = crypto.randomUUID();
+  await api(`/api/pods/${pod.pod.id}/scenes`, { body: { id, planEnc: await pod.seal(plan, `plan:${id}`), roleplay: Boolean(plan.roleplay) } });
+  try {
+    await api(`/api/scenes/${id}/action`, { body: { action: 'offer', startsAt: w.start.toISOString(), endsAt: w.end.toISOString(), switched } });
+  } catch (err) {
+    await api(`/api/scenes/${id}/delete`, { body: { agree: true } }).catch(() => {});
+    throw err;
+  }
+  return id;
+}
+
 /**
- * Offering (or asking for) a scene: who leads (choosing your partner when
- * you usually lead, or yourself when you usually follow, is a switch), what
- * kind (tasks to build, or one of your roleplays), and when. The other one
- * answers it.
+ * Offering (or asking for) a Select-O-Matic scene: who leads (choosing your
+ * partner when you usually lead, or yourself when you usually follow, is a
+ * switch) and when; it's built from the menu. Roleplays are asked for on
+ * their own (AskRoleplay). The other one answers it.
  */
-export function NewOffer({ open, onClose, last, history = {} }: {
+export function NewOffer({ open, onClose, last }: {
   open: boolean;
   onClose: () => void;
-  /** Your last offer: a new one starts from its hours, who led and what kind. */
-  last?: { startsAt: string; endsAt: string; leads: Role; kind: 'tasks' | 'roleplay' } | null;
-  /** How often each roleplay has been played, and when last. */
-  history?: Record<string, { count: number; last: string }>;
+  /** Your last offer: a new one starts from its hours and who led. */
+  last?: { startsAt: string; endsAt: string; leads: Role } | null;
 }) {
   const pod = usePod();
   const router = useRouter();
@@ -248,16 +279,10 @@ export function NewOffer({ open, onClose, last, history = {} }: {
   const them = partner?.display_name ?? 'Them';
   const who = (leads: Role): 'me' | 'them' => (leads === pod.role ? 'me' : 'them');
   const [leader, setLeader] = useState<'me' | 'them'>(last ? who(last.leads) : pod.role === 'lead' ? 'me' : 'them');
-  const [kind, setKind] = useState<'tasks' | 'roleplay'>(last?.kind ?? 'tasks');
-  const [rpId, setRpId] = useState<string | null>(null);
   // Where the form starts: your last offer's hours, or a template's (a new key starts it again).
-  const [preset, setPreset] = useState<{ key: string; hours?: { from: string; until: string }; note?: string; name?: string }>(() =>
-    ({ key: 'last', hours: last ? { from: timeValue(new Date(last.startsAt)), until: timeValue(new Date(last.endsAt)) } : undefined }));
+  const [preset, setPreset] = useState<Preset>(() => presetFrom(last));
   const leaderRole: Role = leader === 'me' ? pod.role : (partner?.role ?? (pod.role === 'lead' ? 'follow' : 'lead'));
   const switched = leaderRole === 'follow';
-  const choices = pod.menu.roleplays.filter((r) => r.leads === leaderRole);
-  const groups = [...new Set(choices.map((r) => r.group))];
-  const rp = kind === 'roleplay' ? choices.find((r) => r.id === rpId) ?? null : null;
   /** Stage the whole scene first (a draft), then offer it from the builder. */
   async function buildFirst() {
     const id = crypto.randomUUID();
@@ -267,20 +292,8 @@ export function NewOffer({ open, onClose, last, history = {} }: {
   return (
     <Sheet open={open} onClose={onClose} title={`Plan a scene with ${them}`}>
       <div className="space-y-5">
-        {pod.menu.templates.length > 0 && (
-          <section className="space-y-2">
-            <span className="label">Start from a template</span>
-            <div className="flex flex-wrap gap-2">
-              {pod.menu.templates.map((t) => (
-                <button key={t.id} type="button" className="chip" aria-pressed={preset.key.startsWith(t.id)}
-                  onClick={() => { setLeader(who(t.leads)); setKind(t.kind); setRpId(null); setPreset({ key: `${t.id}-${Date.now()}`, hours: { from: t.from, until: t.until }, note: t.note, name: t.name }); }}>
-                  {t.name}
-                </button>
-              ))}
-            </div>
-            {preset.name && <p className="text-sm text-ink-soft">“{preset.name}”: the shape is set; what’s in it is new.</p>}
-          </section>
-        )}
+        <TemplateChips kind="tasks" active={preset.key} name={preset.name}
+          onPick={(t) => { setLeader(who(t.leads)); setPreset({ key: `${t.id}-${Date.now()}`, hours: { from: t.from, until: t.until }, note: t.note, name: t.name }); }} />
         <section className="space-y-2">
           <span className="label">Who leads?</span>
           <div className="grid grid-cols-2 gap-2">
@@ -288,23 +301,12 @@ export function NewOffer({ open, onClose, last, history = {} }: {
             <button type="button" className="chip justify-center" aria-pressed={leader === 'them'} onClick={() => setLeader('them')}>{them} leads</button>
           </div>
           {switched && <p className="text-sm font-medium text-follow-dark">⇄ A switch: {leader === 'me' ? 'you lead' : `${them} leads`} this one.</p>}
-        </section>
-        <section className="space-y-2">
-          <span className="label">What kind?</span>
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" className="chip justify-center" aria-pressed={kind === 'tasks'} onClick={() => setKind('tasks')}>Tasks</button>
-            <button type="button" className="chip justify-center" aria-pressed={kind === 'roleplay'} onClick={() => setKind('roleplay')}>🎭 A roleplay</button>
-          </div>
-          {kind === 'tasks' && (leader === 'me' && !switched ? (
+          {leader === 'me' && !switched ? (
             <div className="space-y-2 text-sm">
               <p className="text-ink-soft">Offer the time now and build it once it’s agreed, or build it first: {them} sees the whole scene (and what to get ready) before saying yes.</p>
               <button type="button" className="btn-quiet w-full" onClick={buildFirst}>Build it first, then offer it</button>
             </div>
-          ) : <p className="text-sm text-ink-soft">{leader === 'me' ? 'You build it once it’s agreed.' : `${them} builds it once it’s agreed.`}</p>)}
-          {kind === 'roleplay' && !choices.length && (
-            <p className="text-sm text-ink-soft">No roleplays where {leader === 'me' ? 'you lead' : `${them} leads`} yet. Add some on the Menu page.</p>
-          )}
-          {kind === 'roleplay' && choices.length > 0 && <RoleplayPicker choices={choices} groups={groups} value={rpId} onChange={setRpId} history={history} />}
+          ) : <p className="text-sm text-ink-soft">{leader === 'me' ? 'You build it once it’s agreed.' : `${them} builds it once it’s agreed.`}</p>}
         </section>
         <OfferForm
           key={preset.key}
@@ -312,21 +314,11 @@ export function NewOffer({ open, onClose, last, history = {} }: {
           submit={leader === 'me' ? 'Send the offer' : 'Send the request'}
           noteLabel={`A note for ${them} (optional)`}
           onSaveTemplate={async (name, v) => {
-            const t = { id: newId(), name, ...v, leads: leaderRole, kind };
+            const t: Template = { id: newId(), name, ...v, leads: leaderRole, kind: 'tasks' };
             await pod.saveMenu((m) => ({ ...m, templates: [...m.templates.filter((x) => x.name.toLowerCase() !== name.toLowerCase()), t] }));
           }}
           onSubmit={async ({ start, end, note }) => {
-            if (kind === 'roleplay' && !rp) throw new Error('Pick a roleplay.');
-            const id = crypto.randomUUID();
-            const plan: Plan = cleanPlan({ ...emptyPlan(pod.menu, hoursOf(start, end)), note, roleplay: rp });
-            await api(`/api/pods/${pod.pod.id}/scenes`, { body: { id, planEnc: await pod.seal(plan, `plan:${id}`) } });
-            try {
-              await api(`/api/scenes/${id}/action`, { body: { action: 'offer', startsAt: start.toISOString(), endsAt: end.toISOString(), switched } });
-            } catch (err) {
-              // Not offered (that time is taken, say): don't leave a stray draft.
-              await api(`/api/scenes/${id}/delete`, { body: { agree: true } }).catch(() => {});
-              throw err;
-            }
+            const id = await offerScene(pod, cleanPlan({ ...emptyPlan(pod.menu, hoursOf(start, end)), note }), { start, end }, switched);
             router.push(`/scene/${id}`);
           }}
         />
@@ -336,8 +328,61 @@ export function NewOffer({ open, onClose, last, history = {} }: {
 }
 
 /**
- * Picking a roleplay: how each of you feels about each one, the ones you
- * both love first. One your partner said isn't for them can't be picked.
+ * Asking for a roleplay: a nudge, kept apart from Select-O-Matic scenes.
+ * Pick one (each says who leads it, so one led by whoever usually follows
+ * is a switch), a day and a note. The other reads it, you talk it over,
+ * and their yes means it's on: nothing to build.
+ */
+export function AskRoleplay({ open, onClose, last, history = {} }: {
+  open: boolean;
+  onClose: () => void;
+  /** The last roleplay you asked for: a new one starts from its hours. */
+  last?: { startsAt: string; endsAt: string } | null;
+  /** How often each roleplay has been played, and when last. */
+  history?: Record<string, { count: number; last: string }>;
+}) {
+  const pod = usePod();
+  const router = useRouter();
+  const partner = pod.members.find((m) => m.account_id !== pod.account.id);
+  const them = partner?.display_name ?? 'Them';
+  const [rpId, setRpId] = useState<string | null>(null);
+  const [preset, setPreset] = useState<Preset>(() => presetFrom(last));
+  const all = pod.menu.roleplays;
+  const groups = [...new Set(all.map((r) => r.group))];
+  const rp = all.find((r) => r.id === rpId) ?? null;
+  return (
+    <Sheet open={open} onClose={onClose} title={`A roleplay with ${them}`}>
+      <div className="space-y-5">
+        <p className="text-sm text-ink-soft">Pick one you’d like and a day. {them} reads it, you talk it over, and a yes means it’s on.</p>
+        <TemplateChips kind="roleplay" active={preset.key} name={preset.name}
+          onPick={(t) => setPreset({ key: `${t.id}-${Date.now()}`, hours: { from: t.from, until: t.until }, note: t.note, name: t.name })} />
+        {all.length ? (
+          <section className="space-y-2">
+            <span className="label">Which one?</span>
+            <RoleplayPicker choices={all} groups={groups} value={rpId} onChange={setRpId} history={history} />
+          </section>
+        ) : <p className="text-sm text-ink-soft">No roleplays yet. Add some on the Menu page.</p>}
+        {rp && <p className="text-sm font-medium text-follow-dark">{rp.leads === pod.role ? 'You lead' : `${them} leads`} this one{rp.leads === 'follow' ? ' ⇄ a switch' : ''}.</p>}
+        <OfferForm
+          key={preset.key}
+          initial={{ hours: preset.hours, note: preset.note }}
+          submit={`Send it to ${them}`}
+          noteLabel={`A note for ${them} (optional)`}
+          onSubmit={async ({ start, end, note }) => {
+            if (!rp) throw new Error('Pick a roleplay.');
+            const id = await offerScene(pod, cleanPlan({ ...emptyPlan(pod.menu, hoursOf(start, end)), note, roleplay: rp }), { start, end }, rp.leads === 'follow');
+            router.push(`/scene/${id}`);
+          }}
+        />
+      </div>
+    </Sheet>
+  );
+}
+
+/**
+ * Picking a roleplay: who leads each, how each of you feels about it, the
+ * ones never played first. One your partner said isn't for them can't be
+ * picked.
  */
 function RoleplayPicker({ choices, groups, value, onChange, history }: {
   choices: Roleplay[]; groups: string[]; value: string | null; onChange: (id: string) => void;
@@ -347,6 +392,7 @@ function RoleplayPicker({ choices, groups, value, onChange, history }: {
   const { profiles } = useProfiles();
   const partner = pod.members.find((m) => m.account_id !== pod.account.id);
   const feel = (id: string, rp: string) => profiles?.[id]?.profile.roleplays[rp]?.feel;
+  const leads = (r: Roleplay) => `${r.leads === pod.role ? 'You lead' : `${partner?.display_name ?? 'They'} leads`}${r.leads === 'follow' ? ' ⇄' : ''}`;
   // Never played first (novelty), then ones you both love, then the longest ago.
   const loved = (r: Roleplay) => lovedByAll([r], Object.values(profiles ?? {}).map((p) => p.profile)).length > 0 && Object.keys(profiles ?? {}).length > 1;
   const order = (a: Roleplay, b: Roleplay) => Number(Boolean(history[a.id])) - Number(Boolean(history[b.id]))
@@ -363,7 +409,7 @@ function RoleplayPicker({ choices, groups, value, onChange, history }: {
               <button key={r.id} type="button" role="radio" aria-checked={value === r.id} aria-pressed={value === r.id} disabled={no}
                 className="chip w-full flex-col items-start gap-0.5 text-left disabled:opacity-60" onClick={() => onChange(r.id)}>
                 <span className="font-medium">{r.title}</span>
-                {(r.location || r.intensity) && <span className="text-xs font-normal text-ink-soft">{[r.location, r.intensity].filter(Boolean).join(' · ')}</span>}
+                <span className="text-xs font-normal text-ink-soft">{[leads(r), r.location, r.intensity].filter(Boolean).join(' · ')}</span>
                 <span className="text-xs font-normal text-ink-soft">{history[r.id] ? `Played ${history[r.id]!.count}× · last ${dayText(new Date(history[r.id]!.last))}` : '🆕 Not played yet'}</span>
                 {no ? <span className="text-xs font-medium text-stop">👎 Not for {partner!.display_name}</span> : line && <span className="text-xs font-normal">{line}</span>}
               </button>
@@ -391,11 +437,12 @@ export function OfferView({ data, reload }: { data: SceneData; reload: () => Pro
   const [capacity, setCapacity] = useState<Capacity | null>(null);
   const [sheet, setSheet] = useState<'change' | 'reoffer' | null>(null);
   const [error, setError] = useState('');
-  // Only the one who follows says how much they can take on.
-  const askCapacity = !mine && role === 'follow';
+  // A roleplay asked for is a nudge: nothing to build, so a yes means it's on.
+  const roleplay = Boolean(plan.roleplay);
+  // Only the one who follows says how much they can take on (for tasks).
+  const askCapacity = !mine && role === 'follow' && !roleplay;
   const cap = capacity ?? reply?.capacity ?? 'normal';
-  // A roleplay accepted by its lead needs no building: it's on.
-  const acceptSends = !mine && role === 'lead' && Boolean(plan.roleplay);
+  const acceptSends = !mine && roleplay;
   const seal = async (r: Reply) => pod.seal(r, `reply:${scene.id}`);
 
   async function act(action: string, extra: Record<string, unknown> = {}) {
@@ -417,15 +464,17 @@ export function OfferView({ data, reload }: { data: SceneData; reload: () => Pro
     <div className="space-y-5">
       <section className="card space-y-2 border-lead/40 bg-lead-light">
         <p className="eyebrow text-lead">
-          {mine ? (request ? 'Your request' : 'Your offer') : `${scene.offered_by ? pod.nameOf(scene.offered_by) : otherName} ${request ? 'asks you for a scene' : 'offers you a scene'}`}
+          {roleplay
+            ? (mine ? 'You’d like this roleplay' : `${scene.offered_by ? pod.nameOf(scene.offered_by) : otherName} would like this roleplay`)
+            : mine ? (request ? 'Your request' : 'Your offer') : `${scene.offered_by ? pod.nameOf(scene.offered_by) : otherName} ${request ? 'asks you for a scene' : 'offers you a scene'}`}
         </p>
         <p className="font-display text-2xl text-lead-dark">{when(scene.starts_at, scene.ends_at)}</p>
         <p className="text-sm text-lead-dark">{lengthText(scene.starts_at, scene.ends_at)} · {role === 'lead' ? 'you lead' : `${pod.title('lead')} leads`}</p>
         {plan.note && <p className="whitespace-pre-wrap">“{plan.note}”</p>}
       </section>
-      {plan.roleplay && <RoleplayCard rp={plan.roleplay} />}
+      {plan.roleplay && <RoleplayCard rp={plan.roleplay} open={!mine} />}
       {/* Everything that's staged, so whoever answers knows exactly what they're saying yes to. */}
-      <SceneSummary data={data} showNote={false} />
+      {!roleplay && <SceneSummary data={data} showNote={false} />}
 
       {passed && <p className="card border-warn/40 bg-warn-light">This time has passed.{mine ? ' Offer a new one, or take it back.' : ` ${otherName} can offer a new one.`}</p>}
 
@@ -641,7 +690,14 @@ export function ReadyView({ data, reload, onOpen }: { data: SceneData; reload: (
         {state === 'ok' && left !== null && left <= 0 && <p className="font-semibold text-lead-dark">It’s time.</p>}
         {state === 'over' && <p className="font-semibold text-warn">This time has passed.</p>}
         {reply && <CapacityLine reply={reply} />}
+        {(role === 'follow' || data.plan.roleplay) && state !== 'over' && (
+          <div className="space-y-1 pt-1">
+            <button type="button" className="btn-follow min-h-14 w-full text-lg" disabled={busy || state === 'early'} onClick={() => act('start')}>Start the scene</button>
+            {state === 'early' && <p className="text-sm text-lead-dark">You can start from {opensAt}.</p>}
+          </div>
+        )}
       </section>
+      <ErrorText>{error}</ErrorText>
       {data.plan.note && <p className="card whitespace-pre-wrap">“{data.plan.note}”</p>}
       <AheadList data={data} />
       {data.plan.roleplay && <RoleplayCard rp={data.plan.roleplay} />}
@@ -657,14 +713,7 @@ export function ReadyView({ data, reload, onOpen }: { data: SceneData; reload: (
           </button>
         )} />
       </section>}
-      <ErrorText>{error}</ErrorText>
       <div className="grid gap-2">
-        {(role === 'follow' || data.plan.roleplay) && state !== 'over' && (
-          <>
-            <button type="button" className="btn-follow min-h-14 text-lg" disabled={busy || state === 'early'} onClick={() => act('start')}>Start the scene</button>
-            {state === 'early' && <p className="text-center text-sm text-ink-soft">You can start from {opensAt}.</p>}
-          </>
-        )}
         {role === 'follow' && state === 'over' && <p className="text-center text-sm text-ink-soft">{pod.title('lead')} can take it back and offer a new time, or either of you can call it off.</p>}
         {role === 'lead' && state !== 'over' && !data.plan.roleplay && <p className="text-center text-sm text-ink-soft">{pod.title('follow')} starts it; you’ll hear when.</p>}
         {role === 'lead' && <button type="button" className={state === 'over' ? 'btn' : 'btn-quiet'} disabled={busy} onClick={() => act('unsend')}>{state === 'over' ? 'Take it back to offer a new time' : 'Take it back to change it'}</button>}

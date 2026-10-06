@@ -30,6 +30,8 @@ export interface SceneRow {
   change_request: { by: string; startsAt: string | null; endsAt: string | null } | null;
   reply_enc: string | null;
   switched: boolean;
+  /** A roleplay asked for: it ends straight into aftercare (no inspection). */
+  roleplay: boolean;
   offered_by: string | null;
   close_votes: string[];
   delete_votes: string[];

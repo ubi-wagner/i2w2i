@@ -57,7 +57,7 @@ export function Running({ data, reload, onOpen }: { data: SceneData; reload: () 
 
       <Notes data={data} reload={reload} />
 
-      {lead && <StartInspection data={data} reload={reload} />}
+      {lead && (scene.roleplay ? <EndRoleplay data={data} reload={reload} /> : <StartInspection data={data} reload={reload} />)}
     </div>
   );
 }
@@ -236,7 +236,29 @@ export function Notes({ data, reload, title = 'Notes' }: { data: SceneData; relo
   );
 }
 
-/** The end of the running part: the inspection, where the follow's work (a roleplay too) is scored and rewarded. */
+/** A roleplay's end: no inspection (no scores, no rewards), straight into aftercare. */
+function EndRoleplay({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
+  const [error, setError] = useState('');
+  async function go() {
+    if (!confirm('Finish the roleplay? It goes straight to aftercare.')) return;
+    try {
+      await api(`/api/scenes/${data.scene.id}/action`, { body: { action: 'aftercare' } });
+      await reload();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+  const paused = Boolean(data.scene.paused_at);
+  return (
+    <div className="space-y-2">
+      <button type="button" className="btn w-full" disabled={paused} onClick={go}>Time for aftercare</button>
+      <p className="text-center text-sm text-ink-soft">{paused ? 'Paused: aftercare waits until it’s resumed.' : 'A roleplay has no inspection: once it’s played out, it’s aftercare.'}</p>
+      <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
+/** The end of the running part of a scene: the inspection, where the follow's work is scored and rewarded. */
 function StartInspection({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
   const [error, setError] = useState('');
   const open = data.tasks.filter((t) => !['approved', 'skipped'].includes(t.status)).length;

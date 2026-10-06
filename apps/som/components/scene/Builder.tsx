@@ -234,11 +234,6 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
       )}
       {plan.roleplay && <RoleplayCard rp={plan.roleplay} />}
       {role === 'lead' && <LimitsNote accountId={data.members.find((m) => m.role === 'follow')?.account_id} name={follow} />}
-      {scene.status === 'proposed' && (
-        <div className="card border-follow/40 bg-follow-light text-sm">
-          {role === 'lead' ? `${pod.nameOf(scene.created_by)} sent you this scene. Change anything you like, then start it.` : `Sent to ${lead}. ${lead} can adjust it and start it.`}
-        </div>
-      )}
 
       <div className="card space-y-3">
         <div>
@@ -328,6 +323,9 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
           {canStart && <button type="button" className="btn" disabled={!sendable} onClick={() => setConfirm('start')}>Start now</button>}
           {canSend && <button type="button" className="btn" disabled={!sendable} onClick={() => setConfirm('send')}>Send to {follow}</button>}
         </span>
+        {!sendable && !data.planBroken && (canPropose || canStart || canSend) && (
+          <p className="w-full text-xs text-ink-soft">Pick at least one thing (or tap Fill it for me) to {canSend || canPropose ? 'send' : 'start'} it.</p>
+        )}
       </div>
 
       <Sheet open={picking !== null} onClose={() => setPicking(null)} title={picking ? `${picking.block + 1}. ${BLOCK_NAME[plan.blocks[picking.block]?.kind ?? 'home']}: ${slotLabel(picking.slot, lead).replace(/ \(.*\)$/, '')}` : ''}>

@@ -13,7 +13,7 @@ import { Unlock, WaitingForKey } from './Unlock';
 import { Spinner } from './ui';
 
 export interface Account { id: string; username: string; display_name: string; is_admin: boolean }
-export interface Member { account_id: string; role: Role; display_name: string; username: string; has_key: boolean; invited: boolean }
+export interface Member { account_id: string; role: Role; display_name: string; username: string; has_key: boolean; invited: boolean; /** Who made their sign-in (they, or an admin, can reset it). */ added_by: string | null }
 export interface PodRow { id: string; role: Role; settings_enc: string; menu_enc: string; menu_rev: number; key_backup: PassphraseWrapped | null; invite: boolean; members: Member[] }
 
 export interface PodCtx {
