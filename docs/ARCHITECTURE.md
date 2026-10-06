@@ -122,6 +122,7 @@ The end-to-end suites:
 - **albums:** named albums: approve & post from the photo view, publish, View albums, covers, editors and viewers
 - **hosts:** adding people, changing roles, resets
 - **theme:** the landing page and event info, table cards and posters
+- **slideshow:** settings, full screen, timing, order, fade, borders, new photos joining, Esc and tap to go back
 - **matrix:** 9 kinds of visitor × 4 album states, pages and APIs
 - **uploads:** reload, offline, stall, re-pick, limits
 - **select:** select, zip, bulk moderation
@@ -186,6 +187,7 @@ Named albums inside an event (`events.albums`, `events.album_items`): "Ceremony"
 - Hosts make them on the Albums tab (drafts until published), file photos while approving (`approveInto`), from any photo's view (album chips) or in bulk (Add to album…), set a cover, order them, and publish or unpublish each one.
 - Published albums with something visible in them are listed under **View albums** on `/album/<slug>`; each has its own page, `/album/<slug>/a/<album-slug>`. An album's address never changes when it's renamed.
 - Nothing about an album bypasses review: its photos are read through the uploads policy, so a waiting or hidden photo filed into a published album still shows only to its uploader and the hosts.
+- **Slideshow** (`components/events/Slideshow.tsx`, order logic in `lib/events/slideshow.ts`): any album, and All photos, plays full screen with the browser's own Fullscreen API (the whole window where a phone has none) and a CSS fade; no slideshow package. Settings (every 3/5/10 s, in order or shuffled, fade or not, border none/thin/wide) are kept per device. It shows only approved, unhidden photos even when a host starts it (`toSlides`), keeps the screen awake (Wake Lock), refreshes every 30 seconds so newly approved photos join, and Esc, leaving full screen or a tap ends it.
 
 ### Comments, gifts, frames
 

@@ -80,7 +80,9 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
   serve an upload to others without going through the uploads RLS policy.
 - **Albums (migration 011)** are hosts' picks from the approved photos, drafts
   until published. Album pages read photos through the uploads policy like
-  everything else; an album never shows a waiting or hidden photo.
+  everything else; an album never shows a waiting or hidden photo. The
+  slideshow is for the big screen: only approved, unhidden photos
+  (`toSlides`), even when a host starts it.
 - **Manage is tabs** (`app/events/[id]/(manage)/`): each tab gets the event
   from `loadManage()`; actions revalidate with `'layout'`. Screens call the
   roles Co-host / Editor / Viewer (`ROLE_LABEL`); the database keeps

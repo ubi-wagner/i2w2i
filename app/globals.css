@@ -58,6 +58,8 @@
   50% { opacity: 1; transform: translate(10px, -14px); }
 }
 @media (prefers-reduced-motion: reduce) { .firefly { animation: none; opacity: 0.7; } }
+/* The album slideshow's fade from one photo to the next. */
+@keyframes slide-in { from { opacity: 0; } to { opacity: 1; } }
 @media print {
   .theme-bg, .card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .firefly { animation: none; opacity: 0.8; }

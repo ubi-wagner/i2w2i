@@ -23,9 +23,10 @@ export default function StartHelp() {
         <Step n={3} title="Look, and add your own" shots={[
           { src: 'start-photo.webp', alt: 'A photo open full screen with Next and close buttons' },
           { src: 'start-albums.webp', alt: 'Albums on the event page: Ceremony and Dinner & toasts' },
+          { src: 'start-slideshow.webp', alt: 'The Slideshow choices: how often, order, fade and border' },
         ]}>
           <p>Tap any photo to see it big. Tap <K>Next →</K> for the next one, and <K>✕</K> to go back.</p>
-          <p>If the hosts have made albums (Ceremony, Reception…), tap <K>View albums</K> at the top to look through one part of the day at a time. <b>All photos</b> has everything.</p>
+          <p>If the hosts have made albums (Ceremony, Reception…), tap <K>View albums</K> at the top to look through one part of the day at a time. <b>All photos</b> has everything. <K>Slideshow</K> plays them full screen; tap the screen to stop.</p>
           <p>To add yours, tap <K>Add photos &amp; videos</K> and choose as many as you like. They say <b>Waiting</b> until one of the hosts adds them to the album.</p>
         </Step>
         <Step n={4} title="Coming back later" shots={[{ src: 'start-install.webp', alt: 'The Put i2w2i on your home screen card with the iPhone steps' }]}>

@@ -55,6 +55,9 @@ export default function FaqHelp() {
           <Question q="Who can approve photos?">
             <p>Co-hosts, editors and Eric. Photos that co-hosts and editors add themselves go straight in.</p>
           </Question>
+          <Question q="Can we show the photos on a TV at the party?">
+            <p>Yes. Open the album on a laptop connected to the TV, tap <K>Slideshow</K>, pick the timing and border, and tap <K>Start slideshow</K>. Photos you approve during the party join in by themselves. Tap the screen or press <K>Esc</K> to stop.</p>
+          </Question>
           <Question q="Guests can’t see an album I made">
             <p>It’s still a draft, or nothing in it is approved yet. On the <b>Albums</b> tab, tap <K>Publish</K>. It shows under <K>View albums</K> once it has a photo guests can see.</p>
           </Question>

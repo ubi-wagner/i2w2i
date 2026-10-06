@@ -3,10 +3,12 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AlbumCards } from '@/components/events/AlbumCards';
 import { Gallery } from '@/components/events/Gallery';
+import { Slideshow } from '@/components/events/Slideshow';
 import { ThemeFrame } from '@/components/events/ThemeFrame';
 import { loadAlbum } from '@/lib/events/album';
 import { albumMembership, listAlbums, toAlbumCards } from '@/lib/events/albums';
 import { withCtx } from '@/lib/events/db';
+import { toSlides } from '@/lib/events/slideshow';
 import { GALLERY_SQL_COLUMNS, toGallery, type UploadRow } from '@/lib/events/queries';
 import { publicEvent } from '@/lib/events/session';
 import { approveInto, createAlbum, fileIntoAlbum, setAlbumCover } from '../../../../events/album-actions';
@@ -77,6 +79,7 @@ export default async function NamedAlbumPage({ params }: Params) {
           <h1 className="font-display text-4xl font-semibold text-stone-900">{data.a.title}</h1>
           {data.a.description && <p className="mx-auto max-w-2xl whitespace-pre-wrap text-stone-700">{data.a.description}</p>}
           <p className="text-sm text-stone-500">{items.length} {items.length === 1 ? 'photo' : 'photos'}{data.a.published_at ? '' : ' · a draft: only hosts and editors see it'}</p>
+          <div className="flex justify-center pt-1"><Slideshow slides={toSlides(items)} title={data.a.title} /></div>
         </header>
         <Gallery
           items={items}

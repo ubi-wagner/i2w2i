@@ -9,7 +9,7 @@ const ROUTE = [
   ['#invite', 'Add people', 'Co-hosts, editors, viewers'],
   ['#cards', 'QR cards & posters', 'Tables and the door'],
   ['#photos', 'Photos come in', 'You approve them'],
-  ['#albums', 'Albums', 'Ceremony, Reception…'],
+  ['#albums', 'Albums & slideshow', 'Ceremony, Reception…'],
   ['#publish', 'Publish', 'Choose who sees it'],
 ] as const;
 
@@ -176,6 +176,19 @@ export default function HostingHelp() {
         <Step title="What guests see" shots={[{ src: 'start-albums.webp', alt: 'Albums on the event page: Ceremony, 2 photos, and Dinner & toasts, 4 photos' }]}>
           <p>Once an album is published and has a photo in it, the event page gets a <K>View albums</K> button and an <b>Albums</b> section with a card for each. Each card opens the album’s own page with just its photos. Everything approved is still under <b>All photos</b>.</p>
           <p>An album never shows anyone a photo that’s waiting or hidden.</p>
+        </Step>
+        <Step title="Slideshow, on a TV or a laptop" wide shots={[
+          { src: 'host-slideshow.webp', alt: 'A photo full screen on a laptop, with a wide white border' },
+        ]}>
+          <p>Every album has a <K>Slideshow</K> button: on an album’s own page, and next to <b>All photos</b>. Pick how it plays, then tap <K>Start slideshow</K>:</p>
+          <List>
+            <li><b>Change every</b> 3, 5 or 10 seconds;</li>
+            <li><b>In order</b> or <b>Shuffle</b>;</li>
+            <li><b>Fade</b> from one photo to the next, or <b>No fade</b>;</li>
+            <li><b>Border:</b> none, thin or wide (white, like a print).</li>
+          </List>
+          <p>The photos fill the screen and the screen stays on. Photos approved while it plays join in by themselves, so a laptop plugged into a TV can run it all evening. Tap the screen or press <K>Esc</K> to go back to the album. The device remembers your choices for next time.</p>
+          <Tip>Only approved photos are shown, even when a co-host starts it: nothing waiting or hidden goes up on the big screen. Videos are skipped.</Tip>
         </Step>
       </Section>
 

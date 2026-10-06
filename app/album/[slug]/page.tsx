@@ -11,12 +11,14 @@ import { DirectionsPanel, InfoPanel, SchedulePanel } from '@/components/events/E
 import { EventHero, ThemeFrame } from '@/components/events/ThemeFrame';
 import { cleanPage } from '@/lib/events/page';
 import { Uploader } from '@/components/events/Uploader';
+import { Slideshow } from '@/components/events/Slideshow';
 import { logActivity } from '@/lib/events/activity';
 import { loadAlbum } from '@/lib/events/album';
 import { albumMembership, listAlbums, toAlbumCards } from '@/lib/events/albums';
 import { rateLimit } from '@/lib/rate-limit';
 import { requestMeta } from '@/lib/request-meta';
 import { withCtx } from '@/lib/events/db';
+import { toSlides } from '@/lib/events/slideshow';
 import { GALLERY_SQL_COLUMNS, toGallery, type UploadRow } from '@/lib/events/queries';
 import { publicEvent } from '@/lib/events/session';
 import { approveInto, createAlbum, fileIntoAlbum } from '../../events/album-actions';
@@ -171,7 +173,10 @@ export default async function AlbumPage({ params, searchParams }: Params) {
         )}
 
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">{album.canView ? 'All photos' : 'Your uploads'}</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">{album.canView ? 'All photos' : 'Your uploads'}</h2>
+            {album.canView && <Slideshow slides={toSlides(items)} title="All photos" />}
+          </div>
           {waiting > 0 && !album.canManage && (
             <p className="rounded-xl bg-brand-light px-4 py-3 text-sm text-brand-dark">
               {waiting === 1 ? 'Your photo is' : `${waiting} of your photos are`} waiting for the hosts. Only you and they can see {waiting === 1 ? 'it' : 'them'} until they add {waiting === 1 ? 'it' : 'them'} to the album.
