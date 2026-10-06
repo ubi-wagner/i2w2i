@@ -166,15 +166,24 @@ export default function HostingHelp() {
           <p>On the <b>Albums</b> tab, give it a name and, if you like, a line about it. Tap <K>Make album</K>. It starts as a <b>Draft</b>: only co-hosts and editors see it.</p>
           <p>Put photos in it any of these ways:</p>
           <List>
-            <li>while approving, with <K>Approve &amp; post to the album</K>;</li>
+            <li>while approving, with <K>Approve &amp; post to the album</K> (<K>+ New album</K> there makes one on the spot: type its name and tap <K>Make</K>);</li>
             <li>on any approved photo, tap the album’s name under <b>In albums</b> (a ✓ means it’s in);</li>
-            <li><K>Edit &amp; add photos</K>, then <K>Select</K>, pick them and choose <K>Add to album…</K>.</li>
+            <li><K>Edit &amp; add photos</K>, then <K>Select</K>, pick them and tap <K>Add to “Ceremony”</K>.</li>
           </List>
           <p>On the album’s own page, open a photo for <K>Use as album cover</K> or <K>Take out of this album</K>. Taking a photo out of an album leaves it in the event.</p>
-          <p>When it’s ready, tap <K>Publish</K>. Use <K>↑</K> and <K>↓</K> to set the order guests see. <K>Unpublish</K> hides it again; <K>Delete album</K> removes the album but never its photos. Renaming keeps its link, so shared links still work.</p>
+          <p>Use <K>↑</K> and <K>↓</K> to set the order guests see. <K>Delete album</K> removes the album but never its photos. Renaming keeps its link, so shared links still work.</p>
+        </Step>
+        <Step title="Publish it: private or public" shots={[{ src: 'host-album-public.webp', alt: 'An album’s page: Unpublish, Who can see it set to Public, and its own link with a QR' }]}>
+          <p>When it’s ready, tap <K>Publish album</K>, then choose <b>Who can see it</b>. It saves as soon as you pick:</p>
+          <List>
+            <li><b>Private:</b> whoever can see the event (its people, guests with a code, and the family or everyone if you published the event to them).</li>
+            <li><b>Public:</b> anyone with the album’s link, even without a code or an account, while the rest of the event stays private. They see only that album’s approved photos, and its slideshow; no other photos, no address, no chat.</li>
+          </List>
+          <p>A published album shows its own link with a QR code to copy or scan. <K>Unpublish</K> takes it down again, and making it private again closes the link straight away.</p>
         </Step>
         <Step title="What guests see" shots={[{ src: 'start-albums.webp', alt: 'Albums on the event page: Ceremony, 2 photos, and Dinner & toasts, 4 photos' }]}>
           <p>Once an album is published and has a photo in it, the event page gets a <K>View albums</K> button and an <b>Albums</b> section with a card for each. Each card opens the album’s own page with just its photos. Everything approved is still under <b>All photos</b>.</p>
+          <p>Public albums are also listed under <b>Albums anyone can see</b> on the event’s page for visitors who haven’t joined, below the box for the code.</p>
           <p>An album never shows anyone a photo that’s waiting or hidden.</p>
         </Step>
         <Step title="Slideshow, on a TV or a laptop" wide shots={[
@@ -188,13 +197,13 @@ export default function HostingHelp() {
             <li><b>Border:</b> none, thin or wide (white, like a print).</li>
           </List>
           <p>The photos fill the screen and the screen stays on. Photos approved while it plays join in by themselves, so a laptop plugged into a TV can run it all evening. Tap the screen or press <K>Esc</K> to go back to the album. The device remembers your choices for next time.</p>
-          <Tip>Only approved photos are shown, even when a co-host starts it: nothing waiting or hidden goes up on the big screen. Videos are skipped.</Tip>
+          <Tip>Only approved photos are shown, even when a co-host starts it: nothing waiting or hidden goes up on the big screen. Videos are skipped. For a screen nobody signs in on, make the album public and open its link there.</Tip>
         </Step>
       </Section>
 
       <Section id="publish" eyebrow="Step 8" title="Publish: choose who sees it" lead="Approved photos are always visible to people on the event, and to table guests whose code has “Can see the album” ticked. Publishing opens it wider.">
         <Step title="Publishing" shots={[{ src: 'host-published.webp', alt: 'Publishing set to the whole family' }]}>
-          <p>On the <b>Overview</b> tab, under <b>Publishing</b>, set <K>Published</K>, choose who, and tap <K>Save</K>:</p>
+          <p>On the <b>Overview</b> tab, under <b>Publishing</b>, set <b>The event</b> to <K>Published</K>, choose who, and tap <K>Save</K>:</p>
           <List>
             <li><b>People on the event &amp; guest code holders:</b> just the people above.</li>
             <li><b>Whole family:</b> every family account, signed in. It shows on their home page under <i>Family albums</i>.</li>
@@ -239,6 +248,7 @@ export default function HostingHelp() {
               <tr><th scope="row" className="px-4 py-2.5 font-semibold">Table guest (code)</th><Y>Yes, reviewed</Y><T>Own + approved*</T><N /><N /><N /></tr>
               <tr><th scope="row" className="px-4 py-2.5 font-semibold">Family, not on the event</th><N /><T>Approved, if published to the family</T><N /><N /><N /></tr>
               <tr><th scope="row" className="px-4 py-2.5 font-semibold">Anyone with the link</th><N /><T>Approved, if published to everyone</T><N /><N /><N /></tr>
+              <tr><th scope="row" className="px-4 py-2.5 font-semibold">Anyone with a public album’s link</th><N /><T>That album’s approved photos</T><N /><N /><N /></tr>
             </tbody>
           </table>
         </div>

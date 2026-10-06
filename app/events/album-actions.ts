@@ -86,6 +86,25 @@ export async function publishAlbum(form: FormData): Promise<void> {
   refresh(eventId);
 }
 
+/**
+ * Who can open a published album: whoever can see the event (private), or
+ * anyone with its link (public). Only hosts and editors choose (migration 012).
+ */
+export async function setAlbumAudience(_prev: AlbumState, form: FormData): Promise<AlbumState> {
+  const { user, ctx } = await who();
+  const eventId = clip(form.get('event_id'), 40);
+  const albumId = clip(form.get('album_id'), 40);
+  const audience = form.get('audience') === 'public' ? 'public' : 'private';
+  if (!UUID.test(eventId) || !UUID.test(albumId)) return { error: 'Something went wrong. Reload and try again.' };
+  const rows = await withCtx(ctx, (tx) => tx`
+    UPDATE events.albums SET audience = ${audience} WHERE id = ${albumId} AND event_id = ${eventId} RETURNING 1`);
+  if (!rows.length) return { error: 'Only the event’s co-hosts and editors change albums.' };
+  await audit(user.id, 'events.album.audience', eventId, { album: albumId, audience });
+  await logActivity({ eventId, action: 'album.audience', userId: user.id, actorName: user.display_name, detail: { album: albumId, audience } });
+  refresh(eventId);
+  return { message: audience === 'public' ? 'Saved: anyone with the link can see it.' : 'Saved: only people who can see the event.' };
+}
+
 /** One place up or down in the list guests see. */
 export async function moveAlbum(form: FormData): Promise<void> {
   const { ctx } = await who();

@@ -10,12 +10,17 @@ export interface AlbumRow {
   description: string;
   sort_order: number;
   published_at: Date | null;
+  /** private: whoever can see the event; public: anyone with the album's link (migration 012). */
+  audience: AlbumAudience;
   cover_upload_id: string | null;
-  /** Items the requester can see in it (the uploads policy decides). */
+  /** Photos and videos the requester can see in it (the uploads policy decides). */
   photos: number;
+  videos: number;
   /** Gallery copy of the cover (the chosen one, else the first photo in it), if the requester can see one. */
   cover_key: string | null;
 }
+
+export type AlbumAudience = 'private' | 'public';
 
 export interface AlbumCard {
   id: string;
@@ -23,7 +28,9 @@ export interface AlbumCard {
   title: string;
   description: string;
   published: boolean;
+  public: boolean;
   photos: number;
+  videos: number;
   cover: string | null;
 }
 
@@ -34,9 +41,11 @@ export interface AlbumCard {
  */
 export function listAlbums(tx: Tx, eventId: string, opts: { publishedOnly?: boolean } = {}) {
   return tx<AlbumRow[]>`
-    SELECT a.id, a.slug, a.title, a.description, a.sort_order, a.published_at, a.cover_upload_id,
+    SELECT a.id, a.slug, a.title, a.description, a.sort_order, a.published_at, a.audience, a.cover_upload_id,
            (SELECT count(*)::int FROM events.album_items i JOIN events.uploads u ON u.id = i.upload_id
-             WHERE i.album_id = a.id AND u.status = 'ready' AND NOT u.hidden) AS photos,
+             WHERE i.album_id = a.id AND u.status = 'ready' AND NOT u.hidden AND u.kind = 'photo') AS photos,
+           (SELECT count(*)::int FROM events.album_items i JOIN events.uploads u ON u.id = i.upload_id
+             WHERE i.album_id = a.id AND u.status = 'ready' AND NOT u.hidden AND u.kind = 'video') AS videos,
            (SELECT coalesce(u.preview_key, CASE WHEN u.kind = 'photo' THEN u.original_key END)
               FROM events.uploads u
              WHERE u.status = 'ready' AND NOT u.hidden
@@ -58,7 +67,9 @@ export async function toAlbumCards(rows: AlbumRow[]): Promise<AlbumCard[]> {
     title: a.title,
     description: a.description,
     published: a.published_at !== null,
+    public: a.audience === 'public',
     photos: a.photos,
+    videos: a.videos,
     cover: a.cover_key ? await viewUrl(a.cover_key) : null,
   })));
 }
@@ -79,4 +90,12 @@ export async function freeAlbumSlug(tx: Tx, eventId: string, base: string): Prom
     SELECT slug FROM events.albums WHERE event_id = ${eventId} AND (slug = ${root} OR slug LIKE ${`${root}-%`})`).map((r) => r.slug));
   if (!taken.has(root)) return root;
   for (let n = 2; ; n++) if (!taken.has(`${root}-${n}`)) return `${root}-${n}`;
+}
+
+/** "3 photos", "2 photos · 1 video", "No photos yet". */
+export function countLabel(photos: number, videos: number): string {
+  const p = `${photos} ${photos === 1 ? 'photo' : 'photos'}`;
+  const v = `${videos} ${videos === 1 ? 'video' : 'videos'}`;
+  if (!photos && !videos) return 'No photos yet';
+  return videos ? (photos ? `${p} · ${v}` : v) : p;
 }

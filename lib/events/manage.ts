@@ -16,6 +16,13 @@ export const ROLE_HINT: Record<EventRole, string> = {
   invitee: 'Sees the album, adds photos (a co-host or editor approves them) and joins the chat.',
 };
 
+/** Who can see the event's photos now, in words (what a private album follows). */
+export function eventAudienceLabel(event: Pick<EventRow, 'status' | 'audience'>): string {
+  if (event.status !== 'published' || event.audience === 'invitees') return 'the people on this event and guests with a code';
+  if (event.audience === 'family') return 'the whole family (signed in), the people on this event and guests with a code';
+  return 'anyone with the event’s link';
+}
+
 /**
  * The event being managed and who's asking, for every tab of the manage
  * pages (cached per request, so the layout and the tab share one lookup).

@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useActionState, useState, useTransition } from 'react';
-import { createAlbum, deleteAlbum, updateAlbum, type AlbumState } from '../album-actions';
+import { createAlbum, deleteAlbum, setAlbumAudience, updateAlbum, type AlbumState } from '../album-actions';
 
 /** A new album: just a name (and a line about it); it starts as a draft. */
 export function NewAlbumForm({ eventId }: { eventId: string }) {
@@ -36,6 +36,41 @@ export function NewAlbumForm({ eventId }: { eventId: string }) {
       {state.error && <p className="text-sm text-red-600" role="alert">{state.error}</p>}
       {state.message && <p className="text-sm text-green-700" role="status">{state.message}</p>}
       <button className="btn" disabled={pending || !title.trim()}>Make album</button>
+    </form>
+  );
+}
+
+/**
+ * Who can open the album once it's published. Saves on change, and keeps the
+ * saved choice in its state (React resets the form after the action).
+ */
+export function AlbumAudienceForm({ eventId, albumId, audience, eventAudience }: {
+  eventId: string; albumId: string; audience: 'private' | 'public'; eventAudience: string;
+}) {
+  const [state, action, pending] = useActionState<AlbumState & { audience?: string }, FormData>(
+    async (prev, form) => ({ ...(await setAlbumAudience(prev, form)), audience: String(form.get('audience')) }),
+    {},
+  );
+  const value = state.error ? audience : (state.audience ?? audience);
+  const options = [
+    ['private', 'Private', `Whoever can see the event: ${eventAudience}.`],
+    ['public', 'Public', 'Anyone with the album’s link, even without a code or an account. Only this album’s approved photos; nothing else of the event.'],
+  ] as const;
+  return (
+    <form action={action} className="space-y-2">
+      <input type="hidden" hidden name="event_id" value={eventId} />
+      <input type="hidden" hidden name="album_id" value={albumId} />
+      <fieldset key={value} disabled={pending} className="space-y-2">
+        <legend className="mb-1 text-sm font-medium">Who can see it</legend>
+        {options.map(([v, label, hint]) => (
+          <label key={v} className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-200 p-3 has-[:checked]:border-brand has-[:checked]:bg-brand-light/40">
+            <input type="radio" name="audience" value={v} defaultChecked={v === value} className="mt-1" onChange={(e) => e.currentTarget.form?.requestSubmit()} />
+            <span><b>{label}</b><span className="block text-sm text-stone-600">{hint}</span></span>
+          </label>
+        ))}
+      </fieldset>
+      {state.error && <p className="text-sm text-red-600" role="alert">{state.error}</p>}
+      {state.message && !pending && <p className="text-sm text-green-700" role="status">{state.message}</p>}
     </form>
   );
 }

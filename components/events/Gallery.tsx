@@ -21,6 +21,8 @@ export interface AlbumTools {
   create: (input: { eventId: string; title: string }) => Promise<Result>;
   /** On one album's page: "Take out of this album" and "Use as cover". */
   current?: { id: string; title: string; setCover: (input: { eventId: string; albumId: string; uploadId: string }) => Promise<Result> };
+  /** Picking photos for one album: Select gives a single "Add to …" button. */
+  target?: { id: string; title: string };
 }
 
 interface Props {
@@ -58,7 +60,7 @@ function useNow(every = 5_000) {
 
 /** Milliseconds until a waiting item can be approved (0: now). */
 const waitMs = (it: GalleryItem, now: number) => (it.reviewableAt ? Math.max(0, new Date(it.reviewableAt).getTime() - now) : 0);
-const clockLeft = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.ceil((ms % 60_000) / 1000) % 60).padStart(2, '0')}`;
+const clockLeft = (ms: number) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 export function Gallery({ items, empty, downloadUrl, moderation, albums, commentsSlug, reviewQueue = false }: Props) {
   const [open, setOpen] = useState<number | null>(null);
@@ -122,7 +124,7 @@ export function Gallery({ items, empty, downloadUrl, moderation, albums, comment
     );
   }
 
-  const canSelect = Boolean(downloadUrl || moderation?.bulkAction);
+  const canSelect = Boolean(downloadUrl || moderation?.bulkAction || albums?.target);
   const toggle = (id: string) =>
     setSelected((s) => {
       const n = new Set(s);
@@ -168,12 +170,10 @@ export function Gallery({ items, empty, downloadUrl, moderation, albums, comment
   }
 
   /** A new album from the photo view, ready to post into. */
-  async function newAlbum(): Promise<string | null> {
+  async function newAlbum(title: string): Promise<string | null> {
     if (!albums) return null;
-    const title = prompt('Name the new album (for example “Ceremony”):')?.trim();
-    if (!title) return null;
     const r = await albums.create({ eventId: albums.eventId, title });
-    setNote(r);
+    setNote(r.id ? { message: `Made “${title}”: a draft until you publish it on the Albums tab.` } : r);
     return r.id ?? null;
   }
 
@@ -240,7 +240,12 @@ export function Gallery({ items, empty, downloadUrl, moderation, albums, comment
                   <button type="button" className="btn-secondary py-1 text-red-700" disabled={busy || !selected.size} onClick={() => bulk('delete')}>Delete</button>
                 </>
               )}
-              {albums && listed.length > 0 && (
+              {albums?.target && (
+                <button type="button" className="btn py-1" disabled={busy || !selected.size} onClick={() => void bulkFile(albums.target!.id, true)}>
+                  Add {selected.size || ''} to “{albums.target.title}”
+                </button>
+              )}
+              {albums && !albums.target && listed.length > 0 && (
                 <select
                   className="rounded-lg border border-stone-300 bg-white px-2 py-1"
                   value=""
@@ -369,9 +374,9 @@ export function Gallery({ items, empty, downloadUrl, moderation, albums, comment
                 onApprove={() => void approve(item)}
               />
             )}
-            {albums && !item.pending && listed.length > 0 && (
+            {albums && !item.pending && (
               <div className="mx-auto w-full max-w-xl px-4 text-sm" role="group" aria-label="Albums">
-                <p className="mb-1 text-center text-stone-300">In albums (tap to add or take out)</p>
+                <p className="mb-1 text-center text-stone-300">{listed.length ? 'In albums (tap to add or take out)' : 'Post it to an album, like “Ceremony”:'}</p>
                 <div className="flex flex-wrap justify-center gap-1.5">
                   {listed.map((a) => {
                     const on = albumsOf(item).includes(a.id);
@@ -382,17 +387,15 @@ export function Gallery({ items, empty, downloadUrl, moderation, albums, comment
                       </button>
                     );
                   })}
-                  <button type="button" className="rounded-full border border-dashed border-white/40 px-3 py-1 text-white"
-                    onClick={async () => { const id = await newAlbum(); if (id) await albums.fileInto({ eventId: albums.eventId, albumId: id, uploadIds: [item.id], add: true }); }}>
-                    + New album
-                  </button>
+                  <NewAlbumChip onMake={async (title) => {
+                    const id = await newAlbum(title);
+                    if (id) {
+                      setInAlbums((m) => ({ ...m, [item.id]: [...albumsOf(item), id] }));
+                      await albums.fileInto({ eventId: albums.eventId, albumId: id, uploadIds: [item.id], add: true });
+                    }
+                  }} />
                 </div>
               </div>
-            )}
-            {albums && !item.pending && listed.length === 0 && (
-              <p className="px-4 text-center text-sm text-stone-300">
-                <button type="button" className="underline" onClick={async () => { const id = await newAlbum(); if (id) await albums.fileInto({ eventId: albums.eventId, albumId: id, uploadIds: [item.id], add: true }); }}>Make an album</button> to post this to.
-              </p>
             )}
             {(note.error || note.message) && (
               <p className={`px-4 text-center text-sm ${note.error ? 'text-red-300' : 'text-green-300'}`} role={note.error ? 'alert' : 'status'}>{note.error ?? note.message}</p>
@@ -466,7 +469,7 @@ function ModForm({ moderation, id, action, label, onDone }: { moderation: NonNul
  */
 function ReviewPanel({ item, wait, albums, chosen, setChosen, newAlbum, busy, onApprove }: {
   item: GalleryItem; wait: number; albums?: AlbumTools; chosen: string[]; setChosen: (ids: string[]) => void;
-  newAlbum: () => Promise<string | null>; busy: boolean; onApprove: () => void;
+  newAlbum: (title: string) => Promise<string | null>; busy: boolean; onApprove: () => void;
 }) {
   void item;
   return (
@@ -487,10 +490,7 @@ function ReviewPanel({ item, wait, albums, chosen, setChosen, newAlbum, busy, on
                 </button>
               );
             })}
-            <button type="button" className="rounded-full border border-dashed border-white/40 px-3 py-1 text-white"
-              onClick={async () => { const id = await newAlbum(); if (id) setChosen([...chosen, id]); }}>
-              + New album
-            </button>
+            <NewAlbumChip onMake={async (title) => { const id = await newAlbum(title); if (id) setChosen([...chosen, id]); }} />
           </div>
         </div>
       )}
@@ -503,5 +503,49 @@ function ReviewPanel({ item, wait, albums, chosen, setChosen, newAlbum, busy, on
         </div>
       )}
     </section>
+  );
+}
+
+/** “+ New album”: a name box right where you are, no pop-up. */
+function NewAlbumChip({ onMake }: { onMake: (title: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!open) {
+    return (
+      <button type="button" className="rounded-full border border-dashed border-white/40 px-3 py-1 text-white" onClick={() => setOpen(true)}>
+        + New album
+      </button>
+    );
+  }
+  return (
+    <form
+      className="flex w-full max-w-sm items-center gap-1.5"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const name = title.trim();
+        if (!name) return;
+        setBusy(true);
+        try {
+          await onMake(name);
+          setOpen(false);
+          setTitle('');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <input
+        autoFocus
+        aria-label="New album name"
+        placeholder="Album name, like Ceremony"
+        value={title}
+        maxLength={80}
+        onChange={(e) => setTitle(e.target.value)}
+        className="min-w-0 flex-1 rounded-full border border-white/40 bg-black/40 px-3 py-1 text-white placeholder:text-stone-400"
+      />
+      <button className="rounded-full bg-white px-3 py-1 font-medium text-stone-900 disabled:opacity-50" disabled={busy || !title.trim()}>Make</button>
+      <button type="button" className="px-1.5 text-stone-300" aria-label="Cancel new album" onClick={() => { setOpen(false); setTitle(''); }}>✕</button>
+    </form>
   );
 }

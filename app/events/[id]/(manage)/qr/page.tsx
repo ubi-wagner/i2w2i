@@ -87,7 +87,7 @@ export default async function QrTab({ params }: { params: Promise<{ id: string }
         <div className="flex flex-wrap items-start gap-4">
           <div className="h-28 w-28 shrink-0" dangerouslySetInnerHTML={{ __html: albumQr }} />
           <div className="grow space-y-2 text-sm">
-            <p className="text-stone-600">No code in it: for people already on the event, or once the album is published to the family or to anyone with the link. Guests at the event need a guest code instead.</p>
+            <p className="text-stone-600">No code in it: for people already on the event, or once the event is published to the family or to anyone with the link. Guests at the event need a guest code instead. Albums you make public have their own link and QR on their page (Albums tab).</p>
             <CopyText text={albumUrl(event.slug)} />
             <div className="flex flex-wrap gap-2">
               <Link href={`/events/${id}/card`} className="btn-secondary py-1 text-sm">Album card</Link>

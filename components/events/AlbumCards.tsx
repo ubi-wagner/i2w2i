@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { AlbumCard } from '@/lib/events/albums';
+import { countLabel, type AlbumCard } from '@/lib/events/albums';
 
 /** The event's published albums as cards: a cover, the name and how many photos. */
 export function AlbumCards({ slug, albums, current }: { slug: string; albums: AlbumCard[]; current?: string }) {
@@ -18,7 +18,7 @@ export function AlbumCards({ slug, albums, current }: { slug: string; albums: Al
             </span>
             <span className="block px-3 py-2">
               <span className="block font-display text-lg font-semibold leading-tight text-stone-900">{a.title}</span>
-              <span className="block text-xs text-stone-500">{a.photos} {a.photos === 1 ? 'photo' : 'photos'}{a.published ? '' : ' · draft'}</span>
+              <span className="block text-xs text-stone-500">{countLabel(a.photos, a.videos)}{a.published ? '' : ' · draft'}</span>
             </span>
           </Link>
         </li>

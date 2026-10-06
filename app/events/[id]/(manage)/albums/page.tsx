@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { listAlbums, toAlbumCards } from '@/lib/events/albums';
+import { countLabel, listAlbums, toAlbumCards } from '@/lib/events/albums';
 import { withCtx } from '@/lib/events/db';
 import { loadManage } from '@/lib/events/manage';
 import { moveAlbum, publishAlbum } from '../../../album-actions';
@@ -20,7 +20,7 @@ export default async function AlbumsTab({ params }: { params: Promise<{ id: stri
         <div>
           <h2 className="text-lg font-semibold">Albums</h2>
           <p className="text-sm text-stone-600">
-            Every approved photo is in the event’s main grid. Albums are named pages on top of that, like “Getting ready”, “Ceremony” or “Reception”, for guests to browse. Post photos into them from the photo view (Photos tab) as you approve them, and publish each album when it’s ready. Published albums are listed under <b>View albums</b> on the event’s page.
+            Every approved photo is in the event’s main grid. Albums are named pages on top of that, like “Getting ready”, “Ceremony” or “Reception”. Post photos into them as you approve them (Photos tab), then publish each one when it’s ready: <b>private</b> for whoever can see the event, or <b>public</b> for anyone with its link. Published albums are listed under <b>View albums</b> on the event’s page, and each has a slideshow.
           </p>
         </div>
         <NewAlbumForm eventId={id} />
@@ -40,8 +40,9 @@ export default async function AlbumsTab({ params }: { params: Promise<{ id: stri
                   <p className="font-semibold">
                     <Link href={`/events/${id}/albums/${a.id}`} className="hover:underline">{a.title}</Link>{' '}
                     <span className={`ml-1 rounded-full px-2 py-0.5 text-xs ${a.published ? 'bg-green-100 text-green-800' : 'bg-stone-100 text-stone-600'}`}>{a.published ? 'Published' : 'Draft'}</span>
+                    {a.public && <span className="ml-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800">Public</span>}
                   </p>
-                  <p className="text-sm text-stone-600">{a.photos} {a.photos === 1 ? 'item' : 'items'}{a.description ? ` · ${a.description}` : ''}</p>
+                  <p className="text-sm text-stone-600">{countLabel(a.photos, a.videos)}{a.description ? ` · ${a.description}` : ''}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
                     <Link href={`/events/${id}/albums/${a.id}`} className="text-brand hover:underline">Edit &amp; add photos</Link>
                     {a.published && <Link href={`/album/${event.slug}/a/${a.slug}`} className="text-brand hover:underline">View</Link>}

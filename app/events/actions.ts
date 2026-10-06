@@ -87,7 +87,7 @@ export async function updateEvent(_prev: FormState, form: FormData): Promise<For
   revalidatePath('/album/[slug]', 'page');
   // The form resets after the action; these keep it showing what was saved.
   const fields = { status, audience, chat_enabled: form.get('chat_enabled') === 'on' ? 'on' : '' };
-  return { message: status === 'published' ? 'Saved. The album is published.' : 'Saved. The album is a draft.', fields };
+  return { message: status === 'published' ? 'Saved. The event is published.' : 'Saved. The event is a draft.', fields };
 }
 
 export interface PageInput {

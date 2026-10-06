@@ -43,8 +43,9 @@ await host.getByText('Approved and posted to the album.').waitFor();
 check(await inAlbum('Ceremony') === 1, 'approve & post files the photo into the album');
 // A new album right from the review panel
 await panel.waitFor();
-host.once('dialog', (d) => d.accept('Reception'));
 await panel.getByRole('button', { name: '+ New album' }).click();
+await panel.getByLabel('New album name').fill('Reception');
+await panel.getByRole('button', { name: 'Make', exact: true }).click();
 await panel.getByRole('button', { name: '✓ Reception' }).waitFor();
 check(true, 'a new album made from the review panel is picked straight away');
 await panel.getByRole('button', { name: 'Approve & post to the album' }).click();
@@ -139,7 +140,8 @@ check(await host.getByRole('heading', { name: 'In this album (1)' }).isVisible()
 const add = host.locator('#add-photos');
 await add.getByRole('button', { name: 'Select', exact: true }).click();
 await add.getByRole('button', { name: 'All', exact: true }).click();
-await add.getByLabel('Add the selected to an album').selectOption({ label: 'Reception' });
+check(!(await add.getByRole('button', { name: 'Delete', exact: true }).count()), 'picking photos for an album shows no moderation buttons');
+await add.getByRole('button', { name: /^Add \d+ to “Reception”$/ }).click();
 await host.getByRole('heading', { name: 'In this album (4)' }).waitFor();
 await add.getByText('Every photo is already in this album.').waitFor();
 check(await inAlbum('Reception') === 4 && await add.getByText('Added 3 items.').isVisible(), 'bulk “Add to album” files every selected photo, and says so');
@@ -182,6 +184,35 @@ await vic.goto(`${BASE}/album/${slug}`);
 check(!(await vic.getByRole('region', { name: 'Albums', exact: true }).getByText('First dance').count()), 'a published album with no photos isn’t listed yet');
 check((await vic.goto(`${BASE}/album/${slug}/a/first-dance`)).status() === 200, '…but its page opens');
 
+// An album can be its own public page: anyone with the link, while the event stays private
+const stranger = await phonePage();
+await stranger.goto(`${BASE}/album/${slug}/a/ceremony`);
+check(stranger.url() === `${BASE}/album/${slug}`, 'a private album’s link sends a stranger to the join page');
+await host.goto(`${ev.manage}/albums/${(await albumRow('Ceremony')).id}`);
+await host.getByRole('radio', { name: /^Public/ }).check();
+await host.getByText('Saved: anyone with the link can see it.').waitFor();
+check((await db`SELECT audience FROM events.albums WHERE event_id = ${ev.id} AND title = 'Ceremony'`)[0].audience === 'public', 'a host makes an album public');
+await host.reload();
+check(await host.getByRole('radio', { name: /^Public/ }).isChecked() && await host.getByRole('button', { name: 'Copy link' }).isVisible(), '…it stays public, with its own link to share');
+const publicPhotos = (await db`SELECT count(*)::int AS n FROM events.album_items i JOIN events.uploads u ON u.id = i.upload_id JOIN events.albums a ON a.id = i.album_id
+  WHERE a.event_id = ${ev.id} AND a.title = 'Ceremony' AND u.approved_at IS NOT NULL AND NOT u.hidden`)[0].n;
+await stranger.goto(`${BASE}/album/${slug}`);
+const openAlbums = stranger.getByRole('region', { name: 'Albums', exact: true });
+check(await openAlbums.getByRole('link', { name: /Ceremony/ }).isVisible() && !(await openAlbums.getByText('Party').count()), 'the event’s page lists the public album to anyone, and only that one');
+check(await stranger.getByLabel('Album code').isVisible(), '…while the event itself still asks for a code');
+await openAlbums.getByRole('link', { name: /Ceremony/ }).click();
+await stranger.waitForURL(`${BASE}/album/${slug}/a/ceremony`);
+check(publicPhotos > 0 && (await tiles(stranger).count()) === publicPhotos, `anyone with the link sees the public album’s approved photos (${publicPhotos})`);
+check(!(await stranger.getByRole('button', { name: 'Select', exact: true }).count()), '…without downloads');
+check(await stranger.getByRole('button', { name: 'Slideshow', exact: true }).isVisible(), '…and can play it as a slideshow');
+await tiles(stranger).first().click();
+check(!(await stranger.getByPlaceholder('Add a comment…').count()), '…but not read or write comments');
+await stranger.getByRole('button', { name: 'Close' }).click();
+await host.getByRole('radio', { name: /^Private/ }).check();
+await host.getByText('Saved: only people who can see the event.').waitFor();
+await stranger.goto(`${BASE}/album/${slug}/a/ceremony`);
+check(stranger.url() === `${BASE}/album/${slug}`, 'made private again, its link asks for the code');
+
 // Unpublish and delete
 await host.goto(`${ev.manage}/albums`);
 await host.locator('li', { hasText: 'Ceremony' }).getByRole('button', { name: 'Unpublish' }).click();
@@ -194,5 +225,5 @@ await host.locator('li', { hasText: 'Party' }).waitFor({ state: 'detached' });
 check(!(await albumRow('Party')), 'deleting an album removes it');
 check((await db`SELECT count(*)::int AS n FROM events.uploads WHERE event_id = ${ev.id} AND status = 'ready'`)[0].n === 4, '…and leaves its photos in the event');
 const acts = (await db`SELECT action FROM events.activity WHERE event_id = ${ev.id}`).map((r) => r.action);
-check(['album.create', 'album.publish', 'album.unpublish', 'album.delete', 'album.add', 'upload.approve'].every((a) => acts.includes(a)), 'album changes are in the activity log');
+check(['album.create', 'album.publish', 'album.unpublish', 'album.delete', 'album.add', 'album.audience', 'upload.approve'].every((a) => acts.includes(a)), 'album changes are in the activity log');
 await finish();

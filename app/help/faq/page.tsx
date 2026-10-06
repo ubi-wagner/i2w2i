@@ -61,6 +61,9 @@ export default function FaqHelp() {
           <Question q="Guests can’t see an album I made">
             <p>It’s still a draft, or nothing in it is approved yet. On the <b>Albums</b> tab, tap <K>Publish</K>. It shows under <K>View albums</K> once it has a photo guests can see.</p>
           </Question>
+          <Question q="Can I share one album with people who weren’t there?">
+            <p>Yes. Open the album on the <b>Albums</b> tab, publish it and set <b>Who can see it</b> to <b>Public</b>. Then copy its link (or let them scan its QR). Anyone with the link sees that album’s approved photos and nothing else of the event; no code or account needed. Set it back to <b>Private</b> to close the link.</p>
+          </Question>
           <Question q="A photo shouldn’t be in the album">
             <p>If it’s still waiting, nobody but you and the person who added it has seen it: just tap <K>Delete</K>. If it was already approved, open it on the <b>Photos</b> tab (or in the album) and tap <K>Hide</K>; everyone else stops seeing it right away, in every album.</p>
           </Question>

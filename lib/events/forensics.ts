@@ -115,6 +115,7 @@ const ACTION_LABEL: Record<string, string> = {
   'member.remove': 'took someone off the event',
   'album.create': 'made an album',
   'album.publish': 'published an album',
+  'album.audience': 'changed who can see an album',
   'album.unpublish': 'unpublished an album',
   'album.delete': 'deleted an album',
   'album.add': 'added photos to an album',

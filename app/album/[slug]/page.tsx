@@ -64,8 +64,12 @@ export default async function AlbumPage({ params, searchParams }: Params) {
   const lines = album.canView || album.canUpload ? album.page : cleanPage(event.page_public);
   const header = <EventHero theme={theme} title={event.title} startsOn={event.starts_on} location={event.location} lines={lines} />;
 
-  // Arrived by QR, or has nothing yet: join with a name (and a code).
+  // Arrived by QR, or has nothing yet: join with a name (and a code). Albums
+  // the hosts made public are open to anyone, so they're listed here too.
   if (token || (!album.canUpload && !album.canView)) {
+    const open = await toAlbumCards(
+      (await withCtx(album.ctx, (tx) => listAlbums(tx, event.id, { publishedOnly: true }))).filter((a) => a.photos + a.videos > 0),
+    );
     return (
       <ThemeFrame theme={theme}>
         <main className="mx-auto max-w-md space-y-6 px-4 py-10">
@@ -80,6 +84,12 @@ export default async function AlbumPage({ params, searchParams }: Params) {
             {!album.user && <>Family member? <Link href={`/login?next=/album/${slug}`} className="text-brand underline">Sign in</Link> · </>}
             <Link href="/help/start#table" className="underline">How this works</Link>
           </p>
+          {open.length > 0 && (
+            <section id="albums" className="space-y-3 pt-2" aria-label="Albums">
+              <h2 className="text-center font-display text-2xl font-semibold">Albums anyone can see</h2>
+              <AlbumCards slug={slug} albums={open} />
+            </section>
+          )}
         </main>
       </ThemeFrame>
     );
@@ -91,14 +101,15 @@ export default async function AlbumPage({ params, searchParams }: Params) {
        ORDER BY u.featured DESC, u.created_at DESC LIMIT 2000`,
     links: await tx<LinkRow[]>`SELECT id, kind, label, url FROM events.links WHERE event_id = ${event.id} ORDER BY sort_order, created_at`,
     // The index under “View albums”: published albums only, for hosts too (drafts are on the Albums tab).
-    albumRows: album.canView ? await listAlbums(tx, event.id, { publishedOnly: true }) : [],
+    // RLS decides which: all of them for whoever can see the event, the public ones for anyone else.
+    albumRows: await listAlbums(tx, event.id, { publishedOnly: true }),
     allAlbums: album.canManage ? await listAlbums(tx, event.id) : [],
     membership: album.canManage ? await albumMembership(tx, event.id) : new Map<string, string[]>(),
   }));
   // Hidden items only reach managers; keep them out of the public grid here too.
   const visible = rows.filter((r) => !r.hidden);
   const items = (await toGallery(visible, album.ctx, { originals: album.canManage })).map((g) => (album.canManage ? { ...g, albums: membership.get(g.id) ?? [] } : g));
-  const albumCards = await toAlbumCards(albumRows.filter((a) => a.photos > 0));
+  const albumCards = await toAlbumCards(albumRows.filter((a) => a.photos + a.videos > 0));
   // Hosts and editors clicking through here can approve and file what's waiting, as on the manage page.
   const hostTools = album.canManage
     ? {
@@ -106,7 +117,12 @@ export default async function AlbumPage({ params, searchParams }: Params) {
         albums: { eventId: event.id, list: allAlbums.map((a) => ({ id: a.id, title: a.title, published: a.published_at !== null })), approveInto, fileInto: fileIntoAlbum, create: createAlbum },
       }
     : {};
-  const waiting = items.filter((i) => i.pending && i.mine).length;
+  const mineWaiting = items.filter((i) => i.pending && i.mine);
+  const waiting = mineWaiting.length;
+  const waitingWords = [
+    [mineWaiting.filter((i) => i.kind === 'photo').length, 'photo', 'photos'],
+    [mineWaiting.filter((i) => i.kind === 'video').length, 'video', 'videos'],
+  ].filter(([n]) => n).map(([n, one, many]) => (n === 1 ? one : `${n} ${many}`)).join(' and ');
 
   const { page } = album;
   const actions = ([
@@ -143,9 +159,10 @@ export default async function AlbumPage({ params, searchParams }: Params) {
         </nav>
 
         {header}
-        {event.status === 'draft' && (
+        {event.status === 'draft' && album.canManage && (
           <p className="rounded-xl bg-stone-100 p-3 text-center text-sm text-stone-600">
-            This album isn’t published yet{album.canManage ? '' : ', but you can already add to it'}.
+            Not published yet: only the people on this event and guests with a code can see it.{' '}
+            <Link href={`/events/${event.id}#publishing`} className="text-brand underline">Publishing</Link>
           </p>
         )}
         {album.description && (
@@ -179,7 +196,7 @@ export default async function AlbumPage({ params, searchParams }: Params) {
           </div>
           {waiting > 0 && !album.canManage && (
             <p className="rounded-xl bg-brand-light px-4 py-3 text-sm text-brand-dark">
-              {waiting === 1 ? 'Your photo is' : `${waiting} of your photos are`} waiting for the hosts. Only you and they can see {waiting === 1 ? 'it' : 'them'} until they add {waiting === 1 ? 'it' : 'them'} to the album.
+              Your {waitingWords} {waiting === 1 ? 'is' : 'are'} waiting for the hosts. Only you and they can see {waiting === 1 ? 'it' : 'them'} until they add {waiting === 1 ? 'it' : 'them'} to the album.
             </p>
           )}
           <Gallery

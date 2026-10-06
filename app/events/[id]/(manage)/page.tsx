@@ -76,7 +76,7 @@ export default async function Overview({ params }: { params: Promise<{ id: strin
       <section id="publishing" className="scroll-mt-16 card space-y-4">
         <div>
           <h2 className="text-lg font-semibold">Publishing</h2>
-          <p className="text-sm text-stone-600">Whether the event’s album is out, and who can see it. Each album inside it is published on its own, on the Albums tab.</p>
+          <p className="text-sm text-stone-600">Whether the event’s page and all its photos are out, and who can see them. Each album inside it is published on its own, private or public, on the Albums tab.</p>
         </div>
         <SettingsForm event={{ id: event.id, status: event.status, audience: event.audience, chat_enabled: event.chat_enabled }} />
       </section>

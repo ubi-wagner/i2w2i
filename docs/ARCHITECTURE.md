@@ -96,7 +96,7 @@ permissions. The policies in migration 003 then decide:
   - viewers see only finished, unhidden items.
 - **Chat:** members only.
 - **Activity:** owners and curators read it; nobody can change it.
-- **Albums** (migration 011): owners and curators make, fill, publish and delete them. Others see an album only once it's published and they can see the event's photos, and what shows in it is still the uploads policy's call (approved, not hidden). Album items reference uploads by `(id, event_id)`, so an album can't hold another event's photo.
+- **Albums** (migrations 011, 012): owners and curators make, fill, publish and delete them, and choose each one's audience. A published **private** album is for whoever can see the event's photos; a published **public** one for anyone, signed in or not, even while the event is private. Either way what shows in it is still the uploads policy's call (approved, not hidden): a public album adds only `in_public_album(upload)` to it, so a stranger can read that album's approved photos and nothing else of the event (not the event row, other photos, comments or chat). Album items reference uploads by `(id, event_id)`, so an album can't hold another event's photo.
 
 Access codes and guest sessions are resolved only through `SECURITY DEFINER`
 functions (`resolve_code`, `resolve_qr`, `create_guest`, `resolve_guest`).
@@ -186,6 +186,7 @@ Named albums inside an event (`events.albums`, `events.album_items`): "Ceremony"
 
 - Hosts make them on the Albums tab (drafts until published), file photos while approving (`approveInto`), from any photo's view (album chips) or in bulk (Add to album…), set a cover, order them, and publish or unpublish each one.
 - Published albums with something visible in them are listed under **View albums** on `/album/<slug>`; each has its own page, `/album/<slug>/a/<album-slug>`. An album's address never changes when it's renamed.
+- **Private or public** (`albums.audience`): a public album's page opens for anyone with its link (no code, no account; no downloads or comments for them), and the event's join page lists public albums under "Albums anyone can see". The album's manage page shows its link and a QR.
 - Nothing about an album bypasses review: its photos are read through the uploads policy, so a waiting or hidden photo filed into a published album still shows only to its uploader and the hosts.
 - **Slideshow** (`components/events/Slideshow.tsx`, order logic in `lib/events/slideshow.ts`): any album, and All photos, plays full screen with the browser's own Fullscreen API (the whole window where a phone has none) and a CSS fade; no slideshow package. Settings (every 3/5/10 s, in order or shuffled, fade or not, border none/thin/wide) are kept per device. It shows only approved, unhidden photos even when a host starts it (`toSlides`), keeps the screen awake (Wake Lock), refreshes every 30 seconds so newly approved photos join, and Esc, leaving full screen or a tap ends it.
 

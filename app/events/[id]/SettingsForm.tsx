@@ -20,9 +20,9 @@ export function SettingsForm({ event }: Props) {
       <input type="hidden" hidden name="event_id" value={event.id} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="label" htmlFor="status">Album</label>
+          <label className="label" htmlFor="status">The event</label>
           <select key={`s-${status}`} className="input" id="status" name="status" defaultValue={status}>
-            <option value="draft">Draft (only people on this event)</option>
+            <option value="draft">Draft (people on it &amp; code holders)</option>
             <option value="published">Published</option>
           </select>
         </div>
