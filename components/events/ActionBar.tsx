@@ -2,14 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-export type ActionIcon = 'pin' | 'clock' | 'gift' | 'info';
+export type ActionIcon = 'pin' | 'clock' | 'gift' | 'info' | 'images';
 
 export interface EventAction {
   key: string;
   label: string;
   title: string;
   icon: ActionIcon;
-  panel: React.ReactNode;
+  /** Opens in a sheet… */
+  panel?: React.ReactNode;
+  /** …or goes somewhere on the page (View albums). */
+  href?: string;
 }
 
 const PATHS: Record<ActionIcon, React.ReactNode> = {
@@ -17,6 +20,7 @@ const PATHS: Record<ActionIcon, React.ReactNode> = {
   clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>,
   gift: <><rect x="3.5" y="8" width="17" height="4" rx="1" /><path d="M5.5 12v8.5h13V12M12 8v12.5M12 8C10.5 4.5 6.5 4.5 6.5 6.8 6.5 8 9 8 12 8Zm0 0c1.5-3.5 5.5-3.5 5.5-1.2C17.5 8 15 8 12 8Z" /></>,
   info: <><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5.5M12 7.8v.2" /></>,
+  images: <><rect x="3.5" y="6.5" width="13" height="12" rx="1.5" /><path d="M7 4h12.5a1 1 0 0 1 1 1v11M3.5 15.5l3.8-3.8 3 3 2.2-2.2 4 4" /><circle cx="12.5" cy="10" r="1.2" /></>,
 };
 
 export function Icon({ name, className = 'h-5 w-5' }: { name: ActionIcon; className?: string }) {
@@ -26,6 +30,8 @@ export function Icon({ name, className = 'h-5 w-5' }: { name: ActionIcon; classN
     </svg>
   );
 }
+
+const PILL = 'inline-flex items-center gap-2 rounded-full border border-brand/40 bg-white px-4 py-2.5 text-sm font-medium text-brand-dark shadow-sm transition hover:border-brand hover:bg-brand-light active:scale-[0.98]';
 
 /**
  * The event's quick actions (Directions, Schedule, Good to know, Gifts) as
@@ -38,19 +44,19 @@ export function ActionBar({ actions }: { actions: EventAction[] }) {
   return (
     <>
       <nav aria-label="Event details" className="flex flex-wrap justify-center gap-2">
-        {actions.map((a) => (
-          <button
-            key={a.key}
-            type="button"
-            onClick={() => setOpen(a.key)}
-            className="inline-flex items-center gap-2 rounded-full border border-brand/40 bg-white px-4 py-2.5 text-sm font-medium text-brand-dark shadow-sm transition hover:border-brand hover:bg-brand-light active:scale-[0.98]"
-          >
+        {actions.map((a) => a.href ? (
+          <a key={a.key} href={a.href} className={PILL}>
+            <Icon name={a.icon} />
+            {a.label}
+          </a>
+        ) : (
+          <button key={a.key} type="button" onClick={() => setOpen(a.key)} className={PILL}>
             <Icon name={a.icon} />
             {a.label}
           </button>
         ))}
       </nav>
-      {actions.map((a) => (
+      {actions.filter((a) => a.panel).map((a) => (
         <Sheet key={a.key} title={a.title} icon={a.icon} open={open === a.key} onClose={() => setOpen(null)}>
           {a.panel}
         </Sheet>

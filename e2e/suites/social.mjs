@@ -8,7 +8,7 @@ await createCode(host, ev, 'SOC1');
 await createCode(host, ev, 'SOCUP', { view: false });
 
 // Gift links: Venmo handle and a registry
-await host.goto(ev.manage);
+await host.goto(`${ev.manage}/info`);
 await host.getByLabel('Kind of link').selectOption('venmo');
 await host.getByLabel('Handle or link').fill('@cassie-b');
 await host.getByRole('button', { name: 'Add link' }).click();
@@ -54,7 +54,7 @@ const r = await up.request.get(`${BASE}/album/${slug}/api/comments?upload=000000
 check((await r.json()).canPost === false, 'upload-only guests can’t comment on a private album');
 
 // The host can remove it
-await host.goto(ev.manage);
+await host.goto(`${ev.manage}/photos`);
 await host.getByRole('button', { name: 'Open photo from Gina' }).click();
 await host.getByRole('dialog').getByRole('button', { name: 'remove' }).click();
 await host.waitForTimeout(500);

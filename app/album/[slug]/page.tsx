@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { Chat } from '@/components/events/Chat';
+import { AlbumCards } from '@/components/events/AlbumCards';
 import { Gallery } from '@/components/events/Gallery';
 import { GiftLinks, type LinkRow } from '@/components/events/GiftLinks';
 import { ActionBar, type EventAction } from '@/components/events/ActionBar';
@@ -12,11 +13,14 @@ import { cleanPage } from '@/lib/events/page';
 import { Uploader } from '@/components/events/Uploader';
 import { logActivity } from '@/lib/events/activity';
 import { loadAlbum } from '@/lib/events/album';
+import { albumMembership, listAlbums, toAlbumCards } from '@/lib/events/albums';
 import { rateLimit } from '@/lib/rate-limit';
 import { requestMeta } from '@/lib/request-meta';
 import { withCtx } from '@/lib/events/db';
 import { GALLERY_SQL_COLUMNS, toGallery, type UploadRow } from '@/lib/events/queries';
 import { publicEvent } from '@/lib/events/session';
+import { approveInto, createAlbum, fileIntoAlbum } from '../../events/album-actions';
+import { moderateUpload, moderateUploads } from '../../events/actions';
 import { leaveAlbum } from './actions';
 import { JoinForm } from './JoinForm';
 
@@ -79,19 +83,32 @@ export default async function AlbumPage({ params, searchParams }: Params) {
     );
   }
 
-  const { rows, links } = await withCtx(album.ctx, async (tx) => ({
+  const { rows, links, albumRows, allAlbums, membership } = await withCtx(album.ctx, async (tx) => ({
     rows: await tx<UploadRow[]>`
       SELECT ${tx.unsafe(GALLERY_SQL_COLUMNS)} FROM events.uploads u WHERE u.event_id = ${event.id} AND u.status = 'ready'
        ORDER BY u.featured DESC, u.created_at DESC LIMIT 2000`,
     links: await tx<LinkRow[]>`SELECT id, kind, label, url FROM events.links WHERE event_id = ${event.id} ORDER BY sort_order, created_at`,
+    // The index under “View albums”: published albums only, for hosts too (drafts are on the Albums tab).
+    albumRows: album.canView ? await listAlbums(tx, event.id, { publishedOnly: true }) : [],
+    allAlbums: album.canManage ? await listAlbums(tx, event.id) : [],
+    membership: album.canManage ? await albumMembership(tx, event.id) : new Map<string, string[]>(),
   }));
   // Hidden items only reach managers; keep them out of the public grid here too.
   const visible = rows.filter((r) => !r.hidden);
-  const items = await toGallery(visible, album.ctx, { originals: album.canManage });
+  const items = (await toGallery(visible, album.ctx, { originals: album.canManage })).map((g) => (album.canManage ? { ...g, albums: membership.get(g.id) ?? [] } : g));
+  const albumCards = await toAlbumCards(albumRows.filter((a) => a.photos > 0));
+  // Hosts and editors clicking through here can approve and file what's waiting, as on the manage page.
+  const hostTools = album.canManage
+    ? {
+        moderation: { eventId: event.id, action: moderateUpload, bulkAction: moderateUploads },
+        albums: { eventId: event.id, list: allAlbums.map((a) => ({ id: a.id, title: a.title, published: a.published_at !== null })), approveInto, fileInto: fileIntoAlbum, create: createAlbum },
+      }
+    : {};
   const waiting = items.filter((i) => i.pending && i.mine).length;
 
   const { page } = album;
   const actions = ([
+    albumCards.length > 0 && { key: 'albums', label: 'View albums', title: 'Albums', icon: 'images' as const, href: '#albums' },
     Boolean(page.address) && { key: 'directions', label: 'Directions', title: 'Directions', icon: 'pin' as const, panel: <DirectionsPanel place={event.location} address={page.address} /> },
     page.schedule.length > 0 && { key: 'schedule', label: 'Schedule', title: 'Schedule', icon: 'clock' as const, panel: <SchedulePanel items={page.schedule} date={event.starts_on} /> },
     page.info.length > 0 && { key: 'info', label: 'Good to know', title: 'Good to know', icon: 'info' as const, panel: <InfoPanel items={page.info} /> },
@@ -146,8 +163,15 @@ export default async function AlbumPage({ params, searchParams }: Params) {
           </section>
         )}
 
+        {albumCards.length > 0 && (
+          <section id="albums" className="scroll-mt-4 space-y-3" aria-label="Albums">
+            <h2 className="text-center font-display text-3xl font-semibold">Albums</h2>
+            <AlbumCards slug={slug} albums={albumCards} />
+          </section>
+        )}
+
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">{album.canView ? 'Album' : 'Your uploads'}</h2>
+          <h2 className="text-lg font-semibold">{album.canView ? 'All photos' : 'Your uploads'}</h2>
           {waiting > 0 && !album.canManage && (
             <p className="rounded-xl bg-brand-light px-4 py-3 text-sm text-brand-dark">
               {waiting === 1 ? 'Your photo is' : `${waiting} of your photos are`} waiting for the hosts. Only you and they can see {waiting === 1 ? 'it' : 'them'} until they add {waiting === 1 ? 'it' : 'them'} to the album.
@@ -155,6 +179,7 @@ export default async function AlbumPage({ params, searchParams }: Params) {
           )}
           <Gallery
             items={items}
+            {...hostTools}
             downloadUrl={`/album/${slug}/api/download`}
             commentsSlug={slug}
             empty={album.canView ? 'No photos yet. Be the first!' : 'Nothing from you yet. Your photos and videos will show here.'}

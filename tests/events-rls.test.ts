@@ -363,6 +363,52 @@ describe.skipIf(!enabled)('events row-level security', () => {
     await as({ userId: ids.cara }, (tx) => tx`UPDATE events.events SET audience = 'invitees' WHERE id = ${shower}`);
   });
 
+  it('keeps albums to hosts until published, and shows only approved photos through them', async () => {
+    const ev = await createEvent(ids.cara!, `albums-${run}`);
+    await as({ userId: ids.cara }, async (tx) => {
+      await tx`INSERT INTO events.members (event_id, user_id, role) VALUES (${ev}, ${ids.mia}, 'invitee')`;
+      await tx`UPDATE events.events SET status = 'published', audience = 'family' WHERE id = ${ev}`;
+    });
+    const [album] = await as({ userId: ids.cara }, (tx) =>
+      tx`INSERT INTO events.albums (event_id, slug, title) VALUES (${ev}, 'ceremony', 'Ceremony') RETURNING id`);
+    const albums = (ctx: Ctx) => as(ctx, (tx) => tx`SELECT id FROM events.albums WHERE event_id = ${ev}`).then((r) => r.length);
+    expect(await albums({ userId: ids.cara })).toBe(1);
+    expect(await albums({ userId: ids.mia })).toBe(0); // not published yet
+    expect(await albums({ userId: ids.fay })).toBe(0);
+    // Only co-hosts and editors make albums.
+    await expect(as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.albums (event_id, slug, title) VALUES (${ev}, 'mine', 'Mine')`))
+      .rejects.toThrow(/row-level security/);
+
+    // A host's photo (approved as it arrives) and an invitee's (waiting) both go in.
+    const [h] = await as({ userId: ids.cara }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(ev, { userId: ids.cara }, { status: 'ready' }))} RETURNING id`);
+    const [p] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(ev, { userId: ids.mia }, { status: 'ready' }))} RETURNING id`);
+    await as({ userId: ids.cara }, (tx) => tx`
+      INSERT INTO events.album_items (album_id, upload_id, event_id) VALUES (${album!.id}, ${h!.id}, ${ev}), (${album!.id}, ${p!.id}, ${ev})`);
+    await expect(as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.album_items (album_id, upload_id, event_id) VALUES (${album!.id}, ${p!.id}, ${ev})`))
+      .rejects.toThrow(/row-level security|duplicate key/);
+    // A photo from another event can't be put in this event's album.
+    const [x] = await as({ userId: ids.cara }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(other, { userId: ids.cara }, { status: 'ready' }))} RETURNING id`);
+    await expect(as({ userId: ids.cara }, (tx) => tx`INSERT INTO events.album_items (album_id, upload_id, event_id) VALUES (${album!.id}, ${x!.id}, ${ev})`))
+      .rejects.toThrow(/foreign key/);
+
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.albums SET published_at = now() WHERE id = ${album!.id}`);
+    expect(await albums({ userId: ids.mia })).toBe(1);
+    expect(await albums({ userId: ids.fay })).toBe(1); // family audience
+    expect(await albums({ userId: ids.otto })).toBe(0); // not family
+    // What shows through an album is still up to the uploads policy.
+    const photos = (ctx: Ctx) => as(ctx, (tx) => tx`
+      SELECT u.id FROM events.album_items i JOIN events.uploads u ON u.id = i.upload_id WHERE i.album_id = ${album!.id}`).then((r) => r.map((x) => x.id).sort());
+    expect(await photos({ userId: ids.cara })).toEqual([h!.id, p!.id].sort());
+    expect(await photos({ userId: ids.mia })).toEqual([h!.id, p!.id].sort()); // her own, waiting
+    expect(await photos({ userId: ids.fay })).toEqual([h!.id]); // the waiting one doesn't show
+    // Nobody but a host takes photos out.
+    await as({ userId: ids.mia }, (tx) => tx`DELETE FROM events.album_items WHERE album_id = ${album!.id}`);
+    expect((await photos({ userId: ids.cara })).length).toBe(2);
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.albums SET published_at = NULL WHERE id = ${album!.id}`);
+    expect(await albums({ userId: ids.fay })).toBe(0);
+    expect((await photos({ userId: ids.fay })).length).toBe(0);
+  });
+
   it('cleans up only unfinished uploads past the grace period', async () => {
     const [stale] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }))} RETURNING id`);
     const [fresh] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }))} RETURNING id`);

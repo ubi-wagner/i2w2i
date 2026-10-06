@@ -73,11 +73,18 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
 - **Uploads must survive interruption**: keep the multipart/resume path and
   the IndexedDB queue working; `e2e/suites/uploads.mjs` is the contract.
 - **Uploads are reviewed (migration 008):** nobody but the uploader and the
-  hosts (owners/helpers) sees an upload until a host approves it; hosts' own
+  hosts (co-hosts/editors) sees an upload until a host approves it; hosts' own
   uploads are approved automatically. An approval covers the exact bytes the
   host saw: it's only possible once every upload link for it has expired
   (`writable_until`), and the uploader can't change an approved upload. Never
   serve an upload to others without going through the uploads RLS policy.
+- **Albums (migration 011)** are hosts' picks from the approved photos, drafts
+  until published. Album pages read photos through the uploads policy like
+  everything else; an album never shows a waiting or hidden photo.
+- **Manage is tabs** (`app/events/[id]/(manage)/`): each tab gets the event
+  from `loadManage()`; actions revalidate with `'layout'`. Screens call the
+  roles Co-host / Editor / Viewer (`ROLE_LABEL`); the database keeps
+  owner / curator / invitee.
 - **Guests are told** on the join form that name, device and network details
   are recorded. Keep that notice if you change the form.
 

@@ -9,7 +9,7 @@ const beaCreds = await invite(host, `Bea Bridesmaid ${RUN}`, `bea-${RUN}`, 'memb
 const ev = await createEvent(host, `Cassie's Shower ${RUN}`, slug);
 await addToEvent(host, ev, `Bea Bridesmaid ${RUN} (bea-${RUN})`);
 await createCode(host, ev, 'cb-1106', { label: 'Shower guests' });
-await host.goto(ev.manage);
+await host.goto(`${ev.manage}/qr`);
 check(await host.getByText('CB1106', { exact: true }).isVisible(), 'owner sees the typed code again (stored encrypted)');
 const qrLink = await host.locator('li', { hasText: 'CB1106' }).locator('input[readonly]').inputValue();
 check(/\/album\/[a-z0-9-]+\?t=[A-Za-z0-9_-]{43}$/.test(qrLink), 'QR link is shown to copy');
@@ -64,11 +64,13 @@ await bea.getByText('Thanks Bea!').waitFor({ timeout: 10000 });
 check(true, 'group chat delivers both ways within seconds');
 
 // The host's view of who did what
-await host.goto(ev.manage);
+await host.goto(`${ev.manage}/people`);
 const guests = host.locator('section', { has: host.getByRole('heading', { name: /^Guests/ }) });
 check(await guests.getByText(/Same device also used: (Gina|Mystery Guest)/).first().isVisible(), 'host is warned that one phone used two names');
+await host.goto(`${ev.manage}/activity`);
 const activity = host.locator('section', { has: host.getByRole('heading', { name: 'Activity' }) });
 check(await activity.getByText('tried a wrong code (“WRONG1”)').isVisible(), 'activity shows the failed code and what was typed');
+await host.goto(`${ev.manage}/photos`);
 const dialog = host.getByRole('dialog');
 let details = '';
 for (let i = 0; i < (await host.getByRole('button', { name: 'Open photo from Gina' }).count()); i++) {

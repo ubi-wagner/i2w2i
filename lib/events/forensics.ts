@@ -108,6 +108,17 @@ const ACTION_LABEL: Record<string, string> = {
   'upload.unfeature': 'unstarred an upload',
   'upload.delete': 'deleted an upload',
   'chat.post': 'posted in chat',
+  'upload.approve': 'approved an upload',
+  'member.invite': 'added someone new',
+  'member.add': 'added someone to the event',
+  'member.role': 'changed someone’s role',
+  'member.remove': 'took someone off the event',
+  'album.create': 'made an album',
+  'album.publish': 'published an album',
+  'album.unpublish': 'unpublished an album',
+  'album.delete': 'deleted an album',
+  'album.add': 'added photos to an album',
+  'album.remove': 'took photos out of an album',
 };
 
 export function describeAction(r: ActivityRow): string {

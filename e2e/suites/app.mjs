@@ -82,7 +82,7 @@ const hostMsgs = await waitFor((m) => m.path === `/push/host-${RUN}`);
 check(hostMsgs.length === 1, 'two guest photos → one notification to the host (batched)');
 const msg = hostMsgs[0] ? hostPhone.read(hostMsgs[0]) : {};
 check(msg.title === `Notify ${RUN}` && msg.body === '2 new photos are waiting for your OK.', `it says how many are waiting (“${msg.body}”)`);
-check(msg.url === `/events/${ev.id}#review` && msg.tag === `review-${ev.id}`, 'tapping it opens the review queue; later ones replace it');
+check(msg.url === `/events/${ev.id}/photos` && msg.tag === `review-${ev.id}`, 'tapping it opens the review queue (the Photos tab); later ones replace it');
 check(/^vapid t=.+, k=.+/.test(hostMsgs[0]?.headers.authorization ?? '') && hostMsgs[0]?.headers['content-encoding'] === 'aes128gcm', 'it’s signed (VAPID) and encrypted end to end');
 check(received.every((m) => !m.path.startsWith(`/push/nora-${RUN}`)), 'guests on the event (not hosts) get no review notifications');
 const [{ n: deadLeft }] = await db`SELECT count(*)::int AS n FROM core.push_subscriptions WHERE endpoint = ${deadPhone.sub.endpoint}`;

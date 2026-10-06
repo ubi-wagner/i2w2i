@@ -151,7 +151,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       photo: u.kind === 'photo' ? await readPhotoMeta(u.original_key) : null,
     },
   });
-  // Hosts' and helpers' own uploads need no review; anyone else's waits for them.
+  // Co-hosts' and editors' own uploads need no review; anyone else's waits for them.
   if (!album.canManage) queueReviewNotice(album.event.id);
   return json({ ok: true, complete: true });
 }

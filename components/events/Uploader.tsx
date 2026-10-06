@@ -83,6 +83,8 @@ export function Uploader({ slug, name, reviewed = false }: { slug: string; name:
   const itemsRef = useRef<Item[]>([]);
   itemsRef.current = items;
   const running = useRef(new Map<string, AbortController>());
+  // Bumped when a transfer ends, so the queue looks again once its slot is really free.
+  const [freed, setFreed] = useState(0);
   const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
   const base = `/album/${slug}/api/uploads`;
 
@@ -221,7 +223,10 @@ export function Uploader({ slug, name, reviewed = false }: { slug: string; name:
           else if (err instanceof HttpError && err.status < 500 && err.status !== 409 && err.status !== 429) update(item.key, { status: 'failed', note: err.message });
           else update(item.key, { status: 'paused', note: 'Upload paused. Tap Resume, or it will continue when the connection is back.' });
         })
-        .finally(() => running.current.delete(item.key));
+        .finally(() => {
+          running.current.delete(item.key);
+          setFreed((n) => n + 1);
+        });
     },
     [process, update],
   );
@@ -231,7 +236,7 @@ export function Uploader({ slug, name, reviewed = false }: { slug: string; name:
     const active = items.filter((i) => running.current.has(i.key)).length;
     const next = items.filter((i) => i.status === 'queued' && !running.current.has(i.key)).slice(0, Math.max(0, CONCURRENCY - active));
     for (const item of next) runItem(item);
-  }, [items, runItem]);
+  }, [items, runItem, freed]);
 
   const resumeAll = useCallback(() => {
     setItems((xs) => xs.map((x) => (x.status === 'paused' && x.file ? { ...x, status: 'queued', note: 'Resuming…' } : x)));

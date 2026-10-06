@@ -72,6 +72,10 @@ export interface GalleryItem {
   pending: boolean;
   /** Pending and still changeable by its uploader: minutes until a host can approve it. */
   reviewInMinutes: number;
+  /** Pending: when a host can approve it (counted down on the page), or null if now. */
+  reviewableAt: string | null;
+  /** Hosts filing photos: the albums it's in. */
+  albums?: string[];
   /** Managers only: who/what/where for this upload. */
   details?: { label: string; value: string; href?: string }[];
 }
@@ -123,6 +127,7 @@ export async function toGallery(rows: UploadRow[], ctx: EventCtx, opts: { origin
         overlay: u.overlay,
         pending: u.approved_at === null,
         reviewInMinutes: u.approved_at === null ? minutesUntilReviewable(u.writable_until) : 0,
+        reviewableAt: u.approved_at === null && u.writable_until && u.writable_until.getTime() > Date.now() ? u.writable_until.toISOString() : null,
       };
     }),
   );

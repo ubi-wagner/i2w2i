@@ -9,17 +9,33 @@ import type { Overlay } from '@/lib/events/overlay';
 
 const framed = (o: Record<string, unknown> | null | undefined) => typeof o?.frame === 'string' && o.frame !== 'none';
 
+type Result = { error?: string; message?: string; id?: string };
+
+/** Hosts and editors: the event's albums, and filing photos into them. */
+export interface AlbumTools {
+  eventId: string;
+  list: { id: string; title: string; published: boolean }[];
+  /** Approve a waiting photo and post it into albums, in one go. */
+  approveInto: (input: { eventId: string; uploadId: string; albumIds: string[] }) => Promise<Result>;
+  fileInto: (input: { eventId: string; albumId: string; uploadIds: string[]; add: boolean }) => Promise<Result>;
+  create: (input: { eventId: string; title: string }) => Promise<Result>;
+  /** On one album's page: "Take out of this album" and "Use as cover". */
+  current?: { id: string; title: string; setCover: (input: { eventId: string; albumId: string; uploadId: string }) => Promise<Result> };
+}
+
 interface Props {
   items: GalleryItem[];
   empty: string;
   /** Enables Select + "Download selected" (a zip, streamed by the server). */
   downloadUrl?: string;
-  /** Owners/curators: hide, star, delete, one at a time or in bulk. */
+  /** Owners/curators: approve, hide, star, delete, one at a time or in bulk. */
   moderation?: {
     eventId: string;
     action: (form: FormData) => Promise<void>;
     bulkAction?: (form: FormData) => Promise<void>;
   };
+  /** Owners/curators: post photos into the event's albums. */
+  albums?: AlbumTools;
   /** Album slug: shows comments in the lightbox. */
   commentsSlug?: string;
   /** Items leave this list once approved (the review queue): stay put after approving. */
@@ -30,7 +46,21 @@ function dayLabel(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, reviewQueue = false }: Props) {
+/** The time, ticking every few seconds (for "can be approved in…"). */
+function useNow(every = 5_000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), every);
+    return () => clearInterval(t);
+  }, [every]);
+  return now;
+}
+
+/** Milliseconds until a waiting item can be approved (0: now). */
+const waitMs = (it: GalleryItem, now: number) => (it.reviewableAt ? Math.max(0, new Date(it.reviewableAt).getTime() - now) : 0);
+const clockLeft = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.ceil((ms % 60_000) / 1000) % 60).padStart(2, '0')}`;
+
+export function Gallery({ items, empty, downloadUrl, moderation, albums, commentsSlug, reviewQueue = false }: Props) {
   const [open, setOpen] = useState<number | null>(null);
   // The list can shrink under an open photo (approved out of the review queue, deleted).
   useEffect(() => {
@@ -39,17 +69,28 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, r
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<Result>({});
   const downloadForm = useRef<HTMLFormElement>(null);
+  const now = useNow();
   const item = open === null ? null : items[open];
+
+  // Albums chosen for each waiting photo before it's approved.
+  const [chosen, setChosen] = useState<Record<string, string[]>>({});
+  // Album changes show at once; the next page load confirms them.
+  const [inAlbums, setInAlbums] = useState<Record<string, string[]>>({});
+  useEffect(() => setInAlbums({}), [items]);
+  const albumsOf = (it: GalleryItem) => inAlbums[it.id] ?? it.albums ?? [];
 
   // Forget selections of items that went away (deleted, hidden elsewhere).
   useEffect(() => {
     setSelected((s) => new Set([...s].filter((id) => items.some((i) => i.id === id))));
   }, [items]);
+  useEffect(() => setNote({}), [open]);
 
   useEffect(() => {
     if (open === null) return;
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
       if (e.key === 'Escape') setOpen(null);
       if (e.key === 'ArrowRight') setOpen((i) => (i === null ? i : Math.min(items.length - 1, i + 1)));
       if (e.key === 'ArrowLeft') setOpen((i) => (i === null ? i : Math.max(0, i - 1)));
@@ -71,7 +112,15 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, r
 
   const people = useMemo(() => [...new Set(items.map((i) => i.uploaderName))].sort(), [items]);
 
-  if (!items.length) return <p className="text-stone-600">{empty}</p>;
+  // A list emptied by the last action (all filed, all approved) still says what happened.
+  if (!items.length) {
+    return (
+      <div className="space-y-1">
+        {note.message && <p className="text-sm text-green-800" role="status">{note.message}</p>}
+        <p className="text-stone-600">{empty}</p>
+      </div>
+    );
+  }
 
   const canSelect = Boolean(downloadUrl || moderation?.bulkAction);
   const toggle = (id: string) =>
@@ -108,10 +157,56 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, r
     }
   }
 
+  async function bulkFile(albumId: string, add: boolean) {
+    if (!albums || !albumId || !selected.size) return;
+    setBusy(true);
+    try {
+      setNote(await albums.fileInto({ eventId: albums.eventId, albumId, uploadIds: [...selected], add }));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** A new album from the photo view, ready to post into. */
+  async function newAlbum(): Promise<string | null> {
+    if (!albums) return null;
+    const title = prompt('Name the new album (for example “Ceremony”):')?.trim();
+    if (!title) return null;
+    const r = await albums.create({ eventId: albums.eventId, title });
+    setNote(r);
+    return r.id ?? null;
+  }
+
+  async function toggleAlbum(it: GalleryItem, albumId: string) {
+    if (!albums) return;
+    const has = albumsOf(it).includes(albumId);
+    setInAlbums((m) => ({ ...m, [it.id]: has ? albumsOf(it).filter((a) => a !== albumId) : [...albumsOf(it), albumId] }));
+    const r = await albums.fileInto({ eventId: albums.eventId, albumId, uploadIds: [it.id], add: !has });
+    setNote(r.error ? r : { message: has ? 'Taken out of the album.' : 'Posted to the album.' });
+  }
+
+  async function approve(it: GalleryItem) {
+    if (!albums) return;
+    setBusy(true);
+    try {
+      const r = await albums.approveInto({ eventId: albums.eventId, uploadId: it.id, albumIds: chosen[it.id] ?? [] });
+      setNote(r);
+      if (r.error) return;
+      // On to the next one, for quick review. In the review queue the approved
+      // one leaves the list, so the next one slides into this place.
+      if (!reviewQueue && open !== null && open < items.length - 1) setOpen(open + 1);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const listed = albums?.list ?? [];
+  const albumName = (id: string) => listed.find((a) => a.id === id)?.title ?? 'Album';
+
   return (
     <div className="space-y-3">
       {canSelect && (
-        <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-xl bg-stone-50/95 p-1 text-sm backdrop-blur">
+        <div className="sticky top-12 z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-xl bg-stone-50/95 p-1 text-sm backdrop-blur">
           {!selecting ? (
             <button type="button" className="btn-secondary py-1" onClick={() => setSelecting(true)}>Select</button>
           ) : (
@@ -145,9 +240,26 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, r
                   <button type="button" className="btn-secondary py-1 text-red-700" disabled={busy || !selected.size} onClick={() => bulk('delete')}>Delete</button>
                 </>
               )}
+              {albums && listed.length > 0 && (
+                <select
+                  className="rounded-lg border border-stone-300 bg-white px-2 py-1"
+                  value=""
+                  disabled={busy || !selected.size}
+                  aria-label="Add the selected to an album"
+                  onChange={(e) => void bulkFile(e.target.value, true)}
+                >
+                  <option value="">Add to album…</option>
+                  {listed.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+                </select>
+              )}
+              {albums?.current && (
+                <button type="button" className="btn-secondary py-1" disabled={busy || !selected.size} onClick={() => void bulkFile(albums.current!.id, false)}>Take out of this album</button>
+              )}
               <button type="button" className="ml-auto px-2 py-1 text-stone-600 underline" onClick={() => { setSelecting(false); setSelected(new Set()); }}>Done</button>
             </>
           )}
+          {note.error && !item && <span className="w-full text-red-700" role="alert">{note.error}</span>}
+          {note.message && !item && <span className="w-full text-green-800" role="status">{note.message}</span>}
           {downloadUrl && (
             <form ref={downloadForm} method="post" action={downloadUrl} className="hidden">
               {[...selected].map((id) => <input key={id} type="hidden" name="id" value={id} />)}
@@ -171,6 +283,7 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, r
           <ul className="grid grid-cols-3 gap-1 sm:grid-cols-4 sm:gap-2 lg:grid-cols-5">
             {g.items.map(({ item: it, index: i }) => {
               const isSel = selected.has(it.id);
+              const wait = waitMs(it, now);
               return (
                 <li key={it.id} className={`relative ${it.hidden ? 'opacity-40' : ''}`}>
                   <button
@@ -210,7 +323,7 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, r
                   {it.hidden && !selecting && <span className="absolute right-1 top-1 rounded bg-stone-800 px-1 text-xs text-white">Hidden</span>}
                   {it.pending && (
                     <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-amber-400 px-1 text-xs font-medium text-amber-950">
-                      {moderation ? (it.reviewInMinutes ? `OK in ${it.reviewInMinutes} min` : 'Needs OK') : 'Waiting'}
+                      {moderation ? (wait ? `OK in ${Math.ceil(wait / 60_000)} min` : 'Needs OK') : 'Waiting'}
                     </span>
                   )}
                   {it.comments > 0 && !selecting && (
@@ -228,6 +341,7 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, r
           <div className="flex shrink-0 items-center justify-between gap-2 px-3 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] text-sm">
             <span className="truncate">
               {item.uploaderName} · {new Date(item.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+              {open !== null && <span className="text-stone-400"> · {open + 1} of {items.length}</span>}
             </span>
             <button type="button" onClick={() => setOpen(null)} className="rounded px-3 py-1 text-lg" aria-label="Close">✕</button>
           </div>
@@ -239,9 +353,51 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, r
               <FramedVideo src={item.src} poster={item.poster} overlay={item.overlay as Overlay | null} className="max-h-[60vh] max-w-full" />
             )}
           </div>
-          <div className="max-h-[45vh] shrink-0 space-y-2 overflow-y-auto pb-[env(safe-area-inset-bottom)] pt-2">
+          <div className="max-h-[50vh] shrink-0 space-y-2 overflow-y-auto pb-[env(safe-area-inset-bottom)] pt-2">
             {/* A framed caption is already drawn on the picture. */}
             {item.caption && !item.overlay?.caption && <p className="px-4 text-center">{item.caption}</p>}
+
+            {moderation && item.pending && !item.hidden && (
+              <ReviewPanel
+                item={item}
+                wait={waitMs(item, now)}
+                albums={albums}
+                chosen={chosen[item.id] ?? []}
+                setChosen={(ids) => setChosen((c) => ({ ...c, [item.id]: ids }))}
+                newAlbum={newAlbum}
+                busy={busy}
+                onApprove={() => void approve(item)}
+              />
+            )}
+            {albums && !item.pending && listed.length > 0 && (
+              <div className="mx-auto w-full max-w-xl px-4 text-sm" role="group" aria-label="Albums">
+                <p className="mb-1 text-center text-stone-300">In albums (tap to add or take out)</p>
+                <div className="flex flex-wrap justify-center gap-1.5">
+                  {listed.map((a) => {
+                    const on = albumsOf(item).includes(a.id);
+                    return (
+                      <button key={a.id} type="button" aria-pressed={on} onClick={() => void toggleAlbum(item, a.id)}
+                        className={`rounded-full border px-3 py-1 ${on ? 'border-green-400 bg-green-600 text-white' : 'border-white/40 text-white'}`}>
+                        {on ? '✓ ' : '+ '}{a.title}{a.published ? '' : ' (draft)'}
+                      </button>
+                    );
+                  })}
+                  <button type="button" className="rounded-full border border-dashed border-white/40 px-3 py-1 text-white"
+                    onClick={async () => { const id = await newAlbum(); if (id) await albums.fileInto({ eventId: albums.eventId, albumId: id, uploadIds: [item.id], add: true }); }}>
+                    + New album
+                  </button>
+                </div>
+              </div>
+            )}
+            {albums && !item.pending && listed.length === 0 && (
+              <p className="px-4 text-center text-sm text-stone-300">
+                <button type="button" className="underline" onClick={async () => { const id = await newAlbum(); if (id) await albums.fileInto({ eventId: albums.eventId, albumId: id, uploadIds: [item.id], add: true }); }}>Make an album</button> to post this to.
+              </p>
+            )}
+            {(note.error || note.message) && (
+              <p className={`px-4 text-center text-sm ${note.error ? 'text-red-300' : 'text-green-300'}`} role={note.error ? 'alert' : 'status'}>{note.error ?? note.message}</p>
+            )}
+
             {item.details && item.details.length > 0 && (
               <details className="mx-auto w-full max-w-xl px-4 text-sm">
                 <summary className="cursor-pointer text-center text-stone-300">Details</summary>
@@ -262,36 +418,19 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, r
             <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 px-3 pb-3 text-sm">
               <button type="button" disabled={open === 0} onClick={() => setOpen((i) => (i ?? 1) - 1)} className="px-2 py-1 disabled:opacity-30">← Prev</button>
               {item.originalUrl && <a href={item.originalUrl} className="underline">Download original</a>}
+              {albums?.current && !item.pending && (
+                <>
+                  <button type="button" className="underline" onClick={async () => setNote(await albums.current!.setCover({ eventId: albums.eventId, albumId: albums.current!.id, uploadId: item.id }))}>Use as album cover</button>
+                  <button type="button" className="underline" onClick={async () => { setNote(await albums.fileInto({ eventId: albums.eventId, albumId: albums.current!.id, uploadIds: [item.id], add: false })); }}>Take out of this album</button>
+                </>
+              )}
               {moderation && (
                 <>
-                  {item.pending && item.reviewInMinutes > 0 && (
-                    <span className="text-amber-300">Can be approved in {item.reviewInMinutes} min</span>
-                  )}
-                  {[
-                    ...(item.pending && !item.reviewInMinutes ? [['approve', 'Approve ✓']] : []),
-                    [item.hidden ? 'show' : 'hide', item.hidden ? 'Show' : 'Hide'],
-                    [item.featured ? 'unfeature' : 'feature', item.featured ? 'Unstar' : 'Star'],
-                    ['delete', 'Delete'],
-                  ].map(([action, label]) => (
-                    <form
-                      key={action}
-                      action={async (f) => {
-                        if (action === 'delete' && !confirm('Delete this for good?')) return;
-                        await moderation.action(f);
-                        // Approving moves on to the next one, for quick review. In the
-                        // review queue the approved one leaves the list, so the next
-                        // one slides into this place.
-                        if (action === 'approve' && reviewQueue) return;
-                        if (action === 'approve' && open !== null && open < items.length - 1) setOpen(open + 1);
-                        else setOpen(null);
-                      }}
-                    >
-                      <input type="hidden" hidden name="event_id" value={moderation.eventId} />
-                      <input type="hidden" hidden name="upload_id" value={item.id} />
-                      <input type="hidden" hidden name="action" value={action} />
-                      <button className={action === 'delete' ? 'text-red-300 underline' : action === 'approve' ? 'rounded-full bg-green-600 px-3 py-1 font-medium text-white' : 'underline'}>{label}</button>
-                    </form>
-                  ))}
+                  {/* Without album tools, waiting photos are approved here. */}
+                  {!albums && item.pending && !waitMs(item, now) && <ModForm moderation={moderation} id={item.id} action="approve" label="Approve ✓" onDone={() => { if (!reviewQueue && open !== null && open < items.length - 1) setOpen(open + 1); }} />}
+                  <ModForm moderation={moderation} id={item.id} action={item.hidden ? 'show' : 'hide'} label={item.hidden ? 'Show' : 'Hide'} />
+                  <ModForm moderation={moderation} id={item.id} action={item.featured ? 'unfeature' : 'feature'} label={item.featured ? 'Unstar' : 'Star'} />
+                  <ModForm moderation={moderation} id={item.id} action="delete" label="Delete" />
                 </>
               )}
               <button type="button" disabled={open === items.length - 1} onClick={() => setOpen((i) => (i ?? 0) + 1)} className="px-2 py-1 disabled:opacity-30">Next →</button>
@@ -300,5 +439,69 @@ export function Gallery({ items, empty, downloadUrl, moderation, commentsSlug, r
         </FullScreen>
       )}
     </div>
+  );
+}
+
+/** One moderation button (hide, star, delete…) for the photo being viewed; the view stays open. */
+function ModForm({ moderation, id, action, label, onDone }: { moderation: NonNullable<Props['moderation']>; id: string; action: string; label: string; onDone?: () => void }) {
+  return (
+    <form
+      action={async (f) => {
+        if (action === 'delete' && !confirm('Delete this for good?')) return;
+        await moderation.action(f);
+        onDone?.();
+      }}
+    >
+      <input type="hidden" hidden name="event_id" value={moderation.eventId} />
+      <input type="hidden" hidden name="upload_id" value={id} />
+      <input type="hidden" hidden name="action" value={action} />
+      <button className={action === 'delete' ? 'text-red-300 underline' : action === 'approve' ? 'rounded-full bg-green-600 px-3 py-1 font-medium text-white' : 'underline'}>{label}</button>
+    </form>
+  );
+}
+
+/**
+ * A photo waiting for a host's OK, in the photo view: pick the albums it
+ * goes in, then approve. Hiding or deleting it is below with the others.
+ */
+function ReviewPanel({ item, wait, albums, chosen, setChosen, newAlbum, busy, onApprove }: {
+  item: GalleryItem; wait: number; albums?: AlbumTools; chosen: string[]; setChosen: (ids: string[]) => void;
+  newAlbum: () => Promise<string | null>; busy: boolean; onApprove: () => void;
+}) {
+  void item;
+  return (
+    <section aria-label="Waiting for your OK" className="mx-auto w-full max-w-xl space-y-2 rounded-xl border border-amber-300/60 bg-amber-400/15 px-4 py-3 text-sm">
+      <p className="text-center font-medium text-amber-200">
+        Waiting for your OK{wait ? `: can be approved in ${clockLeft(wait)} (the guest’s phone may still be finishing it)` : ''}
+      </p>
+      {albums && (
+        <div className="space-y-1">
+          <p className="text-center text-stone-300">{albums.list.length ? 'Post it to (optional):' : 'Albums let guests browse by part of the day.'}</p>
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {albums.list.map((a) => {
+              const on = chosen.includes(a.id);
+              return (
+                <button key={a.id} type="button" aria-pressed={on} onClick={() => setChosen(on ? chosen.filter((x) => x !== a.id) : [...chosen, a.id])}
+                  className={`rounded-full border px-3 py-1 ${on ? 'border-green-400 bg-green-600 text-white' : 'border-white/40 text-white'}`}>
+                  {on ? '✓ ' : ''}{a.title}
+                </button>
+              );
+            })}
+            <button type="button" className="rounded-full border border-dashed border-white/40 px-3 py-1 text-white"
+              onClick={async () => { const id = await newAlbum(); if (id) setChosen([...chosen, id]); }}>
+              + New album
+            </button>
+          </div>
+        </div>
+      )}
+      {albums && (
+        <div className="text-center">
+          <button type="button" disabled={busy || wait > 0} onClick={onApprove}
+            className="rounded-full bg-green-600 px-5 py-2 font-semibold text-white disabled:opacity-40">
+            {chosen.length ? `Approve & post to ${chosen.length === 1 ? 'the album' : `${chosen.length} albums`}` : 'Approve ✓'}
+          </button>
+        </div>
+      )}
+    </section>
   );
 }

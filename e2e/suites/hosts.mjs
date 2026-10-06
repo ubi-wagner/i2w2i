@@ -28,7 +28,7 @@ await ninaPage.goto(BASE + '/events');
 check(await ninaPage.getByText(`Hosted ${RUN}`).isVisible(), '…and sees the event under Events');
 
 // Typing an existing username never adds (or takes over) that account
-await holly.goto(ev.manage);
+await holly.goto(`${ev.manage}/people`);
 await form.getByLabel('Name', { exact: true }).fill('Fred');
 await form.getByLabel('Username', { exact: true }).fill(`fred-${RUN}`);
 await form.getByRole('button', { name: 'Add to this event' }).click();
@@ -40,7 +40,7 @@ await fred.goto(BASE + '/events');
 check(await fred.getByText(`Hosted ${RUN}`).isVisible(), 'an existing account added from the list now sees the event');
 
 // Resets: Holly can for Nina, not for Fred or the admin
-await holly.goto(ev.manage);
+await holly.goto(`${ev.manage}/people`);
 const ninaRow = holly.locator('li', { hasText: `nina-${RUN}` });
 const fredRow = holly.locator('li', { hasText: `fred-${RUN}` });
 check(await ninaRow.getByRole('button', { name: 'Reset password' }).isVisible(), 'a host can reset the password of people they added');
@@ -84,6 +84,8 @@ check(fredNew.username === `fred-${RUN}`, 'the admin can reset anyone’s passwo
 // Album card for sharing a public album
 await holly.goto(ev.manage);
 check(await holly.getByRole('button', { name: 'Copy album link' }).isVisible(), 'manage page has a copyable album link');
+await holly.getByRole('navigation', { name: 'Manage' }).getByRole('link', { name: 'QR & posters' }).click();
+await holly.waitForURL(`${ev.manage}/qr`);
 await holly.getByRole('link', { name: 'Album card' }).click();
 await holly.waitForURL(/\/card$/);
 check(await holly.getByText('See the photos').isVisible() && (await holly.locator('svg').count()) > 0, 'album card shows a QR for the album link');
@@ -99,14 +101,24 @@ const sasha = await acceptInvite(sashaCreds);
 await sasha.goto(`${BASE}/album/${ev.slug}`);
 await sasha.getByRole('link', { name: 'Manage' }).click();
 await sasha.waitForURL(ev.manage);
+await sasha.getByRole('navigation', { name: 'Manage' }).getByRole('link', { name: 'People' }).click();
+await sasha.waitForURL(`${ev.manage}/people`);
 check(await sasha.getByText('Add someone new').isVisible(), 'a co-host can open the manage page and add people');
-// …and change someone's role: Fred becomes a helper
+// …and change someone's role: Fred becomes an editor. Picking it saves it,
+// says so, and the list keeps showing what was saved (it used to snap back).
 const fredOnSasha = sasha.locator('li', { hasText: `fred-${RUN}` });
+const fredRoleNow = async () => (await db`SELECT m.role FROM events.members m JOIN core.users u ON u.id = m.user_id WHERE m.event_id = ${ev.id} AND u.username = ${`fred-${RUN}`}`)[0]?.role;
 await fredOnSasha.getByLabel(/role$/).selectOption('curator');
-await fredOnSasha.getByRole('button', { name: 'Save' }).click();
-await sasha.waitForLoadState('networkidle');
-const [fredRole] = await db`SELECT m.role FROM events.members m JOIN core.users u ON u.id = m.user_id WHERE m.event_id = ${ev.id} AND u.username = ${`fred-${RUN}`}`;
-check(fredRole?.role === 'curator', 'a co-host can change someone’s role on the event');
+await fredOnSasha.getByText('Saved: now an editor.').waitFor();
+check(await fredRoleNow() === 'curator' && await fredOnSasha.getByLabel(/role$/).inputValue() === 'curator',
+  'a co-host changes someone’s role by picking it: it saves, says so, and still shows the new role');
+await sasha.reload();
+check(await sasha.locator('li', { hasText: `fred-${RUN}` }).getByLabel(/role$/).inputValue() === 'curator', '…and after a reload');
+await sasha.locator('li', { hasText: `fred-${RUN}` }).getByLabel(/role$/).selectOption('invitee');
+await sasha.locator('li', { hasText: `fred-${RUN}` }).getByText('Saved: now a viewer.').waitFor();
+await sasha.locator('li', { hasText: `fred-${RUN}` }).getByLabel(/role$/).selectOption('curator');
+await sasha.locator('li', { hasText: `fred-${RUN}` }).getByText('Saved: now an editor.').waitFor();
+check(await fredRoleNow() === 'curator', '…and again and again, each change sticking');
 // …and, though only a family-member account, reset people she added (a lost password)
 await hostInvite(sasha, ev, `Pia ${RUN}`, `pia-${RUN}`);
 await sasha.reload();

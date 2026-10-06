@@ -20,8 +20,12 @@ export default function StartHelp() {
           <p>You land on the event’s album. You stay signed in on this phone, so you won’t need the password again here.</p>
           <p className="text-base text-stone-600">Want a password you’ll remember? Change it on your <Link href="/account" className="text-brand underline">account page</Link> (tap your name at the top).</p>
         </Step>
-        <Step n={3} title="Look, and add your own" shots={[{ src: 'start-photo.webp', alt: 'A photo open full screen with Next and close buttons' }]}>
+        <Step n={3} title="Look, and add your own" shots={[
+          { src: 'start-photo.webp', alt: 'A photo open full screen with Next and close buttons' },
+          { src: 'start-albums.webp', alt: 'Albums on the event page: Ceremony and Dinner & toasts' },
+        ]}>
           <p>Tap any photo to see it big. Tap <K>Next →</K> for the next one, and <K>✕</K> to go back.</p>
+          <p>If the hosts have made albums (Ceremony, Reception…), tap <K>View albums</K> at the top to look through one part of the day at a time. <b>All photos</b> has everything.</p>
           <p>To add yours, tap <K>Add photos &amp; videos</K> and choose as many as you like. They say <b>Waiting</b> until one of the hosts adds them to the album.</p>
         </Step>
         <Step n={4} title="Coming back later" shots={[{ src: 'start-install.webp', alt: 'The Put i2w2i on your home screen card with the iPhone steps' }]}>

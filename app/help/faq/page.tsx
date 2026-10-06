@@ -47,22 +47,28 @@ export default function FaqHelp() {
       <Section id="hosts" title="For hosts">
         <div className="space-y-3">
           <Question q="Someone forgot their password">
-            <p>Under <b>People on this event</b>, tap <K>Reset password</K> under their name and pass on the new one, just like when you added them. Their old password stops working. You can do this for people you added; Eric can for anyone.</p>
+            <p>On the <b>People</b> tab, tap <K>Reset password</K> under their name and pass on the new one, just like when you added them. Their old password stops working. You can do this for people you added; Eric can for anyone.</p>
+          </Question>
+          <Question q="Someone has the wrong role">
+            <p>On the <b>People</b> tab, pick the right role next to their name (Co-host, Editor or Viewer). It saves straight away and says <b>Saved</b>. Only co-hosts can change roles, and an event always keeps at least one co-host.</p>
           </Question>
           <Question q="Who can approve photos?">
-            <p>Co-hosts, helpers and Eric. Photos that co-hosts and helpers add themselves go straight in.</p>
+            <p>Co-hosts, editors and Eric. Photos that co-hosts and editors add themselves go straight in.</p>
+          </Question>
+          <Question q="Guests can’t see an album I made">
+            <p>It’s still a draft, or nothing in it is approved yet. On the <b>Albums</b> tab, tap <K>Publish</K>. It shows under <K>View albums</K> once it has a photo guests can see.</p>
           </Question>
           <Question q="A photo shouldn’t be in the album">
-            <p>If it’s still waiting, nobody but you and the person who added it has seen it: just tap <K>Delete</K>. If it was already approved, open it in Manage and tap <K>Hide</K>; everyone else stops seeing it right away.</p>
+            <p>If it’s still waiting, nobody but you and the person who added it has seen it: just tap <K>Delete</K>. If it was already approved, open it on the <b>Photos</b> tab (or in the album) and tap <K>Hide</K>; everyone else stops seeing it right away, in every album.</p>
           </Question>
           <Question q="Someone is posting things they shouldn’t">
-            <p>Under <b>Guests</b>, tick <i>hide their uploads</i> and tap <K>Remove</K>. Their name, phone and network are recorded with everything they shared.</p>
+            <p>On the <b>People</b> tab, under <b>Guests</b>, tick <i>hide their uploads</i> and tap <K>Remove</K>. Their name, phone and network are recorded with everything they shared.</p>
           </Question>
           <Question q="The QR cards got out somewhere they shouldn’t">
-            <p>Under <b>Guest codes &amp; QR cards</b>, tap <K>Replace QR</K> and print new cards; the old ones stop working. <K>Turn off typed code</K> does the same for the code typed by hand.</p>
+            <p>On the <b>QR &amp; posters</b> tab, tap <K>Replace QR</K> and print new cards; the old ones stop working. <K>Turn off typed code</K> does the same for the code typed by hand.</p>
           </Question>
           <Question q="Notifications aren’t arriving">
-            <p>On the Manage page, tap <K>Send a test</K>. If nothing comes:</p>
+            <p>On the event’s <b>Overview</b> tab, tap <K>Send a test</K>. If nothing comes:</p>
             <ul className="list-disc space-y-1 pl-5">
               <li><b>iPhone:</b> open i2w2i from its home-screen icon, not from Safari, and turn notifications on there.</li>
               <li>If the page says notifications are blocked, allow them for i2w2i in your phone’s settings, then come back and tap <K>Turn on notifications</K>.</li>

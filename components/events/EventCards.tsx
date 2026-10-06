@@ -14,7 +14,7 @@ interface Row {
 }
 
 const AUDIENCE = { invitees: 'Guests', family: 'Family', public: 'Public' } as const;
-const YOU = { owner: 'You’re a co-host', curator: 'You’re a helper', invitee: 'You’re a guest' } as const;
+const YOU = { owner: 'You’re a co-host', curator: 'You’re an editor', invitee: 'You’re a viewer' } as const;
 
 /**
  * The events someone is on, newest first; the whole card opens the album.
@@ -61,7 +61,7 @@ export async function EventCards({ ctx, empty, limit, shared = false, heading }:
               <div className="flex flex-wrap items-center gap-3">
                 <Link href={`/events/${e.id}`} className="relative z-10 inline-block text-sm font-medium text-brand hover:underline">Manage</Link>
                 {e.to_review > 0 && (
-                  <Link href={`/events/${e.id}#review`} className="relative z-10 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-200">
+                  <Link href={`/events/${e.id}/photos`} className="relative z-10 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-200">
                     {e.to_review} waiting for your OK
                   </Link>
                 )}

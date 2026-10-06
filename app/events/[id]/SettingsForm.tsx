@@ -29,7 +29,7 @@ export function SettingsForm({ event }: Props) {
         <div>
           <label className="label" htmlFor="audience">When published, who can see it?</label>
           <select key={`a-${audience}`} className="input" id="audience" name="audience" defaultValue={audience}>
-            <option value="invitees">Guests &amp; code holders</option>
+            <option value="invitees">People on the event &amp; guest code holders</option>
             <option value="family">Whole family (signed in)</option>
             <option value="public">Anyone with the link</option>
           </select>
