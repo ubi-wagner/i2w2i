@@ -34,6 +34,7 @@ export function LoginForm({ next, onDone }: { next: string; onDone?: () => void 
       </div>
       <ErrorText>{error}</ErrorText>
       <button className="btn w-full" disabled={busy}>Sign in</button>
+      <p className="text-center text-sm text-ink-soft">Forgot your password? Whoever added you can reset it in ⚙ Settings and give you a new one.</p>
     </form>
   );
 }

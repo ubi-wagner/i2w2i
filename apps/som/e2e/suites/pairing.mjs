@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BASE, RUN, TITLES, account, call, check, databaseText, db, finish, login, newPod, phone } from '../lib.mjs';
 
-const { b, r, lead, podId } = await newPod();
+const { b, r, lead, follow, podId } = await newPod();
 check(true, 'the follow sets up a pod and adds the lead; the lead opens the key link and chooses a passphrase');
 
 const secret = new URL(lead.link).hash.match(/k=([^&]+)/)?.[1] ?? '';
@@ -160,6 +160,36 @@ await b.waitForURL(/\/menu#play/);
 await b.locator('dialog[open]').getByLabel('Search ideas').waitFor();
 check(true, '“More ideas” in the builder opens that section’s ideas');
 
-const errors = [...b.errors, ...r.errors, ...r2.errors];
+// ── A forgotten password: whoever added you resets it ───────────────────────
+const r3 = await phone('kay-forgot');
+await r3.goto(`${BASE}/login`);
+await r3.getByText('Forgot your password? Whoever added you can reset it').waitFor();
+check(true, 'the sign-in screen says what to do about a forgotten password');
+await b.goto(`${BASE}/settings`);
+await b.fill('#pod-pass', follow.vault);
+await b.getByRole('button', { name: 'Reset password' }).click();
+await b.getByLabel('Their password').waitFor();
+const fresh = await b.getByLabel('Their password').innerText();
+check(fresh.length >= 8 && fresh !== lead.password && (await b.getByLabel('Their username').innerText()) === lead.username,
+  'Sunny (who added Kay) resets her password and sees the new one to pass on, with Kay’s username');
+check((await call(r3, '/api/login', 'POST', { username: lead.username, password: lead.password })).status !== 200, 'the old password no longer works');
+await r.goto(`${BASE}/`);
+await r.waitForURL(/\/login/);
+check(true, 'Kay is signed out everywhere until she has the new one');
+await login(r, lead.username, fresh);
+await r.getByText(`Hello, ${TITLES.lead}`).waitFor({ timeout: 30000 });
+check(true, 'on her own phone the new password is all she needs: her scenes are still unlocked');
+await login(r3, lead.username, fresh);
+await r3.getByText('Unlock this phone').waitFor();
+await r3.fill('#unlock-pass', lead.vault);
+await r3.getByRole('button', { name: 'Unlock' }).click();
+await r3.getByText(`Hello, ${TITLES.lead}`).waitFor({ timeout: 30000 });
+check(true, 'on another phone, the new password and her same vault passphrase open everything');
+await r.goto(`${BASE}/settings`);
+await r.getByText('Your pod').first().waitFor();
+check((await r.getByRole('button', { name: 'Reset password' }).count()) === 0 && (await r.getByRole('button', { name: 'New key link' }).count()) === 0,
+  'Kay didn’t add Sunny, so she isn’t offered buttons that would only refuse her');
+
+const errors = [...b.errors, ...r.errors, ...r2.errors, ...r3.errors];
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
 await finish();

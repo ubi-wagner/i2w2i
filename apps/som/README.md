@@ -55,9 +55,12 @@ leaves them. The server stores ciphertext and can't read it.
   - **After:** inspection time; the scorecard and rewards ready; time for
     aftercare; a reflection (unless kept private); back to us and closed;
     a request to delete a scene, and the delete.
-- **Forgetting the passphrase.** If one of you forgets it, the other can make
-  you a new key link in Settings. If you both lose every phone *and* both
-  passphrases, the content can't be recovered by anyone, including the admin.
+- **Forgetting the passphrase or the password.** Whoever added you (or an
+  admin) can make you a new key link, or reset your password, in Settings;
+  the sign-in screen says so. Only they see those buttons. A password reset
+  signs you out everywhere and doesn't change your vault passphrase. If you
+  both lose every phone *and* both passphrases, the content can't be
+  recovered by anyone, including the admin.
 - **Saved copies.** "Save to phone" saves a normal, decrypted copy into your
   phone's photos or files. What happens to it there is up to you.
 
