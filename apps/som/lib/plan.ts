@@ -374,8 +374,15 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
   const timed = schedule(next.blocks.map((b) => b.kind));
   next.blocks.forEach((b, i) => {
     for (const s of slotsFor(b.kind, timed[i]?.first ?? false)) {
-      const have = b.items.filter((id) => items.get(id)?.kind === s.kind).length;
-      for (const it of pool(s.kind, s.slot === 'prep', s.slot).slice(0, Math.max(0, s.fill - have))) take(it, b);
+      const mine = b.items.filter((id) => items.get(id)?.kind === s.kind);
+      let picks = pool(s.kind, s.slot === 'prep', s.slot);
+      if (s.perGroup) {
+        // One from each group that has nothing yet: a whole look, around what's already picked.
+        const groupOf = new Map(section(menu, s.kind).groups.flatMap((g) => g.items.map((it) => [it.id, g.id] as const)));
+        const has = new Set(mine.map((id) => groupOf.get(id)));
+        picks = picks.filter((it) => !has.has(groupOf.get(it.id)));
+      } else picks = picks.slice(0, Math.max(0, s.fill - mine.length));
+      for (const it of picks) take(it, b);
     }
   });
   if (!picked(menu, next, 'arrival').length) for (const it of pool('arrival', true).slice(0, 3)) take(it);

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
-import { blocksForWindow, BLOCK_NAME, isWork, slotLabel, slotsFor, type BlockKind, type SlotSpec } from '@/lib/blocks';
+import { blocksForWindow, BLOCK_NAME, isWork, slotHasRoom, slotLabel, slotsFor, type BlockKind, type SlotSpec } from '@/lib/blocks';
 import { newId, proofText, section, type MenuItem, type Proof } from '@/lib/menu';
 import { arrivalChecklist, autoFill, blocksFor, cleanPlan, CHECKIN_CHOICES, pacingFor, pacingOf, picked, placeLoose, planCheckins, planItems, planToTasks, recentlyUsed, tidyPlan, withParam, type Plan, type PlanItem } from '@/lib/plan';
 import { ownsDraft, sceneTransition } from '@/lib/rules';
@@ -427,18 +427,21 @@ function SlotRow({ block, slot, plan, items, edit, editable, onPick }: {
   const here = plan.blocks[block]!.items.map((id) => items.get(id)).filter((x): x is PlanItem => x?.kind === slot.kind);
   const label = slotLabel(slot, lead);
   const short = here.length < slot.min;
+  // Getting ready takes up to so many from each group, so there's always room for one more of something.
+  const room = slot.perGroup ? true : here.length < slot.max;
   return (
     <div className="space-y-1.5 border-t border-line pt-2.5" role="group" aria-label={`Block ${block + 1}: ${label}`}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium">{KIND_ICON[slot.kind]} {label}</span>
-        {slot.max > 1 && <span className={`text-xs ${short ? 'text-warn' : 'text-ink-soft'}`}>{here.length}/{slot.max}</span>}
+        {slot.perGroup ? <span className={`text-xs ${short ? 'text-warn' : 'text-ink-soft'}`}>{here.length} picked</span>
+          : slot.max > 1 && <span className={`text-xs ${short ? 'text-warn' : 'text-ink-soft'}`}>{here.length}/{slot.max}</span>}
       </div>
       {here.length > 0 && (
         <ul className="space-y-1.5">
           {here.map((it) => <Picked key={it.id} item={it} plan={plan} edit={edit} editable={editable} block={block} />)}
         </ul>
       )}
-      {editable && here.length < slot.max && (
+      {editable && room && (
         <button type="button" className={`btn-quiet min-h-9 w-full py-1 text-sm ${short ? 'border-warn/50' : ''}`} onClick={onPick}>
           + {here.length ? 'Another' : slot.slot === 'chores' ? 'Pick two chores' : 'Pick'}
         </button>
@@ -483,7 +486,10 @@ function Picker({ plan, items, block, slot, edit, onDone }: { plan: Plan; items:
   const pod = usePod();
   const sec = section(pod.menu, slot.kind);
   const mine = plan.blocks[block]!.items.filter((id) => items.get(id)?.kind === slot.kind);
-  const full = mine.length >= slot.max;
+  const groupOf = new Map(sec.groups.flatMap((g) => g.items.map((it) => [it.id, g.id] as const)));
+  const inGroup = (gid: string) => mine.filter((id) => groupOf.get(id) === gid).length;
+  // Full: nothing more fits, not even something written for this scene.
+  const full = !slotHasRoom(slot, mine.length, null);
   const where = (id: string) => plan.blocks.findIndex((b) => b.items.includes(id));
   const [writing, setWriting] = useState(false);
   const toggle = (it: MenuItem) => edit((p) => {
@@ -498,17 +504,19 @@ function Picker({ plan, items, block, slot, edit, onDone }: { plan: Plan; items:
   });
   return (
     <div className="space-y-4">
-      <p className="text-sm text-ink-soft" role="status">{mine.length} of {slot.max === slot.min ? slot.max : `up to ${slot.max}`} picked{full ? ': take one out to swap' : ''}.</p>
+      <p className="text-sm text-ink-soft" role="status">
+        {slot.perGroup ? `${mine.length} picked: up to ${slot.perGroup} from each group.` : `${mine.length} of ${slot.max === slot.min ? slot.max : `up to ${slot.max}`} picked${full ? ': take one out to swap' : ''}.`}
+      </p>
       {sec.groups.filter((g) => g.items.length).map((g) => (
-        <div key={g.id} className="space-y-2">
-          <p className="eyebrow text-follow">{g.title}</p>
+        <div key={g.id} className="space-y-2" role="group" aria-label={g.title}>
+          <p className="eyebrow text-follow">{g.title}{slot.perGroup ? ` · ${inGroup(g.id)}/${slot.perGroup}` : ''}</p>
           <div className="flex flex-wrap gap-2">
             {g.items.map((it) => {
               const at = where(it.id);
               const on = at === block;
               const elsewhere = at >= 0 && !on;
               return (
-                <button key={it.id} type="button" className="chip flex-col items-start gap-0.5 text-left" aria-pressed={on} disabled={elsewhere || (full && !on)} title={it.detail} onClick={() => toggle(it)}>
+                <button key={it.id} type="button" className="chip flex-col items-start gap-0.5 text-left" aria-pressed={on} disabled={elsewhere || (!on && !slotHasRoom(slot, mine.length, inGroup(g.id)))} title={it.detail} onClick={() => toggle(it)}>
                   <span>{on ? '✓ ' : ''}{it.label}</span>
                   {(it.needs?.length || elsewhere) && (
                     <span className="text-xs font-normal text-ink-soft">{elsewhere ? `In block ${at + 1}` : it.needs!.map(proofText).join(' · ')}</span>

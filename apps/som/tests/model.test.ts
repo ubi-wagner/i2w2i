@@ -385,7 +385,10 @@ describe('fill it for me', () => {
     const p = autoFill(menu, base, rand);
     const count = (i: number, k: string) => kinds(p, i).filter((x) => x === k).length;
     expect(p.blocks[0]!.items).toContain(shower.id);
-    expect(count(0, 'presentation')).toBe(3);
+    // Getting ready: one from each group that has nothing yet (Shower was picked; Shoes gets one).
+    const shoes = new Set(section(menu, 'presentation').groups.find((g) => g.title === 'Shoes')!.items.map((i) => i.id));
+    expect(count(0, 'presentation')).toBe(2);
+    expect(p.blocks[0]!.items.filter((id) => shoes.has(id))).toHaveLength(1);
     expect([count(0, 'domain'), count(0, 'tasks'), count(0, 'wishes')]).toEqual([2, 1, 1]);
     expect([count(1, 'changeover'), count(1, 'errands'), count(1, 'tasks'), count(1, 'wishes')]).toEqual([1, 2, 1, 1]);
     expect(kinds(p, 2)).toEqual(['play']);

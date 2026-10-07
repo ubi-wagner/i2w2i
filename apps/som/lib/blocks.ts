@@ -29,11 +29,24 @@ export interface SlotSpec {
   max: number;
   fill: number;
   minutes: number;
+  /** At most this many from each group of its section, instead of `max` overall (getting ready: up to 3 of each kind of thing). */
+  perGroup?: number;
 }
 
 const S = (slot: Slot, kind: SectionKind, min: number, max: number, fill: number, minutes: number): SlotSpec => ({ slot, kind, min, max, fill, minutes });
 
 export const BLOCK_MINUTES = 120;
+export const PREP_PER_GROUP = 3;
+
+/**
+ * Whether one more fits a slot: `picked` is how many it has, `inGroup` how
+ * many of those come from the group the new one is in (null for something
+ * written for this scene, which belongs to no group).
+ */
+export function slotHasRoom(s: SlotSpec, picked: number, inGroup: number | null): boolean {
+  if (!s.perGroup) return picked < s.max;
+  return inGroup === null || inGroup < s.perGroup;
+}
 
 /**
  * What a block holds. The first work block starts with a full prep, later
@@ -41,7 +54,8 @@ export const BLOCK_MINUTES = 120;
  * block is two hours.
  */
 export function slotsFor(kind: BlockKind, first: boolean): SlotSpec[] {
-  const ready = first ? S('prep', 'presentation', 1, 6, 3, 30) : S('changeover', 'changeover', 1, 1, 1, 15);
+  // Getting ready: up to 3 from each group (hair, makeup, shoes…); Fill it for me picks one of each, a whole look.
+  const ready = first ? { ...S('prep', 'presentation', 1, Infinity, Infinity, 30), perGroup: PREP_PER_GROUP } : S('changeover', 'changeover', 1, 1, 1, 15);
   const work = BLOCK_MINUTES - ready.minutes - 30;
   const praise = [S('devotion', 'tasks', 1, 1, 1, 15), S('wishes', 'wishes', 1, 1, 1, 15)];
   switch (kind) {

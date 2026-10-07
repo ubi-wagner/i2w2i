@@ -90,6 +90,33 @@ await b.reload();
 const results = await b.getByRole('region', { name: 'Results' }).innerText();
 check(results.includes('A good day.\nThe picnic was perfect.') && results.includes('twenty, slow'), 'Sunny reads the notes as written and the reward as typed');
 
+// ── Getting ready: up to 3 from each group ──────────────────────────────────
+const looks = ['## Presentation: Getting ready', ...['Hair', 'Makeup', 'Shoes'].flatMap((g) => [`### ${g}`, ...[1, 2, 3, 4].map((n) => `- ${g} ${n} [1 photo]`)])].join('\n');
+await b.goto(`${BASE}/menu`);
+await b.getByLabel('Import a menu file').setInputFiles({ name: 'looks.txt', mimeType: 'text/plain', buffer: Buffer.from(looks) });
+await b.getByRole('button', { name: 'Save menu' }).first().click();
+await b.getByText('Saved.').waitFor();
+await b.goto(`${BASE}/`);
+await b.getByRole('button', { name: 'New scene' }).click();
+await b.waitForURL(/\/scene\//);
+const prep = b.getByRole('group', { name: 'Block 1: Getting ready (30 min)' });
+await prep.getByRole('button', { name: /^\+ / }).click();
+const inGroup = (g) => sheet(b).getByRole('group', { name: g, exact: true });
+for (const g of ['Hair', 'Makeup']) for (const n of [1, 2, 3]) await inGroup(g).getByRole('button', { name: new RegExp(`${g} ${n}`) }).click();
+check(await inGroup('Hair').getByRole('button', { name: /Hair 4/ }).isDisabled() && !(await inGroup('Shoes').getByRole('button', { name: /Shoes 1/ }).isDisabled()),
+  'getting ready takes up to 3 from a group: a 4th waits, other groups are still open');
+for (const n of [1, 2]) await inGroup('Shoes').getByRole('button', { name: new RegExp(`Shoes ${n}`) }).click();
+check((await sheet(b).getByRole('status').first().innerText()).includes('8 picked: up to 3 from each group'), '…so far more than six in all (8 here)');
+await sheet(b).getByRole('button', { name: 'Done', exact: true }).click();
+check((await prep.innerText()).includes('8 picked'), '…and the block says how many');
+await b.goto(`${BASE}/`);
+await b.getByRole('button', { name: 'New scene' }).click();
+await b.waitForURL(/\/scene\//);
+await b.getByRole('button', { name: /Fill it for me/ }).click();
+await b.getByText('Saved').waitFor({ timeout: 10000 });
+const filled = await b.getByRole('group', { name: 'Block 1: Getting ready (30 min)' }).innerText();
+check(['Hair', 'Makeup', 'Shoes'].every((g) => (filled.match(new RegExp(`${g} \\d`, 'g')) ?? []).length === 1), 'Fill it for me puts together a whole look: one from each group');
+
 const errors = [...b.errors, ...r.errors];
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
 await finish();

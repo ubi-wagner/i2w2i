@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { blockAt, blockMinutes, blocksForWindow, checkinOffsets, defaultBlocks, nextBlockCheckin, schedule, slotLabel, slotsFor } from '@/lib/blocks';
+import { blockAt, blockMinutes, blocksForWindow, checkinOffsets, defaultBlocks, nextBlockCheckin, PREP_PER_GROUP, schedule, slotHasRoom, slotLabel, slotsFor } from '@/lib/blocks';
 
 describe('the day in blocks', () => {
+  it('getting ready takes up to 3 from each group (any number of groups); other parts have a cap', () => {
+    const prep = slotsFor('home', true)[0]!;
+    expect([prep.slot, prep.perGroup, PREP_PER_GROUP]).toEqual(['prep', 3, 3]);
+    expect(slotHasRoom(prep, 20, 2)).toBe(true); // 20 picked across groups, 2 from this one
+    expect(slotHasRoom(prep, 3, 3)).toBe(false); // this group has its 3
+    expect(slotHasRoom(prep, 30, null)).toBe(true); // something written for this scene
+    const chores = slotsFor('home', true)[1]!;
+    expect([slotHasRoom(chores, 1, 1), slotHasRoom(chores, 2, 0), slotHasRoom(chores, 2, null)]).toEqual([true, false, false]);
+  });
+
   it('2 hours is a block at home; 4 adds one out; 8 has a free hour and welcome home', () => {
     expect(defaultBlocks(2)).toEqual(['home']);
     expect(defaultBlocks(4)).toEqual(['home', 'out']);

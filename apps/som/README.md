@@ -150,7 +150,9 @@ chores for one or two errands, each with its proof. 2 hours is a block at
 home; 4 adds one out; 8 is home, out, a **free hour** (on call: the lead
 can still send a demand), home again, and **welcome home** (be ready, and
 the arrival routine). Time left over goes to free time. Each part has a
-picker: anything from that menu section (nothing twice in a day), or
+picker: anything from that menu section (nothing twice in a day; getting
+ready takes up to three from each of its groups, and Fill it for me picks
+one from each, a whole look), or
 **write your own** for this scene. **Check-ins** come at the end of each
 block (or every so often, or none), and the lead can send a **demand**
 (a photo or a quick act, with proof) any time.
