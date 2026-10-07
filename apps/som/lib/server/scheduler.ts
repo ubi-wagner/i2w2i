@@ -99,10 +99,14 @@ export async function resumeTimers(sceneId: string, pausedAt: Date): Promise<voi
   await scheduleCheckin(sceneId);
 }
 
-/** An arrival is real travel: pausing doesn't move it, but its reminder comes back on resume. */
+/** An arrival is real travel: pausing doesn't move it, but its reminders come back on resume. */
 export async function restoreArrival(sceneId: string): Promise<void> {
   const [s] = await sql<{ arrival_at: Date | null }[]>`SELECT arrival_at FROM som.scenes WHERE id = ${sceneId}`;
-  if (s?.arrival_at && s.arrival_at.getTime() > Date.now()) await add(sceneId, 'arrival', s.arrival_at);
+  const left = s?.arrival_at ? s.arrival_at.getTime() - Date.now() : 0;
+  if (left <= 0) return;
+  // More than 5 minutes left: the "5 minutes away" one hasn't been sent yet.
+  if (left > 5 * MINUTE_MS) await add(sceneId, 'arrival_soon', new Date(s!.arrival_at!.getTime() - 5 * MINUTE_MS));
+  await add(sceneId, 'arrival', s!.arrival_at!);
 }
 
 interface Fired { id: string; scene_id: string; kind: Kind; task_id: string | null; fire_at: Date }
@@ -121,11 +125,12 @@ async function fire(t: Fired): Promise<void> {
     case 'checkin_due':
       if (!running) return;
       // What comes next is set first, so a failed notification can't lose it:
-      // the missed-check-in alarm, and the next block end (they come round
-      // whether or not this one is answered).
+      // the missed-check-in alarm, and the next reminder, which comes round
+      // whether or not this one is answered (the next block end, or so many
+      // minutes on; checking in starts the clock again).
       await add(t.scene_id, 'checkin_overdue', inMinutes(scene.checkin_grace));
-      if (!scene.checkin_minutes) {
-        const next = nextAt(scene, false, new Date(t.fire_at.getTime() + 1));
+      {
+        const next = scene.checkin_minutes ? new Date(t.fire_at.getTime() + scene.checkin_minutes * MINUTE_MS) : nextAt(scene, false, new Date(t.fire_at.getTime() + 1));
         if (next) await add(t.scene_id, 'checkin_due', next);
       }
       await notify(follows, { title: 'S-O-M', body: 'Time to check in.', url: `${url}#checkin`, tag: `checkin-${t.scene_id}` });

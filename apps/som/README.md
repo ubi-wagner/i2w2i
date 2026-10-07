@@ -218,14 +218,26 @@ Then:
    approves (with praise in one more tap), sends back (one-tap reasons like
    "Redo it, properly") or skips. Tasks with a countdown start it when
    begun. The tasks are listed block by block, the one on now marked.
-   Check-ins at the end of each block, or on a schedule (missed ones tell
-   the lead); pausing moves them on.
+   Check-ins at the end of each block, every 15, 30, 45, 60, 90 or 120
+   minutes, or none (the lead can change it while it runs). Each reminder
+   asks the follow; one not answered within 10 minutes tells the lead, and
+   the reminders keep coming (the next block end, or so many minutes on)
+   until the follow checks in, which starts the clock again. Pausing moves
+   the block ends and countdowns on by the time paused.
 2. **The lead's quick actions**, always at the top while it runs:
    **⚡ Demand** (ready-made ones: a photo right now, redo, a correction,
    devotion; or write your own; each with its proof and a countdown that
    starts at once; **Ask for more** on a task makes one about that task),
-   **✨ Praise**, and **🚗 On my way** (two taps; the follow gets a countdown,
-   the arrival routine and reminders).
+   **✨ Praise**, and **🚗 On my way** (two taps: 10 minutes to 1½ hours;
+   the follow gets a countdown, the arrival routine, and reminders 5
+   minutes out and on arrival; it's real travel, so a pause doesn't move
+   it, and its reminders come back on resume).
+
+Anything can be sent in the notes or as a task's proof: photos, videos, a
+voice note recorded in the app, audio files and any other file (shown by
+name and size), plus notes and longer writing, line breaks kept. Each
+opens on the other phone, plays there and saves back as the same file
+(photos as the redrawn JPEG).
 3. **Pause**: either of you, any time. Everything stops, the inspection and
    aftercare included. Only whoever paused can resume.
 4. **Inspection** (the lead; not for a roleplay): every task that was set (demands too) with
@@ -354,7 +366,13 @@ save themselves once back online, the last tap before leaving a page is kept, tw
 menu never silently drop either, calling off and rescheduling from either side, nothing moving while
 paused, retried notes and demands arriving once, unfinished uploads removable, an invite nobody
 opened not holding up a close), a staged scene (built first, seen whole by
-both before it's agreed, with what to get ready beforehand), with a stand-in push service, and
+both before it's agreed, with what to get ready beforehand), every timer
+(check-ins at block ends, every 15 to 120 minutes and none; missed ones
+and repeats; demands with each countdown and time's up; pause and resume;
+on my way with each choice and its reminders), every kind of media (photo,
+video, a recorded voice note, an audio file, another file, notes and
+writing, each opened, played and saved on the other phone, and deleted by
+its sender), with a stand-in push service, and
 check that the database and the bucket hold nothing readable. The layout suite walks every screen on a small
 phone (iPhone SE; `E2E_LAYOUT_DEVICE` for another) and checks nothing is
 wider than the screen, text boxes are 16px (so iPhones don't zoom) and
