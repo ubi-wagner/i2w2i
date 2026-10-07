@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cleanMenu } from '@/lib/menu';
 import { builtInInventory } from '@/lib/inventory-data';
 import { cleanProfile, lovedByAll, matches, ratedCount, rateSections, rateSectionsToText, textToRateSections } from '@/lib/profile';
-import { roleplaysToText, textToRoleplays } from '@/lib/roleplay-text';
+import { keepRoleplayIds, roleplaysToText, textToRoleplays } from '@/lib/roleplay-text';
 
 describe('roleplays as text', () => {
   const words = { lead: ['captain kay', 'kay'], follow: ['sunny'] };
@@ -47,6 +47,15 @@ describe('roleplays as text', () => {
     const again = textToRoleplays(roleplaysToText(roleplays));
     expect(again.warnings).toEqual([]);
     expect(again.roleplays.map(({ id: _, ...r }) => r)).toEqual(roleplays.map(({ id: _, ...r }) => r));
+  });
+
+  it('replacing them all as text keeps each one’s id by its title (so feelings and history stay)', () => {
+    const before = textToRoleplays('## Indoor\n- The Night Shift\n- Breakfast\n## Out\n- Breakfast\n').roleplays;
+    const after = keepRoleplayIds(textToRoleplays('## Indoor\n- the night  shift\n  Setup: New words.\n## Out\n- Breakfast\n## Indoor\n- Breakfast\n- Something new\n').roleplays, before);
+    expect(after.map((r) => r.id)).toEqual([before[0]!.id, before[2]!.id, before[1]!.id, expect.any(String)]);
+    expect(after[0]!.setup).toBe('New words.');
+    expect(new Set(after.map((r) => r.id)).size).toBe(4);
+    expect(before.some((r) => r.id === after[3]!.id)).toBe(false);
   });
 
   it('says which lines it couldn’t place', () => {

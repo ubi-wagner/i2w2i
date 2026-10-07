@@ -53,6 +53,18 @@ await sheet(r).locator('[role=radio][aria-checked=true]', { hasText: 'Not for me
 await closeSheet(r);
 await r.getByText('You 👎').waitFor();
 check(true, 'Kay says how she feels about a roleplay with one tap, before ever playing it (“not for me”)');
+// Replacing them all as text (a new version of the file) keeps how each of them feels about them.
+const roleplaysCard = r.locator('section', { has: r.getByRole('button', { name: '+ Add a roleplay' }) });
+await roleplaysCard.getByRole('button', { name: 'Edit as text' }).click();
+const asText = r.getByRole('textbox', { name: 'Roleplays as text' });
+await asText.fill((await asText.inputValue()).replace('Warm plates, low music.', 'Warm plates, soft music.'));
+await r.getByRole('button', { name: 'Use this' }).click();
+await r.getByRole('button', { name: 'Save menu' }).first().click();
+await r.getByText('Saved.').waitFor();
+await r.reload();
+await r.getByRole('button', { name: /^Roleplays/ }).click();
+await r.getByText('You 👎').waitFor();
+check(true, 'replacing every roleplay as text keeps how each of them feels about them');
 
 // ── Kay asks Sunny for a roleplay where Sunny leads ─────────────────────────
 // Asking for a roleplay is its own thing, apart from a Select-O-Matic scene:

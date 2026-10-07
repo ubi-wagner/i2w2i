@@ -100,3 +100,30 @@ export function textToRoleplays(text: string, words: RoleWords = { lead: [], fol
   finish();
   return { roleplays, warnings };
 }
+
+const titleKey = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * Roleplays edited as text come back with new ids; this gives each the id it
+ * had when its title matches one already there (in the same group first), so
+ * replacing them all keeps how each of you feels about them and when they
+ * were played.
+ */
+export function keepRoleplayIds(next: Roleplay[], prev: Roleplay[]): Roleplay[] {
+  const used = new Set<string>();
+  const find = (r: Roleplay, sameGroup: boolean) => prev.find((p) => !used.has(p.id) && titleKey(p.title) === titleKey(r.title) && (!sameGroup || titleKey(p.group) === titleKey(r.group)));
+  const ids = next.map((r) => {
+    const hit = find(r, true);
+    if (hit) used.add(hit.id);
+    return hit?.id ?? null;
+  });
+  return next.map((r, i) => {
+    let id = ids[i];
+    if (!id) {
+      const hit = find(r, false);
+      if (hit) { used.add(hit.id); id = hit.id; }
+    }
+    return id ? { ...r, id } : r;
+  });
+}
+

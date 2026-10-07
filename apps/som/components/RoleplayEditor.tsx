@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { newId, type Menu, type Roleplay } from '@/lib/menu';
-import { roleplaysToText, textToRoleplays, type RoleWords } from '@/lib/roleplay-text';
+import { keepRoleplayIds, roleplaysToText, textToRoleplays, type RoleWords } from '@/lib/roleplay-text';
 import { usePod } from './Pod';
 import { useProfiles } from './Profiles';
 import { feelLine, FeelPicker } from './RoleplayFeel';
@@ -123,7 +123,7 @@ export function RoleplaysEditor({ menu, change, open, setOpen }: {
         }} />}
       </Sheet>
       <Sheet open={asText} onClose={() => setAsText(false)} title="Roleplays as text" wide>
-        {asText && <RoleplayText initial={roleplaysToText(menu.roleplays)} words={words} onApply={(rps) => { change((m) => { m.roleplays = rps; }); setAsText(false); }} />}
+        {asText && <RoleplayText initial={roleplaysToText(menu.roleplays)} words={words} onApply={(rps) => { change((m) => { m.roleplays = keepRoleplayIds(rps, m.roleplays); }); setAsText(false); }} />}
       </Sheet>
     </Collapsible>
   );
