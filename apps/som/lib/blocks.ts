@@ -163,6 +163,26 @@ export function blockAt(timed: Timed[], minutes: number): number {
 
 /** Change-over groups meant for the welcome home ("Welcome home", "Ready for {lead}"). */
 export const WELCOME_GROUP = /welcome|ready for|home/i;
+/** Change-over groups for a block out ("Going out", "For the errands") and for one at home ("Back to the chores"). */
+export const OUT_GROUP = /\bout\b|errand|shops/i;
+export const CHORES_GROUP = /chore|cleaning|housework/i;
+
+/**
+ * The change-over groups that suit a part, best first: the welcome home
+ * takes the welcome groups; a change-over into a block out takes the
+ * going-out ones, then any that suit either (a fresh-up), and only then
+ * the back-to-the-chores ones; into a block at home, the other way round.
+ * A menu that doesn't sort its change-overs this way gets them all, as one.
+ */
+export function changeoverTiers<G extends { title: string }>(groups: G[], slot: Slot, into: BlockKind): G[][] {
+  const welcome = groups.filter((g) => WELCOME_GROUP.test(g.title));
+  if (slot === 'welcome') return [welcome.length ? welcome : groups];
+  const between = welcome.length < groups.length ? groups.filter((g) => !welcome.includes(g)) : groups;
+  const out = between.filter((g) => OUT_GROUP.test(g.title));
+  const chores = between.filter((g) => !out.includes(g) && CHORES_GROUP.test(g.title));
+  const either = between.filter((g) => !out.includes(g) && !chores.includes(g));
+  return (into === 'out' ? [out, either, chores] : [chores, either, out]).filter((t) => t.length);
+}
 
 export const BLOCK_NAME: Record<BlockKind, string> = { home: 'Home', out: 'Out', free: 'Free time', welcome: 'Welcome home' };
 

@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
-import { blocksForWindow, BLOCK_NAME, isWork, itemMinutes, slotHasRoom, slotLabel, slotsFor, type BlockKind, type SlotSpec } from '@/lib/blocks';
+import { blocksForWindow, BLOCK_NAME, changeoverTiers, isWork, itemMinutes, slotHasRoom, slotLabel, slotsFor, type BlockKind, type SlotSpec } from '@/lib/blocks';
 import { newId, proofText, section, type MenuItem, type Proof } from '@/lib/menu';
-import { arrivalChecklist, autoFill, blocksFor, cleanPlan, CHECKIN_CHOICES, pacingFor, pacingOf, picked, placeLoose, planCheckins, planItems, planToTasks, recentlyUsed, tidyPlan, withParam, type Plan, type PlanItem } from '@/lib/plan';
+import { arrivalChecklist, autoFill, blocksFor, cleanPlan, CHECKIN_CHOICES, inMenuOrder, pacingFor, pacingOf, picked, placeLoose, planCheckins, planItems, planToTasks, recentlyUsed, tidyPlan, withParam, type Plan, type PlanItem } from '@/lib/plan';
 import { ownsDraft, sceneTransition } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ProofEditor } from '../ProofEditor';
@@ -424,7 +424,7 @@ function SlotRow({ block, slot, length, plan, items, edit, editable, onPick }: {
 }) {
   const pod = usePod();
   const lead = pod.title('lead');
-  const here = plan.blocks[block]!.items.map((id) => items.get(id)).filter((x): x is PlanItem => x?.kind === slot.kind);
+  const here = inMenuOrder(items, plan.blocks[block]!.items).filter((x) => x.kind === slot.kind);
   const label = slotLabel(slot, lead);
   const short = here.length < slot.min;
   // Getting ready takes up to so many from each group, so there's always room for one more of something;
@@ -496,6 +496,10 @@ function Picker({ plan, items, block, slot, length, edit, onDone }: { plan: Plan
   const fits = (minutes?: number) => !slot.byTime || usedMin + itemMinutes(slot, minutes) <= length;
   const full = slot.byTime ? !fits() : !slotHasRoom(slot, mine.length, null);
   const where = (id: string) => plan.blocks.findIndex((b) => b.items.includes(id));
+  // A change-over shows first what suits the block it leads into (going out, back to the chores).
+  const groups = sec.groups.filter((g) => g.items.length);
+  const fitting = slot.kind === 'changeover' ? changeoverTiers(groups, slot.slot, plan.blocks[block]!.kind).flat() : groups;
+  const shown = [...fitting, ...groups.filter((g) => !fitting.includes(g))];
   const [writing, setWriting] = useState(false);
   const toggle = (it: MenuItem) => edit((p) => {
     const b = p.blocks[block]!;
@@ -514,7 +518,7 @@ function Picker({ plan, items, block, slot, length, edit, onDone }: { plan: Plan
           : slot.byTime ? `${mine.length} picked: ${usedMin} of ${length} minutes. Each takes its countdown, or about ${slot.byTime} minutes.`
           : `${mine.length} of ${slot.max === slot.min ? slot.max : `up to ${slot.max}`} picked${full ? ': take one out to swap' : ''}.`}
       </p>
-      {sec.groups.filter((g) => g.items.length).map((g) => (
+      {shown.map((g) => (
         <div key={g.id} className="space-y-2" role="group" aria-label={g.title}>
           <p className="eyebrow text-follow">{g.title}{slot.perGroup ? ` · ${inGroup(g.id)}/${slot.perGroup}` : ''}</p>
           <div className="flex flex-wrap gap-2">

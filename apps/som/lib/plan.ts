@@ -3,7 +3,7 @@
 // scene alone. The follow usually drafts it, the lead adjusts and starts
 // or sends it; that turns it into the follow's tasks (planToTasks). Pure.
 
-import { blocksForWindow, checkinOffsets, itemMinutes, schedule, slotsFor, BLOCK_KINDS, WELCOME_GROUP, type BlockKind, type Slot } from './blocks';
+import { blocksForWindow, changeoverTiers, checkinOffsets, itemMinutes, schedule, slotsFor, BLOCK_KINDS, type BlockKind, type Slot } from './blocks';
 import { cleanProofs, cleanRoleplay, itemsById, NEEDS, section, SECTION_KINDS, type Menu, type MenuItem, type Need, type Pacing, type Proof, type Roleplay, type SectionKind } from './menu';
 import type { Capacity } from './rules';
 
@@ -116,6 +116,17 @@ export function planItems(menu: Menu, plan: Plan): Map<string, PlanItem> {
   for (const [id, { item, section: s }] of itemsById(menu)) out.set(id, { ...item, kind: s.kind });
   for (const c of plan.customs) out.set(c.id, { id: c.id, kind: c.kind, label: c.label, detail: c.details, needs: c.needs, custom: true });
   return out;
+}
+
+/**
+ * Picks in the menu's order (its sections, groups and items; anything
+ * written for the scene after), however they were picked: each part reads
+ * the way the menu runs, the shower before the shoes. The menu's order is
+ * the day's.
+ */
+export function inMenuOrder(items: Map<string, PlanItem>, ids: string[]): PlanItem[] {
+  const rank = new Map([...items.keys()].map((id, i) => [id, i]));
+  return ids.filter((id) => items.has(id)).sort((a, b) => rank.get(a)! - rank.get(b)!).map((id) => items.get(id)!);
 }
 
 /**
@@ -251,7 +262,7 @@ export function planToTasks(menu: Menu, plan: Plan): TaskDraft[] {
   const timed = schedule(plan.blocks.map((b) => b.kind));
   const tasks: TaskDraft[] = [];
   plan.blocks.forEach((b, i) => {
-    const here = b.items.map((id) => items.get(id)).filter((x): x is PlanItem => !!x);
+    const here = inMenuOrder(items, b.items);
     const done = new Set<string>();
     const slots = slotsFor(b.kind, timed[i]?.first ?? false);
     const fitted = slots.map((s) => [s, here.filter((it) => it.kind === s.kind)] as const);
@@ -360,11 +371,10 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
     into?.items.push(it.id);
     used.add(it.id);
   };
-  const groupsFor = (kind: SectionKind, slot?: Slot) => {
+  // A part's groups, best fit first: a change-over suits the block it leads into, the welcome home has its own looks.
+  const tiersFor = (kind: SectionKind, slot: Slot | undefined, into: BlockKind) => {
     const all = section(menu, kind).groups.filter((g) => g.items.length);
-    // A change-over is between blocks; the welcome home has its own looks (when the menu has some).
-    const welcome = slot === 'welcome' || slot === 'changeover' ? all.filter((g) => WELCOME_GROUP.test(g.title)) : [];
-    return slot === 'welcome' && welcome.length ? welcome : slot === 'changeover' && welcome.length < all.length ? all.filter((g) => !welcome.includes(g)) : all;
+    return slot === 'welcome' || slot === 'changeover' ? changeoverTiers(all, slot, into) : [all];
   };
   const free = (xs: MenuItem[]) => shuffle(xs.filter((i) => !used.has(i.id) && !next.picks[i.id]), (i) => i.id);
   // Which groups each part has drawn from today: the next pick prefers one it hasn't, so the day varies.
@@ -378,16 +388,19 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
   /**
    * Candidates for a part, spread over its groups: one from each group in
    * turn (groups not drawn from today first), what recent scenes didn't use
-   * first. The first few always come from different groups.
+   * first. The first few always come from different groups. Groups that fit
+   * better (a change-over's) all come before the rest.
    */
-  const spread = (kind: SectionKind, slot?: Slot, skip: ReadonlySet<string | undefined> = new Set()) => {
-    const groups = groupsFor(kind, slot).filter((g) => !skip.has(g.id));
+  const spread = (kind: SectionKind, slot?: Slot, skip: ReadonlySet<string | undefined> = new Set(), into: BlockKind = 'home') => {
     const seen = drawn.get(kind) ?? new Set<string>();
-    const lists = [...shuffle(groups.filter((g) => !seen.has(g.id))), ...shuffle(groups.filter((g) => seen.has(g.id)))].map((g) => free(g.items));
     const out: MenuItem[] = [];
-    // Within a round, what recent scenes didn't use still comes first.
-    for (let round = 0; lists.some((l) => l.length > round); round++) {
-      out.push(...lists.flatMap((l) => l[round] ? [l[round]!] : []).sort((a, b) => Number(avoid.has(a.id)) - Number(avoid.has(b.id))));
+    for (const tier of tiersFor(kind, slot, into)) {
+      const groups = tier.filter((g) => !skip.has(g.id));
+      const lists = [...shuffle(groups.filter((g) => !seen.has(g.id))), ...shuffle(groups.filter((g) => seen.has(g.id)))].map((g) => free(g.items));
+      // Within a round, what recent scenes didn't use still comes first.
+      for (let round = 0; lists.some((l) => l.length > round); round++) {
+        out.push(...lists.flatMap((l) => l[round] ? [l[round]!] : []).sort((a, b) => Number(avoid.has(a.id)) - Number(avoid.has(b.id))));
+      }
     }
     return out;
   };
@@ -413,13 +426,15 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
         // Each from a different group while there are others: two chores, say, and now and then a twist.
         const has = new Set(mine.map((id) => groupOf.get(id)));
         const want = Math.max(0, s.fill - mine.length);
-        const cands = spread(s.kind, s.slot);
+        const cands = spread(s.kind, s.slot, undefined, b.kind);
         const fresh = cands.filter((it) => !has.has(groupOf.get(it.id)));
         for (const it of [...fresh, ...cands.filter((it) => !fresh.includes(it))].slice(0, want)) add(it);
       }
     }
   });
-  if (!picked(menu, next, 'arrival').length) for (const it of spread('arrival').slice(0, 3)) take(it);
+  // The arrival routine: one from each of its groups, in its order (where, how, the greeting, the service…), and at least three.
+  const steps = Math.max(3, section(menu, 'arrival').groups.filter((g) => g.items.length).length);
+  if (!picked(menu, next, 'arrival').length) for (const it of spread('arrival').slice(0, steps)) take(it);
   return cleanPlan(next);
 }
 

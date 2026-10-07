@@ -140,7 +140,10 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
   Nothing twice in a day; check-ins at the end of each block; demands any
   time. Fill it for me fills every part by those rules, spreading picks
   over a section's groups (two chores never from one group) and skipping
-  what recent scenes used: keep the novelty.
+  what recent scenes used: keep the novelty. A change-over suits the block
+  it leads into (`changeoverTiers`: going out, back to the chores, welcome
+  home, by group title), and every part runs in the menu's order
+  (`inMenuOrder`), so the couple's menu order is the day's.
 - **Both see the whole scene before it's agreed:** the answerer of an
   offer sees the staged scene (`SceneSummary`: what to get ready, what to
   wear, every block and task with its proof). Plans from older versions
