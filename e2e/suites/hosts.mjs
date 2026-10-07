@@ -38,6 +38,19 @@ check(!(await form.getByLabel('Their password').isVisible()), 'a taken username 
 await addToEvent(holly, ev, `Fred Family ${RUN} (fred-${RUN})`);
 await fred.goto(BASE + '/events');
 check(await fred.getByText(`Hosted ${RUN}`).isVisible(), 'an existing account added from the list now sees the event');
+await fred.goto(BASE + '/');
+check(await fred.getByText(`Hosted ${RUN}`).isVisible() && !(await fred.getByRole('link', { name: /New event|Plan your own event|Create your first event/ }).count()),
+  'a family member sees the events they’re on on their home page, with no option to make one');
+
+// New creators: a clear first step, and later their invitations beside a way to plan their own
+const cleo = await acceptInvite(await invite(admin, `Cleo Creator ${RUN}`, `cleo-${RUN}`, 'creator'));
+check(new URL(cleo.url()).pathname === '/' && await cleo.getByRole('link', { name: 'Create your first event' }).isVisible(), 'a brand-new creator lands home, invited to make their first event');
+await addToEvent(holly, ev, `Cleo Creator ${RUN} (cleo-${RUN})`, 'curator');
+await cleo.goto(BASE + '/');
+check(await cleo.getByText(`Hosted ${RUN}`).isVisible() && await cleo.getByText('You’re an editor').isVisible(), 'a creator added to someone else’s event sees it on their home page');
+await cleo.getByRole('link', { name: /Plan your own event/ }).click();
+await cleo.waitForURL(`${BASE}/events/new`);
+check(true, '…beside a clear “Plan your own event” that opens New event');
 
 // Resets: Holly can for Nina, not for Fred or the admin
 await holly.goto(`${ev.manage}/people`);

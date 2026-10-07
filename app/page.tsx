@@ -34,6 +34,7 @@ export default async function Dashboard() {
             <EventCards
               ctx={userCtx(user)}
               limit={6}
+              newTile={canCreate}
               empty={(
                 <div className="rounded-2xl border border-dashed border-stone-300 bg-white/60 px-6 py-10 text-center">
                   <p className="font-medium">{canCreate ? 'No events yet' : 'You’re not on any events yet'}</p>

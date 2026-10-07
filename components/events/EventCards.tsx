@@ -39,7 +39,11 @@ const YOU = { owner: 'You’re a co-host', curator: 'You’re an editor', invite
  * `shared` lists instead the albums published to the whole family (or
  * everyone) that they aren't on.
  */
-export async function EventCards({ ctx, empty, limit, shared = false, heading }: { ctx: EventCtx; empty: React.ReactNode; limit?: number; shared?: boolean; heading?: React.ReactNode }) {
+export async function EventCards({ ctx, empty, limit, shared = false, heading, newTile = false }: {
+  ctx: EventCtx; empty: React.ReactNode; limit?: number; shared?: boolean; heading?: React.ReactNode;
+  /** Creators: a "Plan your own event" tile beside the events they're on. */
+  newTile?: boolean;
+}) {
   const events = await withCtx(ctx, (tx) => tx<Row[]>`
     SELECT e.id, e.slug, e.title, e.starts_on, e.status, e.audience, e.theme, events.member_role(e.id) AS role,
            (SELECT count(*)::int FROM events.uploads u WHERE u.event_id = e.id AND u.status = 'ready' AND NOT u.hidden) AS uploads,
@@ -88,20 +92,32 @@ export async function EventCards({ ctx, empty, limit, shared = false, heading }:
               <p className="text-sm text-stone-500">
                 {shared ? 'Shared with the family' : e.role ? YOU[e.role as keyof typeof YOU] : 'You’re the admin'}
               </p>
-              {manages && (
-                <div className="flex flex-wrap items-center gap-2 pt-2">
-                  <Link href={`/events/${e.id}`} className="btn-secondary btn-sm relative z-10">Manage</Link>
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <span className="text-sm font-medium text-brand-dark" aria-hidden="true">Open album →</span>
+                {manages && (
+                  <>
+                  <Link href={`/events/${e.id}`} className="btn-secondary btn-sm relative z-10 ml-auto">Manage</Link>
                   {e.to_review > 0 && (
-                    <Link href={`/events/${e.id}/photos`} className="badge relative z-10 bg-amber-100 px-2.5 py-1 text-amber-900 hover:bg-amber-200">
+                    <Link href={`/events/${e.id}/photos`} className="badge relative z-10 basis-full justify-center bg-amber-100 px-2.5 py-1 text-amber-900 hover:bg-amber-200 sm:basis-auto">
                       {e.to_review} waiting for your OK
                     </Link>
                   )}
-                </div>
-              )}
+                  </>
+                )}
+              </div>
             </div>
           </li>
         );
       })}
+      {newTile && (
+        <li>
+          <Link href="/events/new" className="flex h-full min-h-[14rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-stone-300 bg-white/60 p-6 text-center transition hover:border-brand hover:bg-brand-light/40">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand text-2xl text-white" aria-hidden="true">+</span>
+            <span className="text-lg font-semibold">Plan your own event</span>
+            <span className="max-w-xs text-sm text-stone-600">A page for guests, QR cards for the tables and a shared album you run.</span>
+          </Link>
+        </li>
+      )}
     </ul>
     </section>
   );

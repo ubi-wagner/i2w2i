@@ -39,7 +39,7 @@ export default function HostingHelp() {
 
       <Section id="create" eyebrow="Step 1" title="Create the event">
         <Step title="New event" shots={[{ src: 'host-new-event.webp', alt: 'The New event form' }]}>
-          <p>Sign in at <b>i2w2i.com</b>. On your home page, tap <K>New event</K>.</p>
+          <p>Sign in at <b>i2w2i.com</b>. On your home page, tap <K>+ New event</K> (or <b>Plan your own event</b>, beside any events you’ve been added to).</p>
           <List>
             <li><b>Event name:</b> write two names with an “&amp;” (“Sam &amp; Riley”) and the fancier looks set the “&amp;” in script.</li>
             <li><b>Album web address</b> fills itself in. It’s the link people will use, so keep it short.</li>
