@@ -82,10 +82,11 @@ await sheet(b).getByText('For review').first().waitFor();
 await closeSheet(b);
 
 // ── Kay hears about each, and opens each ────────────────────────────────────
-const deadline = Date.now() + 20000;
-while (pushCount('kay', /sent you something/) < 5 && Date.now() < deadline) await new Promise((res) => setTimeout(res, 300));
-check(pushCount('kay', /sent you something/) >= 5 && pushCount('kay', /New note from Sunny/) >= 1 && pushCount('kay', /sent something for review/) >= 1,
-  'Kay hears about each thing sent, the note, and the writing sent for review');
+// Each comes as it's sent (an upload when it finishes), so wait for all of them, the review last.
+const heardAll = () => pushCount('kay', /sent you something/) >= 5 && pushCount('kay', /New note from Sunny/) >= 1 && pushCount('kay', /sent something for review/) >= 1;
+const deadline = Date.now() + 30000;
+while (!heardAll() && Date.now() < deadline) await new Promise((res) => setTimeout(res, 300));
+check(heardAll(), `Kay hears about each thing sent, the note, and the writing sent for review (${pushCount('kay', /sent you something/)} sent, ${pushCount('kay', /New note from Sunny/)} note, ${pushCount('kay', /sent something for review/)} for review)`);
 await r.reload();
 const kayNotes = r.locator('#notes');
 await kayNotes.getByText('And the good candle.').waitFor();
@@ -140,7 +141,8 @@ check(savedFile.name === TEXT.name && savedFile.bytes.equals(TEXT.buffer), '…a
 await closeSheet(r);
 
 await r.getByRole('button', { name: /Write me a sonnet/ }).first().click();
-check((await sheet(r).getByText('you pour for us, I pour for me.').count()) === 1, 'Kay reads the writing in the task, line by line');
+// The writing decrypts on Kay's phone once the task opens.
+check(await sheet(r).getByText('you pour for us, I pour for me.').waitFor({ timeout: 15000 }).then(() => true, () => false), 'Kay reads the writing in the task, line by line');
 await sheet(r).getByRole('button', { name: 'Approve ✓' }).click();
 await sheet(r).getByText('Approved').first().waitFor();
 await closeSheet(r);

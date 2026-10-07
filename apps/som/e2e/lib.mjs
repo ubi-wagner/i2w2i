@@ -148,7 +148,7 @@ export async function typeIn(loc, text) {
 
 /**
  * Picks something for one part of a block in the scene builder: block 1's
- * "Two chores", say, and a menu item matching `label`.
+ * "Chores", say, and a menu item matching `label`.
  */
 export async function pick(p, block, part, label) {
   const group = p.getByRole('group', { name: new RegExp(`^Block ${block}: ${part}`) });

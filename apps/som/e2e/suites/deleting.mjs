@@ -22,7 +22,7 @@ await b.waitForURL(`${BASE}/`);
 check((await db`SELECT 1 FROM som.scenes WHERE id = ${draft}`).length === 0, 'the author deletes their own unsent draft alone');
 
 // ── What you send is yours to delete ────────────────────────────────────────
-const id = await runningScene(b, r, { title: 'Delete test', picks: [[1, 'Two chores', 'Laundry: wash']], checkin: '120' });
+const id = await runningScene(b, r, { title: 'Delete test', picks: [[1, 'Chores', 'Laundry: wash']], checkin: '120' });
 await b.goto(`${BASE}/scene/${id}`);
 await b.getByRole('button', { name: /Laundry: wash/ }).click();
 await sheet(b).locator('input[type=file][accept="image/*,video/*,audio/*"]').setInputFiles([await png(b, 'FLOWERS', '#c37')]);

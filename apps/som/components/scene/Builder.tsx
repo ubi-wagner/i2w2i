@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
 import { blocksForWindow, BLOCK_NAME, changeoverTiers, isWork, itemMinutes, slotHasRoom, slotLabel, slotsFor, type BlockKind, type SlotSpec } from '@/lib/blocks';
 import { newId, proofText, section, type MenuItem, type Proof } from '@/lib/menu';
-import { arrivalChecklist, autoFill, blocksFor, cleanPlan, CHECKIN_CHOICES, inMenuOrder, pacingFor, pacingOf, picked, placeLoose, planCheckins, planItems, planToTasks, recentlyUsed, tidyPlan, withParam, type Plan, type PlanItem } from '@/lib/plan';
+import { arrivalChecklist, autoFill, blocksFor, cleanPlan, CHECKIN_CHOICES, inMenuOrder, pacingFor, pacingOf, picked, placeLoose, planCheckins, planItems, planToTasks, recentlyUsed, sharedRoom, tidyPlan, withParam, type Plan, type PlanItem } from '@/lib/plan';
 import { ownsDraft, sceneTransition } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ProofEditor } from '../ProofEditor';
@@ -258,7 +258,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
           </div>
         )}
         <p className="text-sm text-ink-soft">
-          Two-hour blocks: getting ready (or a 15-minute change-over), two chores at home or errands out, then devotion and one for {lead}, 15 minutes each.
+          Two-hour blocks: getting ready (or a 15-minute change-over), chores at home (two areas, up to two jobs in each) or errands out, then devotion and one for {lead}, 15 minutes each.
           {plan.blocks.some((b) => b.kind === 'free') ? ' A long day has a free hour, on call, and ends with welcome home.' : ''}
         </p>
         {editable && (
@@ -430,12 +430,12 @@ function SlotRow({ block, slot, length, plan, items, edit, editable, onPick }: {
   // Getting ready takes up to so many from each group, so there's always room for one more of something;
   // the play break fills the free time.
   const usedMin = here.reduce((n, it) => n + itemMinutes(slot, it.minutes), 0);
-  const room = slot.perGroup ? true : slot.byTime ? usedMin < length : here.length < slot.max;
+  const room = slot.byTime ? usedMin < length : here.length < slot.max;
   return (
     <div className="space-y-1.5 border-t border-line pt-2.5" role="group" aria-label={`Block ${block + 1}: ${label}`}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium">{KIND_ICON[slot.kind]} {label}</span>
-        {slot.perGroup ? <span className={`text-xs ${short ? 'text-warn' : 'text-ink-soft'}`}>{here.length} picked</span>
+        {slot.perGroup && !slot.maxGroups ? <span className={`text-xs ${short ? 'text-warn' : 'text-ink-soft'}`}>{here.length} picked</span>
           : slot.byTime ? <span className="text-xs text-ink-soft">{usedMin} of {length} min</span>
           : slot.max > 1 && <span className={`text-xs ${short ? 'text-warn' : 'text-ink-soft'}`}>{here.length}/{slot.max}</span>}
       </div>
@@ -446,7 +446,7 @@ function SlotRow({ block, slot, length, plan, items, edit, editable, onPick }: {
       )}
       {editable && room && (
         <button type="button" className={`btn-quiet min-h-9 w-full py-1 text-sm ${short ? 'border-warn/50' : ''}`} onClick={onPick}>
-          + {here.length ? 'Another' : slot.slot === 'chores' ? 'Pick two chores' : 'Pick'}
+          + {here.length ? 'Another' : slot.slot === 'chores' ? 'Pick the chores' : 'Pick'}
         </button>
       )}
     </div>
@@ -491,6 +491,7 @@ function Picker({ plan, items, block, slot, length, edit, onDone }: { plan: Plan
   const mine = plan.blocks[block]!.items.filter((id) => items.get(id)?.kind === slot.kind);
   const groupOf = new Map(sec.groups.flatMap((g) => g.items.map((it) => [it.id, g.id] as const)));
   const inGroup = (gid: string) => mine.filter((id) => groupOf.get(id) === gid).length;
+  const groupsUsed = new Set(mine.map((id) => groupOf.get(id)).filter(Boolean)).size;
   // Full: nothing more fits, not even something written for this scene.
   const usedMin = mine.reduce((n, id) => n + itemMinutes(slot, items.get(id)?.minutes), 0);
   const fits = (minutes?: number) => !slot.byTime || usedMin + itemMinutes(slot, minutes) <= length;
@@ -507,14 +508,17 @@ function Picker({ plan, items, block, slot, length, edit, onDone }: { plan: Plan
       b.items = b.items.filter((x) => x !== it.id);
       delete p.picks[it.id];
     } else {
+      // A second job in an area's room goes in the same room.
+      const room = sharedRoom(pod.menu, p, block, it.id);
       b.items.push(it.id);
-      p.picks[it.id] = {};
+      p.picks[it.id] = room ? { param: room } : {};
     }
   });
   return (
     <div className="space-y-4">
       <p className="text-sm text-ink-soft" role="status">
-        {slot.perGroup ? `${mine.length} picked: up to ${slot.perGroup} from each group.`
+        {slot.perGroup && slot.maxGroups ? `${mine.length} of ${slot.max} picked: from ${slot.maxGroups} areas, up to ${slot.perGroup} in each${full ? '. Take one out to swap' : ''}.`
+          : slot.perGroup ? `${mine.length} picked: up to ${slot.perGroup} from each group.`
           : slot.byTime ? `${mine.length} picked: ${usedMin} of ${length} minutes. Each takes its countdown, or about ${slot.byTime} minutes.`
           : `${mine.length} of ${slot.max === slot.min ? slot.max : `up to ${slot.max}`} picked${full ? ': take one out to swap' : ''}.`}
       </p>
@@ -527,7 +531,7 @@ function Picker({ plan, items, block, slot, length, edit, onDone }: { plan: Plan
               const on = at === block;
               const elsewhere = at >= 0 && !on;
               return (
-                <button key={it.id} type="button" className="chip flex-col items-start gap-0.5 text-left" aria-pressed={on} disabled={elsewhere || (!on && (!slotHasRoom(slot, mine.length, inGroup(g.id)) || !fits(it.minutes)))} title={it.detail} onClick={() => toggle(it)}>
+                <button key={it.id} type="button" className="chip flex-col items-start gap-0.5 text-left" aria-pressed={on} disabled={elsewhere || (!on && (!slotHasRoom(slot, mine.length, inGroup(g.id), groupsUsed) || !fits(it.minutes)))} title={it.detail} onClick={() => toggle(it)}>
                   <span>{on ? '✓ ' : ''}{it.label}</span>
                   {(it.needs?.length || it.minutes || elsewhere) && (
                     <span className="text-xs font-normal text-ink-soft">{elsewhere ? `In block ${at + 1}` : [...(it.needs ?? []).map(proofText), it.minutes ? `${it.minutes} min` : ''].filter(Boolean).join(' · ')}</span>

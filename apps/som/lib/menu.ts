@@ -337,7 +337,7 @@ export function starterMenu(): Menu {
     titles: { lead: 'Lead', follow: 'Follow' },
     switchTitles: { lead: '', follow: '' },
     pacing: [
-      { id: 'p2', label: '2 hours', hours: 2, rooms: 1, playBreaks: 1, praise: 1, errands: false, note: 'One block at home: getting ready, two chores, devotion, one for you.' },
+      { id: 'p2', label: '2 hours', hours: 2, rooms: 1, playBreaks: 1, praise: 1, errands: false, note: 'One block at home: getting ready, chores in two areas, devotion, one for you.' },
       { id: 'p4', label: '4 hours', hours: 4, rooms: 2, playBreaks: 2, praise: 2, errands: false, note: 'A block at home, then one out on errands.' },
       { id: 'p8', label: '8 hours', hours: 8, rooms: 4, playBreaks: 3, praise: 3, errands: true, note: 'Home, out, a free hour, home again, then welcome home.' },
     ],

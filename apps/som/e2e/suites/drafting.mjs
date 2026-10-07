@@ -136,6 +136,26 @@ const change = (n) => b.getByRole('group', { name: `Block ${n}: Change-over (15 
 check((await change(2)).includes('Going out look'), 'the change-over into the block out is one for going out');
 check((await change(4)).includes('Back to the chores look'), '…and the one back into a block at home is for the chores');
 check((await b.getByRole('group', { name: `Block 5: Ready for ${TITLES.lead} (optional)` }).innerText()).includes('Welcome home look'), '…and the welcome home gets a welcome-home look');
+// Chores by hand: two areas a block, up to two jobs in each, the second job in an area's room going in the same room.
+await b.goto(`${BASE}/`);
+await b.getByRole('button', { name: 'New scene' }).click();
+await b.waitForURL(/\/scene\//);
+const choresRow = b.getByRole('group', { name: /^Block 1: Chores/ });
+await choresRow.getByRole('button', { name: /^\+ / }).click();
+await sheet(b).getByRole('button', { name: /Deep-clean the/ }).click();
+await sheet(b).getByRole('button', { name: 'Done', exact: true }).click();
+await b.getByLabel('Deep-clean the ___: room').selectOption('Office');
+await choresRow.getByRole('button', { name: /^\+ / }).click();
+const area = (g) => sheet(b).getByRole('group', { name: g, exact: true });
+await area('Rooms').getByRole('button', { name: /Vacuum and mop/ }).click();
+await area('Kitchen & bath').getByRole('button', { name: /refrigerator/ }).click();
+check(await area('Around the house').getByRole('button').first().isDisabled() && !(await area('Kitchen & bath').getByRole('button', { name: /shower/ }).isDisabled()),
+  'chores come from two areas: a third waits, the second area still takes a second job');
+check((await sheet(b).getByRole('status').first().innerText()).includes('3 of 4 picked: from 2 areas, up to 2 in each'), '…and the picker says so');
+await sheet(b).getByRole('button', { name: 'Done', exact: true }).click();
+check(await b.getByLabel('Vacuum and mop the ___ floor: room').inputValue() === 'Office', 'a second job in the same area goes in the same room (Office)');
+await b.getByText('Saved').waitFor({ timeout: 10000 });
+
 // Picking one by hand, what suits the block comes first.
 await b.goto(`${BASE}/`);
 await b.getByRole('button', { name: 'New scene' }).click();

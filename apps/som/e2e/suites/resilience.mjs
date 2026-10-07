@@ -99,7 +99,7 @@ check(await r.inputValue('#m-name') === 'Sunny again' && (await r.getByRole('but
   'a template saved on top of a newer menu keeps both');
 
 // ── Nothing moves while paused ──────────────────────────────────────────────
-const run = await runningScene(b, r, { title: 'Pause test', picks: [[1, 'Two chores', 'Laundry: wash']] });
+const run = await runningScene(b, r, { title: 'Pause test', picks: [[1, 'Chores', 'Laundry: wash']] });
 await b.goto(`${BASE}/scene/${run}`);
 await b.getByRole('button', { name: 'Pause' }).click();
 await b.getByText('You paused the scene').waitFor();

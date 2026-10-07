@@ -42,7 +42,7 @@ const id = b.url().split('/').pop();
 await b.fill('#plan-title', 'Layout check');
 await b.getByRole('button', { name: '4 hours' }).click();
 await pick(b, 1, 'Getting ready', 'Shower');
-await pick(b, 1, 'Two chores', 'Deep-clean the');
+await pick(b, 1, 'Chores', 'Deep-clean the');
 await b.getByLabel('Deep-clean the ___: room').selectOption('Kitchen');
 await pick(b, 1, 'Devotion', 'Daily affirmations');
 await b.getByRole('group', { name: 'Block 2: Errands' }).getByRole('button', { name: /^\+ / }).click();
