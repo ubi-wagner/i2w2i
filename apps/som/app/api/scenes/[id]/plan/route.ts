@@ -1,7 +1,7 @@
 import { bad, body, guard, isCipher, isUuid, json } from '@/lib/server/api';
 import { sql } from '@/lib/server/db';
 import { sceneFor } from '@/lib/server/pods';
-import { sceneTransition } from '@/lib/rules';
+import { ownsDraft, sceneTransition } from '@/lib/rules';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +13,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const found = isUuid(id) ? await sceneFor(me.id, id) : null;
   if (!found) return bad('Not found', 404);
   if (!sceneTransition(found.scene.status, 'edit', found.role)) return bad('This scene can’t be changed now.', 409);
+  if (!ownsDraft(found.scene.status, found.scene.created_by, me.id)) return bad('It’s their draft: only they can change it until it’s sent.', 403);
   const b = await body<{ planEnc?: unknown; rev?: unknown }>(req);
   if (!isCipher(b?.planEnc, 'j1', 200_000) || !Number.isInteger(b?.rev)) return bad('That doesn’t look like a plan.');
   const [row] = await sql<{ plan_rev: number }[]>`

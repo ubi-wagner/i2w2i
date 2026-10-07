@@ -70,8 +70,8 @@ leaves them. The server stores ciphertext and can't read it.
   it's removed from the bucket too. Deleting a note deletes what was sent
   with it.
 - A **whole scene** goes only when **everyone in the pod agrees**. Asking
-  shows on the other phone; you can take it back. A draft nobody else has
-  seen is just its author's.
+  shows on the other phone; you can take it back. A draft is just its
+  author's to delete.
 - Each of you can save to your phone what the other sends.
 
 ## How a scene runs
@@ -111,6 +111,15 @@ There are two ways in:
 - **The follow drafts one**: pick how long, then tap to pick for each
   block; it saves as you go. **Send** it to the lead, who adjusts
   anything and **starts it now**.
+
+**Drafts show to both of you as they're built.** A draft (either of
+yours) is on the other's phone too, updating as it saves, but it's its
+author's: only they can change it, send it, offer it or start it. The
+other sees it view only, and both screens say so ("Captain Kay can see
+this draft as it saves, but can't change it"; "Sunny is still building
+this draft"). Nothing is sent, and nobody is notified, until the author
+sends or offers it; then it's the lead's to change. The server enforces
+it (`ownsDraft` in `lib/rules.ts`).
 
 **The whole scene, before anyone says yes.** The lead can build a scene
 first (**Build it first, then offer it**) and see it as one sheet (**See
@@ -335,7 +344,10 @@ my way, per-task scores), a switched roleplay (asked for on its own by the
 usual lead, talked over in the notes, accepted by the usual follow, run with the roles swapped, ended
 straight into aftercare with loves and dislikes from both, no inspection, scores or rewards; a
 roleplay marked "not for me" can't be picked; and a request turned down),
-templates and novelty (the last offer remembered, a template applied, a
+drafting as people type (key by key, with spaces and new lines, in the
+builder, the inspection and a roleplay's loves; a draft view only, and
+refused by the server, for the one who didn't write it), templates and
+novelty (the last offer remembered, a template applied, a
 fill that avoids the last scene's picks, never-played roleplays first), profiles (ratings, notes, the
 other's view, Together, limits in the builder), deleting, and resilience (edits made offline
 save themselves once back online, the last tap before leaving a page is kept, two phones saving the

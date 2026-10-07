@@ -115,6 +115,14 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
   scene role is meant.
 - **Deleting:** people delete their own content any time (bucket too); a
   whole scene needs every member's yes; an unsent draft is its author's.
+- **Drafts are seen, not shared:** both see a draft as it's built (say so
+  on both screens), but only its author changes, sends, offers or starts
+  it (`ownsDraft`, enforced by the server).
+- **Typing:** never clean or trim a text box's value on each keystroke
+  (`cleanPlan(…, { typing: true })` while editing; trim when it's sent),
+  and never define a component inside another's render: both eat spaces,
+  new lines or focus. Multi-line text gets a `<textarea>` and is shown
+  with `whitespace-pre-wrap`. `e2e/suites/drafting.mjs` types key by key.
 - **Pause** is a safety control: either can pause, only whoever paused
   resumes, and nothing moves while paused. Don't weaken it.
 - **Roleplays are asked for on their own** (🎭 Ask for a roleplay), apart

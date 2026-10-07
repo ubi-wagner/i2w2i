@@ -7,7 +7,7 @@
 // loved and didn't. A roleplay Kay marked "not for me" can't be asked for.
 // Then Sunny asks Kay for a scene and Kay says not this time. Every new screen is checked on the small phone; nothing
 // readable reaches the database or a notification.
-import { audit, BASE, call, check, databaseText, db, finish, newPod, pushService, pushTo, pushes, SMALL, TITLES } from '../lib.mjs';
+import { audit, BASE, call, check, databaseText, db, finish, newPod, pushService, pushTo, pushes, SMALL, TITLES, typeIn } from '../lib.mjs';
 
 console.log(`on ${SMALL}`);
 const subscribe = await pushService();
@@ -26,7 +26,7 @@ const ROLEPLAYS = `## Indoor
   Location: Kitchen | Intensity: Playful
   Attire: Apron (Kay); a clipboard (Sunny)
   Setup: Kay arrives late for her shift and has to make up for it.
-  Action: Sunny gives the orders and sets the pace.
+  Action: {follow} gives the orders and sets the pace.
   Aftercare: Tea on the couch, feet up.
 - Breakfast service
   Leads: ${TITLES.lead}
@@ -88,7 +88,7 @@ await card.click();
 await b.getByText('Kay would like this roleplay').waitFor();
 check((await b.getByText('⇄ Switched: Sir leads, Kay follows').count()) === 1, 'in the scene, the titles are the switched ones (Sir; Kay by name)');
 check((await b.getByRole('radio', { name: /Normal/ }).count()) === 0, 'nobody is asked about capacity for a roleplay');
-check((await b.getByText('Sunny gives the orders and sets the pace.').count()) === 1, 'Sunny reads all of the roleplay before answering, decrypted on her phone');
+check((await b.getByText('Sunny gives the orders and sets the pace.').count()) === 1, 'Sunny reads all of the roleplay before answering, decrypted on her phone ({follow} written as her title)');
 await b.getByLabel('Note', { exact: true }).fill('Can we start at nine instead?');
 await b.getByRole('button', { name: 'Send note' }).click();
 await b.getByText('Can we start at nine instead?').waitFor();
@@ -144,7 +144,7 @@ check(!!await pushTo('kay', /Time for aftercare/), 'Kay hears it’s aftercare')
 check((await b.getByRole('region', { name: 'Results' }).count()) === 0 && (await b.getByText('The scorecard and tasks').count()) === 0, 'no scorecard and no rewards');
 const feelings = (p) => p.getByRole('region', { name: 'Loves and dislikes' });
 await feelings(b).getByRole('radio', { name: /Love it/ }).click();
-await feelings(b).getByLabel('What you loved').fill('The pace, and the clipboard.');
+check(await typeIn(feelings(b).getByLabel('What you loved'), 'The pace,\nand the clipboard.') === 'The pace,\nand the clipboard.', 'what she loved can run to more than one line, typed key by key');
 await feelings(b).getByRole('button', { name: 'Save words' }).click();
 await feelings(b).getByText('Saved', { exact: true }).waitFor();
 await audit(b, 'aftercare after a roleplay');
@@ -154,7 +154,7 @@ await feelings(r).getByLabel('What you didn’t love').fill('The apron was itchy
 await feelings(r).getByRole('button', { name: 'Save words' }).click();
 await feelings(r).getByText('Saved', { exact: true }).waitFor();
 const sunnySays = await r.getByRole('group', { name: 'Sir’s loves and dislikes' }).innerText();
-check(sunnySays.includes('❤️ Love it') && sunnySays.includes('The pace, and the clipboard.'), 'in aftercare each says what they loved and didn’t; Kay sees what Sunny loved');
+check(sunnySays.includes('❤️ Love it') && sunnySays.includes('The pace,\nand the clipboard.'), 'in aftercare each says what they loved and didn’t; Kay sees what Sunny loved, line by line');
 await audit(r, 'loves and dislikes');
 await b.reload();
 const kaySays = await b.getByRole('group', { name: 'Kay’s loves and dislikes' }).innerText();
@@ -198,7 +198,7 @@ check(pushes.every((m) => !m.error), 'every notification decrypts on the phone i
 const leaks = pushes.filter((m) => /night shift|breakfast|late for her|tea on|Sir|photo/i.test(`${m.title} ${m.body}`));
 check(leaks.length === 0, `notifications never say what’s in the scene${leaks.length ? `: ${JSON.stringify(leaks)}` : ''}`);
 const all = await databaseText();
-const found = ['The night shift', 'Breakfast service', 'start at nine', 'late for her shift', 'Tea on the couch', 'Your turn, tomorrow', 'clipboard (Sunny)', '"switchTitles"', '"roleplay":{', '"setup":', 'The pace, and the clipboard', 'apron was itchy', '"loved"'].filter((w) => all.includes(w));
+const found = ['The night shift', 'Breakfast service', 'start at nine', 'late for her shift', 'Tea on the couch', 'Your turn, tomorrow', 'clipboard (Sunny)', '"switchTitles"', '"roleplay":{', '"setup":', 'and the clipboard', 'apron was itchy', '"loved"'].filter((w) => all.includes(w));
 check(found.length === 0, `nothing readable in the database${found.length ? `: ${found.join(', ')}` : ''}`);
 const errors = [...b.errors, ...r.errors];
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);

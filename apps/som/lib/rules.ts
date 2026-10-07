@@ -94,6 +94,15 @@ export function taskTransition(status: TaskStatus, action: TaskAction, role: Rol
   return null;
 }
 
+/**
+ * A draft is its author's until it's sent or offered: the others in the pod
+ * can watch it being built (it saves as it goes) but can't change it, send
+ * it or start it. Anything past a draft follows sceneTransition.
+ */
+export function ownsDraft(status: SceneStatus, createdBy: string, accountId: string): boolean {
+  return status !== 'draft' || createdBy === accountId;
+}
+
 /** Content belongs to whoever made it: only they delete it. */
 export function canDelete(authorId: string, accountId: string): boolean {
   return authorId === accountId;

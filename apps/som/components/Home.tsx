@@ -119,6 +119,7 @@ export function Home() {
           )}
           <Section title="Drafts" eyebrow="Build" action={<button type="button" className={pod.role === 'follow' ? 'btn-follow' : 'btn-quiet'} disabled={busy} onClick={newScene}>{lead ? 'Build one now' : 'New scene'}</button>}>
             {drafts.length ? drafts.map((s) => <SceneCard key={s.id} s={s} />) : <p className="text-sm text-ink-soft">No drafts. {pod.role === 'follow' ? `Start one and send it to ${pod.title('lead')}.` : `Start one, or wait for ${pod.title('follow')} to send you one.`}</p>}
+            {partner && <p className="text-xs text-ink-soft">👁 You both see every draft as it’s built; only whoever started one can change it, send it or start it.</p>}
           </Section>
           {past.length > 0 && (
             <Section title="Past scenes" eyebrow="Record">
@@ -146,7 +147,7 @@ function turnFor(s: ListedScene, pod: ReturnType<typeof usePod>): { mine: boolea
   if (passed) return { mine: s.offered_by === me || lead, text: s.offered_by === me || lead ? 'Its time passed: offer a new one, or call it off' : `Its time passed: ${other} can offer a new one` };
   if (s.paused_at) return { mine: false, text: 'Paused: nothing moves until it’s resumed' };
   switch (s.status) {
-    case 'draft': return s.created_by === me ? { mine: true, text: 'Your draft: not sent yet' } : { mine: false, text: `${pod.nameOf(s.created_by)}’s draft, not sent yet` };
+    case 'draft': return s.created_by === me ? { mine: true, text: 'Your draft: not sent yet' } : { mine: false, text: `${pod.nameOf(s.created_by)} is building it: not sent yet` };
     case 'proposed': return lead ? { mine: true, text: 'Your turn: look at it, then start it or give it a time' } : { mine: false, text: `With ${other} to look at` };
     case 'offered':
       if (s.offered_by === me) return s.change_requested ? { mine: true, text: `Your turn: ${other} asked for a change` } : { mine: false, text: `Waiting for ${other} to answer` };
@@ -187,7 +188,7 @@ function SceneCard({ s, big = false }: { s: ListedScene; big?: boolean }) {
       )}
       <p className="text-sm text-ink-soft">
         {s.tasks > 0 ? `${s.done} of ${s.tasks} done` : `By ${pod.nameOf(s.created_by)}`} · {timeAgo(when)}
-        {s.waiting > 0 && <span className="ml-2 rounded-full bg-follow-light px-2 py-0.5 font-medium text-follow-dark">{s.waiting} to review</span>}
+        {s.waiting > 0 && (s.status === 'active' || s.status === 'inspection') && <span className="ml-2 rounded-full bg-follow-light px-2 py-0.5 font-medium text-follow-dark">{s.waiting} to review</span>}
         {s.delete_votes.length > 0 && <span className="ml-2 rounded-full bg-stop-light px-2 py-0.5 font-medium text-stop">Delete requested</span>}
       </p>
     </Link>

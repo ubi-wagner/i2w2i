@@ -15,7 +15,7 @@ const STEPS = {
 } as const;
 
 type Who = 'you' | 'them' | 'both' | 'soon' | 'done';
-export interface Guide { who: Who; waitingOn?: string; now: string; next?: string }
+export interface Guide { who: Who; waitingOn?: string; now: string; next?: string; /** Who else can see it, when that's worth saying. */ seen?: string }
 
 const clock = (d: Date) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -43,12 +43,19 @@ export function guideFor(data: SceneData, pod: ReturnType<typeof usePod>): Guide
   const built = plan.blocks.some((b) => b.items.length) || plan.customs.length > 0;
 
   switch (scene.status) {
-    case 'draft':
-      if (scene.created_by !== data.me) return { who: 'them', waitingOn: pod.nameOf(scene.created_by), now: `${pod.nameOf(scene.created_by)} is still planning this draft.`, next: 'You’ll get a notification when it’s sent to you.' };
-      if (plan.roleplay) return { who: 'you', now: 'This roleplay isn’t on: it was turned down or called off.', next: 'Offer a time to ask again, or delete it.' };
+    case 'draft': {
+      // Drafts show to everyone in the pod as they're built; only the author changes or sends one (ownsDraft).
+      const author = pod.nameOf(scene.created_by);
+      const watchers = data.members.filter((m) => m.account_id !== data.me && m.has_key).map((m) => pod.nameOf(m.account_id)).join(' and ');
+      if (scene.created_by !== data.me) {
+        return { who: 'them', waitingOn: author, now: `${author} is still building this draft. You see it as it saves; only ${author} can change it.`, next: `You’ll get a notification when ${author} sends it or offers it to you.` };
+      }
+      const seen = watchers ? `${watchers} can see this draft as it saves, but can’t change it. Nothing is sent until you send or offer it.` : undefined;
+      if (plan.roleplay) return { who: 'you', now: 'This roleplay isn’t on: it was turned down or called off.', next: 'Offer a time to ask again, or delete it.', seen };
       return lead
-        ? { who: 'you', now: 'A draft only you are working on: nothing is sent yet. Pick what goes in each block, or tap Fill it for me.', next: `Then Offer a time (${F} sees the whole scene before saying yes), or Start now.` }
-        : { who: 'you', now: 'A draft only you are working on: nothing is sent yet. Pick what goes in each block, or tap Fill it for me.', next: `Then Send to ${L} to look at, or Offer a time.` };
+        ? { who: 'you', now: 'Your draft. Pick what goes in each block, or tap Fill it for me; it saves as you go.', next: `Then Offer a time (${F} sees the whole scene before saying yes), or Start now.`, seen }
+        : { who: 'you', now: 'Your draft. Pick what goes in each block, or tap Fill it for me; it saves as you go.', next: `Then Send to ${L} to look at, or Offer a time.`, seen };
+    }
     case 'proposed':
       return lead
         ? { who: 'you', now: `${pod.nameOf(scene.created_by)} sent you this scene to look at. Change anything you like.`, next: `Then Start now, Offer a time for later, or Not now (it goes back to ${F}).` }
@@ -130,6 +137,7 @@ export function NextStep({ data }: { data: SceneData }) {
       <p className={`eyebrow ${g.who === 'you' || g.who === 'both' ? 'text-lead' : 'text-ink-soft'}`}>{g.who === 'you' ? '👉 ' : ''}{label}</p>
       <p className="font-medium">{g.now}</p>
       {g.next && <p className="text-sm text-ink-soft"><span className="font-semibold">Next:</span> {g.next}</p>}
+      {g.seen && <p className="text-sm text-ink-soft">👁 {g.seen}</p>}
       <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-1 pt-1 text-xs" aria-label="Steps">
         {steps.flatMap((s, i) => [
           ...(i ? [<li key={`${s}-sep`} aria-hidden className="text-ink-faint">›</li>] : []),

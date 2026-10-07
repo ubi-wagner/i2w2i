@@ -80,8 +80,8 @@ export function RoleplayFeelings({ rp }: { rp: Roleplay }) {
       <div className="space-y-2">
         <p className="text-sm font-medium">You</p>
         <FeelPicker value={mine.feel} label="How you feel about it" onPick={(f) => void save({ feel: f })} />
-        <input className="input" aria-label="What you loved" placeholder="Loved… (optional)" maxLength={500} value={shown.loved} onChange={(e) => setLoved(e.target.value)} />
-        <input className="input" aria-label="What you didn’t love" placeholder="Didn’t love… (optional)" maxLength={500} value={shown.disliked} onChange={(e) => setDisliked(e.target.value)} />
+        <textarea className="input" rows={2} aria-label="What you loved" placeholder="Loved… (optional)" maxLength={500} value={shown.loved} onChange={(e) => setLoved(e.target.value)} />
+        <textarea className="input" rows={2} aria-label="What you didn’t love" placeholder="Didn’t love… (optional)" maxLength={500} value={shown.disliked} onChange={(e) => setDisliked(e.target.value)} />
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm text-ink-soft" role="status">{state === 'saving' ? 'Saving…' : state === 'saved' && !changed ? 'Saved' : ''}</span>
           {changed && <button type="button" className="btn-quiet" onClick={() => void save({ loved: shown.loved.trim(), disliked: shown.disliked.trim() }).then((ok) => { if (ok) clearWords(); })}>Save words</button>}
@@ -93,8 +93,8 @@ export function RoleplayFeelings({ rp }: { rp: Roleplay }) {
         return (
           <div key={m.account_id} className="space-y-1 border-t border-line pt-3" role="group" aria-label={`${pod.nameOf(m.account_id)}’s loves and dislikes`}>
             <p className="text-sm font-medium">{pod.nameOf(m.account_id)}{f?.feel ? `: ${FEEL[f.feel].icon} ${FEEL[f.feel].label}` : ''}</p>
-            {f?.loved && <p className="text-sm"><span className="text-ink-soft">Loved:</span> {f.loved}</p>}
-            {f?.disliked && <p className="text-sm"><span className="text-ink-soft">Didn’t love:</span> {f.disliked}</p>}
+            {f?.loved && <p className="whitespace-pre-wrap text-sm"><span className="text-ink-soft">Loved:</span> {f.loved}</p>}
+            {f?.disliked && <p className="whitespace-pre-wrap text-sm"><span className="text-ink-soft">Didn’t love:</span> {f.disliked}</p>}
             {!f && <p className="text-sm text-ink-soft">Not said yet.</p>}
           </div>
         );

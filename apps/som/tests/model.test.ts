@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cleanMenu, itemsById, proofText, section, SECTION_KINDS, starterMenu, type Menu } from '@/lib/menu';
 import { arrivalChecklist, autoFill, cleanPlan, emptyPlan, noProof, picked, pacingForHours, placeLoose, planCheckins, upgradePlan, planToTasks, proofComplete, proofProgress, recentlyUsed, roleplayHistory, tidyPlan, withParam, type Plan } from '@/lib/plan';
-import { allAgreed, canDelete, overlaps, sceneRole, sceneTransition, startState, taskTransition, windowProblem } from '@/lib/rules';
+import { allAgreed, canDelete, overlaps, ownsDraft, sceneRole, sceneTransition, startState, taskTransition, windowProblem } from '@/lib/rules';
 
 const find = (menu: Menu, label: string) => [...itemsById(menu).values()].find((x) => x.item.label === label)!.item;
 
@@ -105,6 +105,15 @@ describe('plan → tasks', () => {
     expect(cleanPlan({ checkinMinutes: 0 }).checkinMinutes).toBe(0);
   });
 
+  it('keeps words as they’re typed (the space or new line before the next word), and trims them after', () => {
+    const typing = { title: 'Friday ', note: 'Wear the blue one.\n', picks: { 'ok-1': { param: 'the kitchen ' } } };
+    const p = cleanPlan(typing, { typing: true });
+    expect([p.title, p.note, p.picks['ok-1']?.param]).toEqual(['Friday ', 'Wear the blue one.\n', 'the kitchen ']);
+    const done = cleanPlan(p);
+    expect([done.title, done.note, done.picks['ok-1']?.param]).toEqual(['Friday', 'Wear the blue one.', 'the kitchen']);
+    expect(cleanPlan({ title: 'x'.repeat(90) }, { typing: true }).title).toHaveLength(80);
+  });
+
   it('tidies away picks no longer in the day (the arrival routine stays)', () => {
     const door = find(menu, 'Meet at the door with a drink');
     const fridge = find(menu, 'Clean the refrigerator, inside and out');
@@ -185,6 +194,13 @@ describe('rules', () => {
     expect(sceneTransition('proposed', 'edit', 'follow')).toBeNull();
     expect(sceneTransition('proposed', 'edit', 'lead')).toBe('proposed');
     expect(sceneTransition('active', 'edit', 'lead')).toBeNull();
+  });
+
+  it('a draft is its author’s: the other can watch it being built, not change, send or start it', () => {
+    expect(ownsDraft('draft', 'sunny', 'sunny')).toBe(true);
+    expect(ownsDraft('draft', 'sunny', 'kay')).toBe(false);
+    expect(ownsDraft('proposed', 'sunny', 'kay')).toBe(true); // sent: it's the lead's to look at now
+    expect(ownsDraft('accepted', 'sunny', 'kay')).toBe(true);
   });
 
   it('the follow starts and submits tasks; the lead approves, returns, skips or reopens', () => {

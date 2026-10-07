@@ -1,6 +1,7 @@
 'use client';
 
 import { BLOCK_NAME } from '@/lib/blocks';
+import { putTitles } from '@/lib/client/ideas';
 import { proofText } from '@/lib/menu';
 import { arrivalChecklist, planCheckins, planToTasks, type Plan, type TaskDraft } from '@/lib/plan';
 import { usePod } from '../Pod';
@@ -76,8 +77,8 @@ export function SceneSummary({ data, plan = data.plan, showRoleplay = false, sho
       {showRoleplay && plan.roleplay && (
         <div className="space-y-1">
           <p className="font-medium">🎭 {plan.roleplay.title}</p>
-          {plan.roleplay.attire && <p className="text-sm"><span className="text-ink-soft">Wear:</span> {plan.roleplay.attire}</p>}
-          {plan.roleplay.setup && <p className="whitespace-pre-wrap text-sm">{plan.roleplay.setup}</p>}
+          {plan.roleplay.attire && <p className="whitespace-pre-wrap text-sm"><span className="text-ink-soft">Wear:</span> {putTitles(plan.roleplay.attire, pod.menu.titles)}</p>}
+          {plan.roleplay.setup && <p className="whitespace-pre-wrap text-sm">{putTitles(plan.roleplay.setup, pod.menu.titles)}</p>}
         </div>
       )}
 

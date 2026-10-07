@@ -135,7 +135,9 @@ function Scorecard({ data, reload, onOpen }: { data: SceneData; reload: () => Pr
     }
   }
 
-  const Chips = ({ items }: { items: MenuItem[] }) => (
+  // Called, not rendered as <Chips />: a component made anew on each render
+  // would remount its boxes on every key, dropping the focus after one letter.
+  const chips = (items: MenuItem[]) => (
     <div className="flex flex-wrap gap-2">
       {items.map((it) => (
         <span key={it.id} className="inline-flex flex-col gap-1">
@@ -200,14 +202,14 @@ function Scorecard({ data, reload, onOpen }: { data: SceneData; reload: () => Pr
         <Section title="Consequences & rewards" eyebrow="What follows">
           <div className="card space-y-4">
             {outcomeGroups.map((g) => g.items.length > 0 && (
-              <div key={g.id} className="space-y-2"><p className="eyebrow text-follow">{g.title}</p><Chips items={g.items} /></div>
+              <div key={g.id} className="space-y-2"><p className="eyebrow text-follow">{g.title}</p>{chips(g.items)}</div>
             ))}
           </div>
         </Section>
       )}
       {service.length > 0 && (
         <Section title="Service" eyebrow="Continuation">
-          <div className="card"><Chips items={service} /></div>
+          <div className="card">{chips(service)}</div>
         </Section>
       )}
       <ErrorText>{error}</ErrorText>
