@@ -133,13 +133,14 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
 - **Enthusiastic consent:** whoever is offered or asked for a scene can
   always say "Not this time", no reason needed. Keep that path one tap.
 - **The day is two-hour blocks** (`lib/blocks.ts`): getting ready (30
-  min; up to 3 from each of its groups, `perGroup`) or a 15-minute change-over, exactly two chores at home (errands
-  when out), then Devotion and For {lead}, 15 minutes each; 8 hours adds a
+  min; up to 3 from each of its groups, `perGroup`) or a 15-minute change-over, chores at home (two areas, up to two
+  jobs in each: `maxGroups`/`perGroup`; two jobs in an area share a room, `sharedRoom`; errands when out),
+  then Devotion and For {lead}, 15 minutes each; 8 hours adds a
   free hour and welcome home; the free hour's play break holds what fits
   its minutes (`byTime`: each item's countdown, or `PLAY_MINUTES`).
   Nothing twice in a day; check-ins at the end of each block; demands any
   time. Fill it for me fills every part by those rules, spreading picks
-  over a section's groups (two chores never from one group) and skipping
+  over a section's groups (two areas for the chores) and skipping
   what recent scenes used: keep the novelty. A change-over suits the block
   it leads into (`changeoverTiers`: going out, back to the chores, welcome
   home, by group title), and every part runs in the menu's order

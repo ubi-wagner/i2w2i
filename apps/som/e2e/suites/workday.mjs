@@ -119,15 +119,17 @@ await r.getByText(`Agreed with ${TITLES.follow}`).waitFor();
 
 // ── Kay fills it in and sends it ────────────────────────────────────────────
 await r.getByRole('button', { name: /Fill it for me/ }).click();
-const chores = r.getByRole('group', { name: 'Block 1: Two chores' });
-await chores.getByText('2/2').waitFor();
+const chores = r.getByRole('group', { name: /^Block 1: Chores/ });
+await chores.getByText('4/4').waitFor();
 if (!(await chores.getByText(LAUNDRY).count())) {
-  await chores.getByRole('button', { name: /^Take out/ }).first().click();
-  await pick(r, 1, 'Two chores', 'Laundry: wash');
+  // Swap the first area (its two jobs) for the one with the laundry.
+  for (let n = 0; n < 2; n++) await chores.getByRole('button', { name: /^Take out/ }).first().click();
+  await pick(r, 1, 'Chores', 'Laundry: wash');
+  await pick(r, 1, 'Chores', 'Wash the windows');
 }
 await r.getByText('Saved').waitFor({ timeout: 10000 });
 const filled = Number((await r.getByText(/^\d+ tasks? ·/).innerText()).match(/^(\d+)/)[1]);
-check(filled === 5, `“Fill it for me” fills the block: getting ready, two chores, devotion and one for Kay (${filled} tasks)`);
+check(filled === 7, `“Fill it for me” fills the block: getting ready, four chores (two areas, two in each), devotion and one for Kay (${filled} tasks)`);
 check(await r.locator('#plan-checkin').inputValue() === 'blocks', '…with a check-in at the end of the block');
 await audit(r, 'builder, filled in');
 await r.getByRole('button', { name: `Send to ${TITLES.follow}` }).click();

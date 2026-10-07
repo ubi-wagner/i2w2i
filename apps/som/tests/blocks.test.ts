@@ -2,14 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { blockAt, blockMinutes, blocksForWindow, changeoverTiers, checkinOffsets, defaultBlocks, nextBlockCheckin, PREP_PER_GROUP, schedule, slotHasRoom, slotLabel, slotsFor } from '@/lib/blocks';
 
 describe('the day in blocks', () => {
-  it('getting ready takes up to 3 from each group (any number of groups); other parts have a cap', () => {
+  it('getting ready takes up to 3 from each group (any number of groups); chores two areas, two in each; other parts have a cap', () => {
     const prep = slotsFor('home', true)[0]!;
     expect([prep.slot, prep.perGroup, PREP_PER_GROUP]).toEqual(['prep', 3, 3]);
     expect(slotHasRoom(prep, 20, 2)).toBe(true); // 20 picked across groups, 2 from this one
     expect(slotHasRoom(prep, 3, 3)).toBe(false); // this group has its 3
     expect(slotHasRoom(prep, 30, null)).toBe(true); // something written for this scene
     const chores = slotsFor('home', true)[1]!;
-    expect([slotHasRoom(chores, 1, 1), slotHasRoom(chores, 2, 0), slotHasRoom(chores, 2, null)]).toEqual([true, false, false]);
+    expect(slotHasRoom(chores, 1, 1, 1)).toBe(true); // a second job in the same area
+    expect(slotHasRoom(chores, 2, 2, 1)).toBe(false); // that area has its two
+    expect(slotHasRoom(chores, 2, 0, 1)).toBe(true); // a second area
+    expect(slotHasRoom(chores, 2, 0, 2)).toBe(false); // …but not a third
+    expect([slotHasRoom(chores, 3, null, 2), slotHasRoom(chores, 4, null, 2)]).toEqual([true, false]); // written for this scene, up to four in all
+    const errands = slotsFor('out', false)[1]!;
+    expect([slotHasRoom(errands, 1, 0), slotHasRoom(errands, 2, 0), slotHasRoom(errands, 2, null)]).toEqual([true, false, false]);
   });
 
   it('a change-over suits the block it leads into: going out, or back to the chores', () => {
@@ -39,7 +45,7 @@ describe('the day in blocks', () => {
     expect(slotsFor('out', false).map((s) => [s.slot, s.minutes])).toEqual([['changeover', 15], ['errands', 75], ['devotion', 15], ['wishes', 15]]);
     expect(blockMinutes('home', true)).toBe(120);
     expect(blockMinutes('home', false)).toBe(120);
-    expect(slotsFor('home', true).find((s) => s.slot === 'chores')).toMatchObject({ min: 2, max: 2 });
+    expect(slotsFor('home', true).find((s) => s.slot === 'chores')).toMatchObject({ min: 2, max: 4, perGroup: 2, maxGroups: 2 });
   });
 
   it('times each block; spare time goes to the free hour, or a free stretch at the end', () => {
@@ -82,6 +88,6 @@ describe('the day in blocks', () => {
   });
 
   it('says what each part is, with the lead’s title', () => {
-    expect(slotsFor('home', false).map((s) => slotLabel(s, 'Captain Kay'))).toEqual(['Change-over (15 min)', 'Two chores', 'Devotion (15 min)', 'For Captain Kay (15 min)']);
+    expect(slotsFor('home', false).map((s) => slotLabel(s, 'Captain Kay'))).toEqual(['Change-over (15 min)', 'Chores (two areas, two in each)', 'Devotion (15 min)', 'For Captain Kay (15 min)']);
   });
 });

@@ -34,6 +34,9 @@ export interface Plan {
 
 export const CHECKIN_CHOICES = [15, 30, 45, 60, 90, 120];
 
+/** The most one block holds (a long getting-ready, four chores, devotion, one for the lead…). */
+export const BLOCK_ITEMS = 60;
+
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 /** Words as typed: the space or new line just typed at the end stays (it's trimmed when the plan is loaded or sent). */
 const typed = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
@@ -82,12 +85,12 @@ export function cleanPlan(raw: unknown, { typing = false }: { typing?: boolean }
     if (!label || typeof c.id !== 'string' || !ID.test(c.id) || !KINDS.has(c.kind as SectionKind)) return [];
     return [{ id: c.id, kind: c.kind as SectionKind, label, details: str(c.details, 1000), needs: cleanProofs(c.needs) }];
   });
-  // Each thing in one block only.
+  // Each thing in one block only. A block holds plenty: getting ready alone can take three from each of its groups.
   const placed = new Set<string>();
   const blocks: PlanBlock[] = (Array.isArray(r.blocks) ? r.blocks : []).slice(0, 10).flatMap((x) => {
     const b = (x ?? {}) as Record<string, unknown>;
     if (!BLOCK_KINDS.includes(b.kind as BlockKind)) return [];
-    const items = (Array.isArray(b.items) ? b.items : []).filter((id): id is string => typeof id === 'string' && ID.test(id) && !placed.has(id)).slice(0, 12);
+    const items = (Array.isArray(b.items) ? b.items : []).filter((id): id is string => typeof id === 'string' && ID.test(id) && !placed.has(id)).slice(0, BLOCK_ITEMS);
     items.forEach((id) => placed.add(id));
     return [{ kind: b.kind as BlockKind, items }];
   });
@@ -116,6 +119,17 @@ export function planItems(menu: Menu, plan: Plan): Map<string, PlanItem> {
   for (const [id, { item, section: s }] of itemsById(menu)) out.set(id, { ...item, kind: s.kind });
   for (const c of plan.customs) out.set(c.id, { id: c.id, kind: c.kind, label: c.label, detail: c.details, needs: c.needs, custom: true });
   return out;
+}
+
+/**
+ * The room for a job picked into a block: the one another job from the same
+ * group (area) already has there, so two jobs in an area are in one room.
+ */
+export function sharedRoom(menu: Menu, plan: Plan, block: number, id: string): string | undefined {
+  const byId = itemsById(menu);
+  const g = byId.get(id);
+  if (g?.item.param !== 'room') return undefined;
+  return plan.blocks[block]?.items.filter((x) => x !== id && byId.get(x)?.group.id === g.group.id && byId.get(x)?.item.param === 'room').map((x) => plan.picks[x]?.param).find(Boolean);
 }
 
 /**
@@ -343,7 +357,7 @@ export function pacingFor(menu: Menu, hours: number, capacity: Capacity = 'norma
 }
 
 /**
- * Fill it for me: tops each block up (getting ready, two chores, errands,
+ * Fill it for me: tops each block up (getting ready, chores, errands,
  * devotion, one for the lead; a play break in the free hour; a change for
  * the welcome home) and the arrival routine, from the menu. Nothing twice
  * in a day, and whatever recent scenes used (`avoid`: ids, and rooms as
@@ -366,8 +380,11 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
     roomsToday.add(r);
     return r;
   };
+  const groupOf = new Map(menu.sections.flatMap((sec) => sec.groups.flatMap((g) => g.items.map((it) => [it.id, g.id] as const))));
   const take = (it: MenuItem, into?: PlanBlock) => {
-    next.picks[it.id] = it.param ? { param: it.param === 'room' ? room() : defaultParam(it.param) } : {};
+    // Two jobs from one area in a block are in the same room.
+    const same = it.param === 'room' ? into?.items.map((x) => (groupOf.get(x) === groupOf.get(it.id) && items.get(x)?.param === 'room' ? next.picks[x]?.param : undefined)).find(Boolean) : undefined;
+    next.picks[it.id] = it.param ? { param: it.param === 'room' ? (same ?? room()) : defaultParam(it.param) } : {};
     into?.items.push(it.id);
     used.add(it.id);
   };
@@ -378,7 +395,6 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
   };
   const free = (xs: MenuItem[]) => shuffle(xs.filter((i) => !used.has(i.id) && !next.picks[i.id]), (i) => i.id);
   // Which groups each part has drawn from today: the next pick prefers one it hasn't, so the day varies.
-  const groupOf = new Map(menu.sections.flatMap((sec) => sec.groups.flatMap((g) => g.items.map((it) => [it.id, g.id] as const))));
   const drawn = new Map<SectionKind, Set<string>>();
   const mark = (kind: SectionKind, id: string) => {
     const g = groupOf.get(id);
@@ -410,7 +426,21 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
     for (const s of slotsFor(b.kind, timed[i]?.first ?? false)) {
       const mine = b.items.filter((id) => items.get(id)?.kind === s.kind);
       const add = (it: MenuItem) => { take(it, b); mark(s.kind, it.id); };
-      if (s.perGroup) {
+      if (s.perGroup && s.maxGroups) {
+        // Chores: two areas (the one already started counts), up to two jobs in each, the areas the day hasn't had first.
+        const has = new Map<string, number>();
+        for (const id of mine) { const g = groupOf.get(id); if (g) has.set(g, (has.get(g) ?? 0) + 1); }
+        let n = mine.length;
+        for (const it of spread(s.kind, s.slot, undefined, b.kind)) {
+          const g = groupOf.get(it.id)!;
+          const k = has.get(g) ?? 0;
+          if (n >= s.fill) break;
+          if (k >= s.perGroup || (!k && has.size >= s.maxGroups)) continue;
+          has.set(g, k + 1);
+          add(it);
+          n++;
+        }
+      } else if (s.perGroup) {
         // Getting ready: one from each group that has nothing yet, a whole look around what's picked.
         const has = new Set(mine.map((id) => groupOf.get(id)));
         for (const it of spread(s.kind, s.slot, has)) if (!has.has(groupOf.get(it.id))) { has.add(groupOf.get(it.id)); add(it); }
@@ -423,7 +453,7 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
           if (usedMin + m <= length) { add(it); usedMin += m; }
         }
       } else {
-        // Each from a different group while there are others: two chores, say, and now and then a twist.
+        // Each from a different group while there are others: one way to go and one place to go on errands, say.
         const has = new Set(mine.map((id) => groupOf.get(id)));
         const want = Math.max(0, s.fill - mine.length);
         const cands = spread(s.kind, s.slot, undefined, b.kind);

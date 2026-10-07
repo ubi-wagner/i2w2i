@@ -141,9 +141,10 @@ replaces goes into your own ideas.
 
 **The day, in two-hour blocks.** A block at home is getting ready (30
 minutes; after the first block, a 15-minute **change-over**, like out of
-the cleaning clothes and into something for the shops), then **exactly
-two chores** (clean the fridge, wash the windows, deep-clean a room from
-the room bank), then 15 minutes of **Devotion** (a praise act for the
+the cleaning clothes and into something for the shops), then the
+**chores: two areas, up to two jobs in each** (the kitchen: the fridge and
+the oven; a room from the room bank: dust it and mop it, both in the same
+room), then 15 minutes of **Devotion** (a praise act for the
 lead) and 15 minutes **For {lead}** (a sonnet about your marriage, plan a
 night out somewhere new, pick a date outfit). A block **out** swaps the
 chores for one or two errands, each with its proof. 2 hours is a block at
@@ -154,11 +155,12 @@ the arrival routine). Time left over goes to free time. The free hour's
 own countdown, or about 20 minutes, and the picker shows "40 of 60 min"
 and greys out what won't fit (a 9-hour window has 120 minutes of it).
 Each part has a picker: anything from that menu section (nothing twice in
-a day; getting ready takes up to three from each of its groups), or
+a day; getting ready takes up to three from each of its groups, chores two
+of the chores' groups with up to two from each), or
 **write your own** for this scene. **Fill it for me** fills each part the
-same way: a whole look for getting ready (one from each group), the two
-chores from two different groups (so a twist or an evidence chore comes up
-about half the time, when the chores section has them), devotions, For
+same way: a whole look for getting ready (one from each group), two jobs
+in each of two areas for the chores (areas the day hasn't had first, so a
+twist written into an area comes up now and then), devotions, For
 {lead} and errands from a group the day hasn't used yet where it can,
 the play break up to its minutes, and the arrival routine one step from
 each of its groups (where you're found, how, the greeting, the service:
