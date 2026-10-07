@@ -6,7 +6,7 @@ import { api, ApiError } from '@/lib/client/api';
 import { blocksForWindow, BLOCK_NAME, isWork, slotLabel, slotsFor, type BlockKind, type SlotSpec } from '@/lib/blocks';
 import { newId, proofText, section, type MenuItem, type Proof } from '@/lib/menu';
 import { arrivalChecklist, autoFill, blocksFor, cleanPlan, CHECKIN_CHOICES, pacingFor, pacingOf, picked, placeLoose, planCheckins, planItems, planToTasks, recentlyUsed, tidyPlan, withParam, type Plan, type PlanItem } from '@/lib/plan';
-import { sceneTransition } from '@/lib/rules';
+import { ownsDraft, sceneTransition } from '@/lib/rules';
 import { usePod } from '../Pod';
 import { ProofEditor } from '../ProofEditor';
 import { ErrorText, Sheet } from '../ui';
@@ -40,7 +40,9 @@ function dayHours(timed: { end: number }[]): { from: string; until: string } {
 export function Builder({ data, reload }: { data: SceneData; reload: () => Promise<void> }) {
   const pod = usePod();
   const { scene, role } = data;
-  const editable = Boolean(sceneTransition(scene.status, 'edit', role)) && !data.planBroken;
+  // A draft is its author's; the other one watches it being built (ownsDraft).
+  const mine = ownsDraft(scene.status, scene.created_by, data.me);
+  const editable = Boolean(sceneTransition(scene.status, 'edit', role)) && mine && !data.planBroken;
   const [stored, setPlan] = useState<Plan>(data.plan);
   // A plan from before blocks, seen by someone who can't edit it: shown in blocks.
   const plan = stored.blocks.length || editable ? stored : placeLoose(pod.menu, { ...stored, blocks: blocksFor(pacingOf(pod.menu, stored)?.hours ?? 2) });
@@ -83,7 +85,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
     const run = (async () => {
       setSaving('saving');
       try {
-        const r = await api<{ rev: number }>(`/api/scenes/${scene.id}/plan`, { method: 'PUT', body: { planEnc: await pod.seal(planRef.current, `plan:${scene.id}`), rev: revRef.current } });
+        const r = await api<{ rev: number }>(`/api/scenes/${scene.id}/plan`, { method: 'PUT', body: { planEnc: await pod.seal(cleanPlan(planRef.current), `plan:${scene.id}`), rev: revRef.current } });
         savedUpTo.current = upTo;
         revRef.current = r.rev;
         setRev(r.rev);
@@ -134,7 +136,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
       const c = structuredClone(p);
       fn(c);
       delete c.arrival; // a draft's routine follows the menu until it's started or sent
-      return tidyPlan(pod.menu, cleanPlan(c));
+      return tidyPlan(pod.menu, cleanPlan(c, { typing: true }));
     });
     edits.current += 1;
     setSaving('idle');
@@ -183,14 +185,15 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
     setError('');
     try {
       await save();
-      const drafts = planToTasks(pod.menu, plan);
+      const ready = cleanPlan(plan); // what was typed, trimmed
+      const drafts = planToTasks(pod.menu, ready);
       const tasks = await Promise.all(drafts.map(async (t, ord) => {
         const id = crypto.randomUUID();
         return { id, ord, bodyEnc: await pod.seal(t, `task:${id}`), minutes: t.minutes ?? null };
       }));
-      const checkins = planCheckins(plan, windowMinutes(scene));
+      const checkins = planCheckins(ready, windowMinutes(scene));
       // The arrival routine is kept with the scene as it is now, so a later menu change can't alter it.
-      const kept = { ...plan, arrival: arrivalChecklist(pod.menu, { ...plan, arrival: undefined }) };
+      const kept = { ...ready, arrival: arrivalChecklist(pod.menu, { ...ready, arrival: undefined }) };
       await api(`/api/scenes/${scene.id}/action`, { body: { action, tasks, planEnc: await pod.seal(kept, `plan:${scene.id}`), checkinMinutes: checkins.every, checkinAt: checkins.at } });
       setConfirm(null);
       await reload();
@@ -209,11 +212,11 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
   const short = plan.blocks.flatMap((b, i) => slotsFor(b.kind, timed[i]?.first ?? false)
     .filter((s) => b.items.filter((id) => items.get(id)?.kind === s.kind).length < s.min)
     .map((s) => `${i + 1}. ${slotLabel(s, lead).replace(/ \(.*\)$/, '')}`));
-  const canPropose = sceneTransition(scene.status, 'propose', role);
+  const canPropose = mine && sceneTransition(scene.status, 'propose', role);
   const canWithdraw = sceneTransition(scene.status, 'withdraw', role);
-  const canStart = sceneTransition(scene.status, 'start', role);
+  const canStart = mine && sceneTransition(scene.status, 'start', role);
   const canSend = sceneTransition(scene.status, 'send', role);
-  const canOffer = (scene.status === 'draft' || scene.status === 'accepted' || scene.status === 'proposed') && sceneTransition(scene.status, 'offer', role, scene.offered_by === pod.account.id);
+  const canOffer = mine && (scene.status === 'draft' || scene.status === 'accepted' || scene.status === 'proposed') && sceneTransition(scene.status, 'offer', role, scene.offered_by === pod.account.id);
   const canCallOff = scene.status === 'accepted';
   // A roleplay can go with no tasks at all.
   const sendable = (tasks.length > 0 || Boolean(plan.roleplay)) && !data.planBroken;
@@ -313,7 +316,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
       <ErrorText>{error}</ErrorText>
       <div className="sticky bottom-20 z-10 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-line bg-paper-raised/95 p-3 shadow-lg backdrop-blur">
         <span className="text-sm text-ink-soft" role="status">
-          {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'} · {saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : saving === 'error' ? 'Not saved' : editable ? 'Changes save themselves' : 'View only'}
+          {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'} · {saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Saved' : saving === 'error' ? 'Not saved' : editable ? 'Changes save themselves' : mine ? 'View only' : `${pod.nameOf(scene.created_by)}’s draft: view only`}
         </span>
         <span className="flex gap-2">
           {canWithdraw && <button type="button" className="btn-quiet" onClick={() => act('withdraw')}>{role === 'lead' ? 'Not now' : 'Take it back'}</button>}
@@ -355,7 +358,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
       </Sheet>
       <Sheet open={whole} onClose={() => setWhole(false)} title="The whole scene" wide>
         <div className="space-y-4">
-          <p className="text-sm text-ink-soft">{scene.status === 'draft' || scene.status === 'proposed' ? `This is what ${role === 'lead' ? follow : lead} sees before saying yes.` : 'As it stands now.'}</p>
+          <p className="text-sm text-ink-soft">{!mine ? `As ${pod.nameOf(scene.created_by)} has it so far.` : scene.status === 'draft' || scene.status === 'proposed' ? `This is what ${role === 'lead' ? follow : lead} sees before saying yes.` : 'As it stands now.'}</p>
           <SceneSummary data={data} plan={plan} showRoleplay />
           {canOffer && <button type="button" className="btn w-full" onClick={() => { setWhole(false); setOffering(true); }}>{scene.status === 'accepted' ? 'Change the time' : 'Offer it'}</button>}
         </div>

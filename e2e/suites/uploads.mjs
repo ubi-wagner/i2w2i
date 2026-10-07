@@ -1,7 +1,8 @@
 // Uploads that survive real-world interruptions: page reloads, going
 // offline, silent stalls, and a browser that couldn't keep the file.
 import { randomBytes } from 'node:crypto';
-import { BASE, RUN, adminPage, check, createCode, createEvent, db, finish, joinWithCode, phonePage, sha, storedSha } from '../lib.mjs';
+import { readFileSync } from 'node:fs';
+import { BASE, RUN, adminPage, check, createCode, createEvent, db, finish, fixture, joinWithCode, phonePage, sha, storedSha } from '../lib.mjs';
 
 const BIG = randomBytes(40 * 1024 * 1024 + 12345); // 6 parts of 8 MB
 const PARTS = Math.ceil(BIG.length / (8 * 1024 * 1024));
@@ -96,6 +97,26 @@ const slow = (p) => p.route(/op=part/, (route) => setTimeout(() => route.continu
   await added(p);
   check(second && (await second) === 200, 'two completions at once: both succeed');
   check((await storedSha('duo.mp4', 'Duo')) === bigSha, 'two completions at once: stored video is byte-identical');
+}
+{ // Two finishing at the same moment: the next waiting file still starts (two go at a time)
+  const { p } = await guest('Trio');
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let held = 0;
+  await p.route(/\/api\/uploads\/[0-9a-f-]{36}$/, async (route) => {
+    if ((route.request().postData() ?? '').includes('"complete"') && held < 2) {
+      if (++held === 2) release();
+      await gate;
+    }
+    await route.continue();
+  });
+  const photo = readFileSync(fixture('landscape-gps.jpg'));
+  await p.locator('input[type=file]').setInputFiles([1, 2, 3].map((i) => ({ name: `trio${i}.jpg`, mimeType: 'image/jpeg', buffer: photo })));
+  const done = await p.waitForFunction(
+    () => [...document.querySelectorAll('[aria-label="Uploads"] li')].filter((l) => l.textContent.includes('Added ✓')).length === 3,
+    null, { timeout: 30000 },
+  ).then(() => true, () => false);
+  check(held === 2 && done, 'two uploads finishing together don’t leave the third one waiting');
 }
 { // Too big, wrong type: refused before anything is sent
   const { p } = await guest('Big Ben');

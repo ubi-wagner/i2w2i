@@ -48,7 +48,7 @@ export function Running({ data, reload, onOpen }: { data: SceneData; reload: () 
           <div className="card space-y-3">
             <ProgressBar tasks={tasks} />
             <DayList plan={data.plan} scene={scene} tasks={tasks} base={scene.started_at} skew={data.skew}
-              row={(t) => <TaskRow t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} />} />
+              row={(t) => <TaskRow t={t} skew={data.skew} paused={Boolean(scene.paused_at)} onOpen={onOpen} anchor />} />
           </div>
         </Section>
       )}
@@ -62,10 +62,11 @@ export function Running({ data, reload, onOpen }: { data: SceneData; reload: () 
   );
 }
 
-export function TaskRow({ t, skew, paused, onOpen }: { t: TaskView; skew: number; paused: boolean; onOpen: (id: string) => void }) {
+/** A task in a list; `anchor` on the one place it's listed in full (a demand also shows at the top). */
+export function TaskRow({ t, skew, paused, onOpen, anchor = false }: { t: TaskView; skew: number; paused: boolean; onOpen: (id: string) => void; anchor?: boolean }) {
   const left = useCountdown(t.status === 'started' && !paused ? t.due_at : null, skew);
   return (
-    <button type="button" id={`task-${t.id}`} className="flex w-full items-center gap-3 py-2.5 text-left" onClick={() => onOpen(t.id)}>
+    <button type="button" id={anchor ? `task-${t.id}` : undefined} className="flex w-full items-center gap-3 py-2.5 text-left" onClick={() => onOpen(t.id)}>
       <span className="text-xl" aria-hidden>{KIND_ICON[t.body.kind]}</span>
       <span className="min-w-0 flex-1">
         <span className={`block font-medium ${done(t) ? 'text-ink-soft' : ''}`}>{t.body.title}</span>

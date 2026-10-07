@@ -338,6 +338,8 @@ function scoreText(n: Score | undefined): string {
 
 function TheirProfile({ name, profile, sections }: { name: string; profile: Profile; sections: RateSection[] }) {
   const about = ABOUT.filter((a) => profile.about[a.key]);
+  const words = about.filter((a) => a.key !== 'hard' && a.key !== 'signals'); // the limits are shown first, above
+  const rated = ratedCount(sections, profile);
   return (
     <div className="space-y-5">
       {(profile.about.hard || profile.about.signals) && (
@@ -346,16 +348,15 @@ function TheirProfile({ name, profile, sections }: { name: string; profile: Prof
           {profile.about.signals && <div><p className="eyebrow text-stop">Safeword and signals</p><p className="whitespace-pre-wrap">{profile.about.signals}</p></div>}
         </section>
       )}
-      {about.length > 0 && (
-        <Section title={`About ${name}`} eyebrow="In their words">
-          <div className="card space-y-3">
-            {about.filter((a) => a.key !== 'hard' && a.key !== 'signals').map((a) => (
-              <div key={a.key}><p className="eyebrow text-follow">{a.label}</p><p className="whitespace-pre-wrap">{profile.about[a.key]}</p></div>
-            ))}
-          </div>
-        </Section>
-      )}
-      <Section title="What they like" eyebrow={`${ratedCount(sections, profile)} rated`}>
+      <Section title={`About ${name}`} eyebrow="In their words">
+        <div className="card space-y-3">
+          {words.length ? words.map((a) => (
+            <div key={a.key}><p className="eyebrow text-follow">{a.label}</p><p className="whitespace-pre-wrap">{profile.about[a.key]}</p></div>
+          )) : <p className="text-sm text-ink-soft">{about.length ? `Nothing else written yet.` : `${name} hasn’t written anything yet.`}</p>}
+        </div>
+      </Section>
+      <Section title="What they like" eyebrow={`${rated} rated`}>
+        {!rated && <p className="card text-sm text-ink-soft">{name} hasn’t rated anything yet.</p>}
         {sections.map((s) => {
           const rated = s.items.filter((i) => profile.ratings[i.id]);
           if (!rated.length) return null;

@@ -81,13 +81,13 @@ export async function updateEvent(_prev: FormState, form: FormData): Promise<For
            published_at = CASE WHEN ${status} = 'published' THEN coalesce(published_at, now()) ELSE published_at END
      WHERE id = ${id}
     RETURNING id`);
-  if (!rows.length) return { error: 'Only the event’s hosts and helpers can change it.' };
+  if (!rows.length) return { error: 'Only the event’s co-hosts and editors can change it.' };
   await audit(user.id, 'events.update', id, { status, audience });
-  revalidatePath(`/events/${id}`);
+  revalidatePath(`/events/${id}`, 'layout');
   revalidatePath('/album/[slug]', 'page');
   // The form resets after the action; these keep it showing what was saved.
   const fields = { status, audience, chat_enabled: form.get('chat_enabled') === 'on' ? 'on' : '' };
-  return { message: status === 'published' ? 'Saved. The album is published.' : 'Saved. The album is a draft.', fields };
+  return { message: status === 'published' ? 'Saved. The event is published.' : 'Saved. The event is a draft.', fields };
 }
 
 export interface PageInput {
@@ -119,35 +119,99 @@ export async function updatePage(input: PageInput): Promise<FormState> {
            page = ${tx.json(page as unknown as Parameters<typeof tx.json>[0])}
      WHERE id = ${id}
     RETURNING id`);
-  if (!rows.length) return { error: 'Only the event’s hosts and helpers can change its page.' };
+  if (!rows.length) return { error: 'Only the event’s co-hosts and editors can change its page.' };
   await audit(user.id, 'events.page', id, { theme });
-  revalidatePath(`/events/${id}`);
+  revalidatePath(`/events/${id}`, 'layout');
   revalidatePath('/album/[slug]', 'page');
   return { message: 'Saved. Guests see it now.' };
 }
 
-export async function addMember(form: FormData): Promise<void> {
-  const { user, ctx: c } = await ctx();
-  const id = str(form, 'event_id');
-  const userId = str(form, 'user_id');
-  const role = ['owner', 'curator', 'invitee'].includes(str(form, 'role')) ? str(form, 'role') : 'invitee';
-  if (!userId) return;
-  if (userId === user.id && role !== 'owner') return; // don't demote yourself out of managing
-  await withCtx(c, (tx) => tx`
-    INSERT INTO events.members (event_id, user_id, role, added_by) VALUES (${id}, ${userId}, ${role}, ${user.id})
-    ON CONFLICT (event_id, user_id) DO UPDATE SET role = EXCLUDED.role`);
-  await audit(user.id, 'events.member.add', id, { user: userId, role });
-  revalidatePath(`/events/${id}`);
+const ROLES = ['owner', 'curator', 'invitee'] as const;
+type Role = (typeof ROLES)[number];
+const ROLE_NAME: Record<Role, string> = { owner: 'a co-host', curator: 'an editor', invitee: 'a viewer' };
+const roleOf = (form: FormData): Role => (ROLES as readonly string[]).includes(str(form, 'role')) ? (str(form, 'role') as Role) : 'invitee';
+
+export interface MemberState { error?: string; message?: string; role?: string }
+
+/** Thrown inside a transaction to undo a change that would leave the event without a co-host. */
+class NoCoHostLeft extends Error {}
+async function keepACoHost(tx: Tx, id: string) {
+  const [o] = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM events.members WHERE event_id = ${id} AND role = 'owner'`;
+  if (!o?.n) throw new NoCoHostLeft();
 }
 
-export async function removeMember(form: FormData): Promise<void> {
+/** Someone who already has an account joins the event. */
+export async function addExistingMember(_prev: MemberState, form: FormData): Promise<MemberState> {
   const { user, ctx: c } = await ctx();
   const id = str(form, 'event_id');
   const userId = str(form, 'user_id');
-  if (userId === user.id) return; // don't lock yourself out
-  await withCtx(c, (tx) => tx`DELETE FROM events.members WHERE event_id = ${id} AND user_id = ${userId}`);
+  const role = roleOf(form);
+  if (!userId) return { error: 'Pick someone from the list.' };
+  let name: string | undefined;
+  try {
+    name = await withCtx(c, async (tx) => {
+      const added = await tx`INSERT INTO events.members (event_id, user_id, role, added_by) VALUES (${id}, ${userId}, ${role}, ${user.id})
+                             ON CONFLICT (event_id, user_id) DO NOTHING RETURNING 1`;
+      if (!added.length) return undefined;
+      const [u] = await tx<{ display_name: string }[]>`SELECT display_name FROM core.users WHERE id = ${userId}`;
+      return u?.display_name ?? 'They';
+    });
+  } catch (err) {
+    if (isRlsError(err)) return { error: 'Only the event’s co-hosts can add people.' };
+    throw err;
+  }
+  if (!name) return { error: 'They’re already on this event: change their role in the list above.' };
+  await audit(user.id, 'events.member.add', id, { user: userId, role });
+  await logActivity({ eventId: id, action: 'member.add', userId: user.id, actorName: user.display_name, detail: { added: userId, role } });
+  revalidatePath(`/events/${id}`, 'layout');
+  return { message: `Added ${name} as ${ROLE_NAME[role]}.` };
+}
+
+/** A different role for someone on the event. Every event keeps at least one co-host. */
+export async function setMemberRole(prev: MemberState, form: FormData): Promise<MemberState> {
+  const { user, ctx: c } = await ctx();
+  const id = str(form, 'event_id');
+  const userId = str(form, 'user_id');
+  const role = roleOf(form);
+  if (userId === user.id) return { error: 'You can’t change your own role. Ask another co-host.', role: prev.role };
+  try {
+    const changed = await withCtx(c, async (tx) => {
+      const rows = await tx`UPDATE events.members SET role = ${role} WHERE event_id = ${id} AND user_id = ${userId} RETURNING 1`;
+      if (rows.length) await keepACoHost(tx, id);
+      return rows.length > 0;
+    });
+    if (!changed) return { error: 'Only the event’s co-hosts can change roles.', role: prev.role };
+  } catch (err) {
+    if (err instanceof NoCoHostLeft) return { error: 'Every event needs at least one co-host.', role: prev.role };
+    throw err;
+  }
+  await audit(user.id, 'events.member.role', id, { user: userId, role });
+  await logActivity({ eventId: id, action: 'member.role', userId: user.id, actorName: user.display_name, detail: { member: userId, role } });
+  revalidatePath(`/events/${id}`, 'layout');
+  return { message: `Saved: now ${ROLE_NAME[role]}.`, role };
+}
+
+/** Off the event (their account stays). Not yourself, and never the last co-host. */
+export async function removeMember(_prev: MemberState, form: FormData): Promise<MemberState> {
+  const { user, ctx: c } = await ctx();
+  const id = str(form, 'event_id');
+  const userId = str(form, 'user_id');
+  if (userId === user.id) return { error: 'You can’t remove yourself. Ask another co-host.' };
+  try {
+    const gone = await withCtx(c, async (tx) => {
+      const rows = await tx`DELETE FROM events.members WHERE event_id = ${id} AND user_id = ${userId} RETURNING 1`;
+      if (rows.length) await keepACoHost(tx, id);
+      return rows.length > 0;
+    });
+    if (!gone) return { error: 'Only the event’s co-hosts can remove people.' };
+  } catch (err) {
+    if (err instanceof NoCoHostLeft) return { error: 'Every event needs at least one co-host.' };
+    throw err;
+  }
   await audit(user.id, 'events.member.remove', id, { user: userId });
-  revalidatePath(`/events/${id}`);
+  await logActivity({ eventId: id, action: 'member.remove', userId: user.id, actorName: user.display_name, detail: { removed: userId } });
+  revalidatePath(`/events/${id}`, 'layout');
+  return { message: 'Removed.' };
 }
 
 export async function createAccessCode(_prev: FormState, form: FormData): Promise<FormState> {
@@ -176,7 +240,7 @@ export async function createAccessCode(_prev: FormState, form: FormData): Promis
     throw err;
   }
   await audit(user.id, 'events.code.create', id, { code_id: codeId, canUpload, canView });
-  revalidatePath(`/events/${id}`);
+  revalidatePath(`/events/${id}`, 'layout');
   return { message: 'Code created.' };
 }
 
@@ -198,7 +262,7 @@ export async function changeAccessCode(form: FormData): Promise<void> {
   });
   await audit(user.id, `events.code.${action}`, id, { code_id: codeId });
   await logActivity({ eventId: id, action: `code.${action}`, userId: user.id, actorName: user.display_name, detail: { code_id: codeId } });
-  revalidatePath(`/events/${id}`);
+  revalidatePath(`/events/${id}`, 'layout');
 }
 
 export async function moderateUpload(form: FormData): Promise<void> {
@@ -225,7 +289,7 @@ export async function moderateUpload(form: FormData): Promise<void> {
   revalidatePath('/album/[slug]', 'page');
   await audit(user.id, `events.upload.${action}`, id, { upload: uploadId });
   await logActivity({ eventId: id, action: `upload.${action}`, userId: user.id, uploadId, actorName: user.display_name });
-  revalidatePath(`/events/${id}`);
+  revalidatePath(`/events/${id}`, 'layout');
 }
 
 /** Ends a guest's access (their session stops working) and optionally hides everything they shared. */
@@ -240,7 +304,7 @@ export async function removeGuest(form: FormData): Promise<void> {
   });
   await audit(user.id, 'events.guest.remove', id, { guest: guestId, hide });
   await logActivity({ eventId: id, action: 'guest.removed', userId: user.id, guestId, actorName: user.display_name, detail: { hide_uploads: hide } });
-  revalidatePath(`/events/${id}`);
+  revalidatePath(`/events/${id}`, 'layout');
 }
 
 /**
@@ -261,7 +325,7 @@ export async function approveAllReady(form: FormData): Promise<void> {
     RETURNING id`);
   await audit(user.id, 'events.upload.approve_all', id, { count: rows.length });
   await logActivity({ eventId: id, action: 'upload.bulk_approve', userId: user.id, actorName: user.display_name, detail: { count: rows.length, ids: rows.map((r) => r.id) } });
-  revalidatePath(`/events/${id}`);
+  revalidatePath(`/events/${id}`, 'layout');
   revalidatePath('/album/[slug]', 'page');
 }
 
@@ -292,7 +356,7 @@ export async function moderateUploads(form: FormData): Promise<void> {
   revalidatePath('/album/[slug]', 'page');
   await audit(user.id, `events.upload.bulk_${action}`, id, { count: ids.length });
   await logActivity({ eventId: id, action: `upload.bulk_${action}`, userId: user.id, actorName: user.display_name, detail: { count: ids.length, ids } });
-  revalidatePath(`/events/${id}`);
+  revalidatePath(`/events/${id}`, 'layout');
 }
 
 export async function addLink(_prev: FormState, form: FormData): Promise<FormState> {
@@ -312,7 +376,7 @@ export async function addLink(_prev: FormState, form: FormData): Promise<FormSta
   }
   await audit(user.id, 'events.link.add', id, { kind, url });
   await logActivity({ eventId: id, action: 'link.add', userId: user.id, actorName: user.display_name, detail: { kind, url } });
-  revalidatePath(`/events/${id}`);
+  revalidatePath(`/events/${id}`, 'layout');
   return { message: 'Added.' };
 }
 
@@ -322,7 +386,7 @@ export async function removeLink(form: FormData): Promise<void> {
   const linkId = str(form, 'link_id');
   await withCtx(c, (tx) => tx`DELETE FROM events.links WHERE id = ${linkId} AND event_id = ${id}`);
   await audit(user.id, 'events.link.remove', id, { link: linkId });
-  revalidatePath(`/events/${id}`);
+  revalidatePath(`/events/${id}`, 'layout');
 }
 
 export interface PeopleState {
@@ -359,7 +423,7 @@ export async function inviteToEvent(_prev: PeopleState, form: FormData): Promise
   await withCtx(c, (tx) => tx`
     INSERT INTO events.members (event_id, user_id, role, added_by) VALUES (${id}, ${made.id}, ${role}, ${user.id})`);
   await logActivity({ eventId: id, action: 'member.invite', userId: user.id, actorName: user.display_name, detail: { invited: made.id, role, new_account: true } });
-  revalidatePath(`/events/${id}`);
+  revalidatePath(`/events/${id}`, 'layout');
   // Signing in from the message lands them in this album.
   const [ev] = await withCtx(c, (tx) => tx<{ slug: string }[]>`SELECT slug FROM events.events WHERE id = ${id}`);
   return { credentials: made.credentials, url: ev ? `${appUrl()}/login?next=/album/${ev.slug}` : appUrl() };

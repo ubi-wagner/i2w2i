@@ -363,6 +363,92 @@ describe.skipIf(!enabled)('events row-level security', () => {
     await as({ userId: ids.cara }, (tx) => tx`UPDATE events.events SET audience = 'invitees' WHERE id = ${shower}`);
   });
 
+  it('keeps albums to hosts until published, and shows only approved photos through them', async () => {
+    const ev = await createEvent(ids.cara!, `albums-${run}`);
+    await as({ userId: ids.cara }, async (tx) => {
+      await tx`INSERT INTO events.members (event_id, user_id, role) VALUES (${ev}, ${ids.mia}, 'invitee')`;
+      await tx`UPDATE events.events SET status = 'published', audience = 'family' WHERE id = ${ev}`;
+    });
+    const [album] = await as({ userId: ids.cara }, (tx) =>
+      tx`INSERT INTO events.albums (event_id, slug, title) VALUES (${ev}, 'ceremony', 'Ceremony') RETURNING id`);
+    const albums = (ctx: Ctx) => as(ctx, (tx) => tx`SELECT id FROM events.albums WHERE event_id = ${ev}`).then((r) => r.length);
+    expect(await albums({ userId: ids.cara })).toBe(1);
+    expect(await albums({ userId: ids.mia })).toBe(0); // not published yet
+    expect(await albums({ userId: ids.fay })).toBe(0);
+    // Only co-hosts and editors make albums.
+    await expect(as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.albums (event_id, slug, title) VALUES (${ev}, 'mine', 'Mine')`))
+      .rejects.toThrow(/row-level security/);
+
+    // A host's photo (approved as it arrives) and an invitee's (waiting) both go in.
+    const [h] = await as({ userId: ids.cara }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(ev, { userId: ids.cara }, { status: 'ready' }))} RETURNING id`);
+    const [p] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(ev, { userId: ids.mia }, { status: 'ready' }))} RETURNING id`);
+    await as({ userId: ids.cara }, (tx) => tx`
+      INSERT INTO events.album_items (album_id, upload_id, event_id) VALUES (${album!.id}, ${h!.id}, ${ev}), (${album!.id}, ${p!.id}, ${ev})`);
+    await expect(as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.album_items (album_id, upload_id, event_id) VALUES (${album!.id}, ${p!.id}, ${ev})`))
+      .rejects.toThrow(/row-level security|duplicate key/);
+    // A photo from another event can't be put in this event's album.
+    const [x] = await as({ userId: ids.cara }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(other, { userId: ids.cara }, { status: 'ready' }))} RETURNING id`);
+    await expect(as({ userId: ids.cara }, (tx) => tx`INSERT INTO events.album_items (album_id, upload_id, event_id) VALUES (${album!.id}, ${x!.id}, ${ev})`))
+      .rejects.toThrow(/foreign key/);
+
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.albums SET published_at = now() WHERE id = ${album!.id}`);
+    expect(await albums({ userId: ids.mia })).toBe(1);
+    expect(await albums({ userId: ids.fay })).toBe(1); // family audience
+    expect(await albums({ userId: ids.otto })).toBe(0); // not family
+    // What shows through an album is still up to the uploads policy.
+    const photos = (ctx: Ctx) => as(ctx, (tx) => tx`
+      SELECT u.id FROM events.album_items i JOIN events.uploads u ON u.id = i.upload_id WHERE i.album_id = ${album!.id}`).then((r) => r.map((x) => x.id).sort());
+    expect(await photos({ userId: ids.cara })).toEqual([h!.id, p!.id].sort());
+    expect(await photos({ userId: ids.mia })).toEqual([h!.id, p!.id].sort()); // her own, waiting
+    expect(await photos({ userId: ids.fay })).toEqual([h!.id]); // the waiting one doesn't show
+    // Nobody but a host takes photos out.
+    await as({ userId: ids.mia }, (tx) => tx`DELETE FROM events.album_items WHERE album_id = ${album!.id}`);
+    expect((await photos({ userId: ids.cara })).length).toBe(2);
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.albums SET published_at = NULL WHERE id = ${album!.id}`);
+    expect(await albums({ userId: ids.fay })).toBe(0);
+    expect((await photos({ userId: ids.fay })).length).toBe(0);
+  });
+
+  it('opens a public album to anyone, and only its approved photos', async () => {
+    const ev = await createEvent(ids.cara!, `public-album-${run}`); // a private draft event
+    const [pub, priv] = await as({ userId: ids.cara }, (tx) => tx`
+      INSERT INTO events.albums (event_id, slug, title, audience, published_at)
+      VALUES (${ev}, 'dance', 'First dance', 'public', now()), (${ev}, 'family', 'Family', 'private', now()) RETURNING id`);
+    const add = async (opts: Record<string, unknown> = {}) => {
+      const [u] = await as({ userId: ids.cara }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(ev, { userId: ids.cara }, { status: 'ready', ...opts }))} RETURNING id`);
+      return u!.id as string;
+    };
+    const shown = await add();
+    const hidden = await add({ hidden: true });
+    const elsewhere = await add(); // approved, but in no public album
+    const [waiting] = await as({ userId: ids.mia }, async (tx) => {
+      await owner`INSERT INTO events.members (event_id, user_id, role) VALUES (${ev}, ${ids.mia}, 'invitee')`;
+      return tx`INSERT INTO events.uploads ${tx(upload(ev, { userId: ids.mia }, { status: 'ready' }))} RETURNING id`;
+    });
+    await as({ userId: ids.cara }, (tx) => tx`
+      INSERT INTO events.album_items (album_id, upload_id, event_id)
+      VALUES (${pub!.id}, ${shown}, ${ev}), (${pub!.id}, ${hidden}, ${ev}), (${pub!.id}, ${waiting!.id}, ${ev}), (${priv!.id}, ${elsewhere}, ${ev})`);
+
+    for (const stranger of [{}, { userId: ids.otto }] as Ctx[]) {
+      const albums = await as(stranger, (tx) => tx`SELECT id FROM events.albums WHERE event_id = ${ev}`);
+      expect(albums.map((a) => a.id)).toEqual([pub!.id]); // the public one, not the private one
+      const inside = await as(stranger, (tx) => tx`
+        SELECT u.id FROM events.album_items i JOIN events.uploads u ON u.id = i.upload_id WHERE i.album_id = ${pub!.id}`);
+      expect(inside.map((r) => r.id)).toEqual([shown]); // not the hidden one, not the waiting one
+      expect((await as(stranger, (tx) => tx`SELECT id FROM events.uploads WHERE event_id = ${ev}`)).map((r) => r.id)).toEqual([shown]);
+      expect((await as(stranger, (tx) => tx`SELECT id FROM events.events WHERE id = ${ev}`)).length).toBe(0); // the event stays private
+      expect((await as(stranger, (tx) => tx`SELECT id FROM events.comments WHERE event_id = ${ev}`)).length).toBe(0);
+    }
+    // Unpublished or made private again: gone for strangers.
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.albums SET audience = 'private' WHERE id = ${pub!.id}`);
+    expect((await as({}, (tx) => tx`SELECT id FROM events.uploads WHERE event_id = ${ev}`)).length).toBe(0);
+    await as({ userId: ids.cara }, (tx) => tx`UPDATE events.albums SET audience = 'public', published_at = NULL WHERE id = ${pub!.id}`);
+    expect((await as({}, (tx) => tx`SELECT id FROM events.albums WHERE event_id = ${ev}`)).length).toBe(0);
+    // Only hosts choose who sees an album.
+    await as({ userId: ids.mia }, (tx) => tx`UPDATE events.albums SET published_at = now() WHERE id = ${pub!.id}`);
+    expect((await as({}, (tx) => tx`SELECT id FROM events.albums WHERE event_id = ${ev}`)).length).toBe(0);
+  });
+
   it('cleans up only unfinished uploads past the grace period', async () => {
     const [stale] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }))} RETURNING id`);
     const [fresh] = await as({ userId: ids.mia }, (tx) => tx`INSERT INTO events.uploads ${tx(upload(shower, { userId: ids.mia }))} RETURNING id`);

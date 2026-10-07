@@ -100,9 +100,9 @@ export async function invite(admin, name, username, role = 'member', password) {
   return readCredentials(form);
 }
 
-/** A host adds a brand-new person to their event (on its Manage page); returns their credentials. */
+/** A host adds a brand-new person to their event (Manage → People); returns their credentials. */
 export async function hostInvite(host, ev, name, username, role = 'invitee', password) {
-  if (new URL(host.url()).pathname !== new URL(ev.manage).pathname) await host.goto(ev.manage);
+  if (new URL(host.url()).pathname !== new URL(`${ev.manage}/people`).pathname) await host.goto(`${ev.manage}/people`);
   const form = eventInviteForm(host);
   await fillNewPerson(form, name, username, password);
   await form.getByLabel('Their role').selectOption(role);
@@ -131,7 +131,7 @@ export async function createEvent(p, title, slug) {
 }
 
 export async function createCode(p, ev, code, { upload = true, view = true, label = '' } = {}) {
-  await p.goto(ev.manage);
+  await p.goto(`${ev.manage}/qr`);
   await p.fill('#code', code);
   if (label) await p.fill('#label', label);
   if (!upload) await p.locator('input[name=can_upload]').uncheck();
@@ -141,12 +141,13 @@ export async function createCode(p, ev, code, { upload = true, view = true, labe
 }
 
 export async function addToEvent(p, ev, label, role = 'invitee') {
-  await p.goto(ev.manage);
+  await p.goto(`${ev.manage}/people`);
   const form = p.locator('form', { has: p.locator('#user_id') });
   await form.locator('#user_id').selectOption({ label });
   await form.locator('select[name=role]').selectOption(role);
   await form.getByRole('button', { name: 'Add', exact: true }).click();
-  await p.waitForLoadState('networkidle');
+  // The form goes when the last person is added; the message stays.
+  await p.locator('#add').getByText(/^Added /).waitFor();
 }
 
 export async function setAudience(p, ev, status, audience) {
@@ -195,7 +196,7 @@ export const sha = (buf) => createHash('sha256').update(buf).digest('hex');
  */
 export async function approveAll(host, ev) {
   await db`UPDATE events.uploads SET writable_until = now() - interval '1 second' WHERE event_id = ${ev.id} AND writable_until > now()`;
-  await host.goto(ev.manage);
+  await host.goto(`${ev.manage}/photos`);
   const review = host.locator('#review');
   if (!(await review.count())) return;
   await review.getByRole('button', { name: /^Approve (all|\d+)/ }).click();

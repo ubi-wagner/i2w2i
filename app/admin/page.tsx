@@ -6,7 +6,7 @@ import type { AppRole, PlatformRole } from '@/lib/access';
 import { InviteForm, ResetPasswordButton } from './InviteForms';
 import { setActive, setAppRole, setPlatformRole } from './actions';
 
-export const metadata = { title: 'People' };
+export const metadata = { title: 'Accounts' };
 
 interface Person {
   id: string;

@@ -89,13 +89,14 @@ permissions. The policies in migration 003 then decide:
 - **Events:**
   - drafts are visible to members only;
   - published albums are visible to their audience (`public`, `family`, or `invitees` meaning members plus code holders who can view).
-- **Members and codes:** owners (and admin) manage them; curators moderate content.
+- **Members and codes:** owners (and admin) manage them; curators moderate content. The screens call the roles **Co-host** (owner), **Editor** (curator) and **Viewer** (invitee); `ROLE_LABEL` in `lib/events/manage.ts`. An event always keeps a co-host (`setMemberRole`/`removeMember` refuse to leave none).
 - **Uploads:**
   - guests insert only into their own event, and only if their code allows uploads;
   - uploaders can finish their own uploads but can't feature, hide or move them;
   - viewers see only finished, unhidden items.
 - **Chat:** members only.
 - **Activity:** owners and curators read it; nobody can change it.
+- **Albums** (migrations 011, 012): owners and curators make, fill, publish and delete them, and choose each one's audience. A published **private** album is for whoever can see the event's photos; a published **public** one for anyone, signed in or not, even while the event is private. Either way what shows in it is still the uploads policy's call (approved, not hidden): a public album adds only `in_public_album(upload)` to it, so a stranger can read that album's approved photos and nothing else of the event (not the event row, other photos, comments or chat). Album items reference uploads by `(id, event_id)`, so an album can't hold another event's photo.
 
 Access codes and guest sessions are resolved only through `SECURITY DEFINER`
 functions (`resolve_code`, `resolve_qr`, `create_guest`, `resolve_guest`).
@@ -118,6 +119,10 @@ The end-to-end suites:
 
 - **auth:** usernames, starting passwords, resets, renaming, deactivation, sign out everywhere
 - **album:** the shower flow on phones, activity records, venue Wi-Fi
+- **albums:** named albums: approve & post from the photo view, publish, View albums, covers, editors and viewers
+- **hosts:** adding people, changing roles, resets
+- **theme:** the landing page and event info, table cards and posters
+- **slideshow:** settings, full screen, timing, order, fade, borders, new photos joining, Esc and tap to go back
 - **matrix:** 9 kinds of visitor × 4 album states, pages and APIs
 - **uploads:** reload, offline, stall, re-pick, limits
 - **select:** select, zip, bulk moderation
@@ -161,12 +166,29 @@ Phones suspend pages when people switch apps, and venue networks drop.
 
 ### Review before anyone else sees it
 
-Nothing a guest, invitee or family member uploads is shown to anyone but them and the event's hosts (owners and helpers) until a host approves it. This is the uploads RLS policy (migration 008), so it covers the album, the public page, zips, originals and comments alike.
+Nothing a guest, invitee or family member uploads is shown to anyone but them and the event's hosts (co-hosts and editors) until a host approves it. This is the uploads RLS policy (migration 008), so it covers the album, the public page, zips, originals and comments alike.
 
-- Hosts' and helpers' own uploads are approved automatically.
+- Co-hosts' and editors' own uploads are approved automatically.
 - An approval is for the exact bytes the host looked at. Upload links last 10 minutes (`UPLOAD_URL_TTL`), each one extends `writable_until`, and the database refuses an approval while any link could still change the files. Phones fetch fresh links when one runs out.
 - Once approved, the uploader can't change it (no new frame, caption or gallery copy). Before approval they can; each change restarts the 10 minutes.
-- Hosts see a "waiting for your OK" banner and queue on the manage page (approve one at a time from the photo view, by selection, or all at once), and a count on their event cards. Uploaders see "Waiting" on their own photos.
+- Hosts see a "waiting for your OK" banner on the Overview, a count on the Photos tab and their event cards, and the queue on the Photos tab: approve all at once, by selection, or one at a time from the photo view, where they also pick the albums it's posted to (`approveInto`). The same review panel shows on the album pages for hosts clicking through. Uploaders see "Waiting" on their own photos.
+
+### Manage pages
+
+`/events/<id>` is a set of tabs (`app/events/[id]/(manage)/`): Overview, Landing page, Event info, People, Photos, Albums, QR & posters (co-hosts only) and Activity. The layout and every tab load the event once per request through `loadManage()` (`React.cache`), which sends anyone who isn't a co-host or editor to the album. Actions revalidate the whole set with `revalidatePath(`/events/<id>`, 'layout')`. The print pages (card, code card, poster) sit outside the tabs.
+
+- **Roles change in place:** the role picker saves on change and keeps the saved role in its `useActionState` state (React resets uncontrolled form fields after an action, which used to snap the picker back).
+- **Posters** (`/events/<id>/poster/<codeId|album>`, `?size=a4`): a full page in the event's look with a big QR on white, three steps and the typed code. The `@page` size is US Letter or A4 and the poster always fits one sheet (the theme e2e checks the PDF).
+
+### Albums
+
+Named albums inside an event (`events.albums`, `events.album_items`): "Ceremony", "Reception". Every approved photo stays in the event's main grid ("All photos"); albums are the hosts' picks from it.
+
+- Hosts make them on the Albums tab (drafts until published), file photos while approving (`approveInto`), from any photo's view (album chips) or in bulk (Add to album…), set a cover, order them, and publish or unpublish each one.
+- Published albums with something visible in them are listed under **View albums** on `/album/<slug>`; each has its own page, `/album/<slug>/a/<album-slug>`. An album's address never changes when it's renamed.
+- **Private or public** (`albums.audience`): a public album's page opens for anyone with its link (no code, no account; no downloads or comments for them), and the event's join page lists public albums under "Albums anyone can see". The album's manage page shows its link and a QR.
+- Nothing about an album bypasses review: its photos are read through the uploads policy, so a waiting or hidden photo filed into a published album still shows only to its uploader and the hosts.
+- **Slideshow** (`components/events/Slideshow.tsx`, order logic in `lib/events/slideshow.ts`): any album, and All photos, plays full screen with the browser's own Fullscreen API (the whole window where a phone has none) and a CSS fade; no slideshow package. Settings (every 3/5/10 s, in order or shuffled, fade or not, border none/thin/wide) are kept per device. It shows only approved, unhidden photos even when a host starts it (`toSlides`), keeps the screen awake (Wake Lock), refreshes every 30 seconds so newly approved photos join, and Esc, leaving full screen or a tap ends it.
 
 ### Comments, gifts, frames
 
@@ -175,9 +197,9 @@ Nothing a guest, invitee or family member uploads is shown to anyone but them an
 
 ### Event pages
 
-Hosts write their event's page in one editor with a live preview (manage page, "Your event page"):
+Hosts write their event's page with a live preview, on two manage tabs: **Landing page** (look, invitation wording, welcome) and **Event info** (directions, schedule, good to know, gifts):
 
-- **Look** (`events.theme`): Enchanted forest, Garden or Classic. Colours are CSS variables under `[data-theme]` in `app/globals.css` (Tailwind's `stone` and `brand` read them), so every component follows the theme; drawings are inline SVG in `components/events/ThemeFrame.tsx`. Used on the join page, album, welcome page and printed cards.
+- **Look** (`events.theme`): Enchanted forest, Garden or Classic. Colours are CSS variables under `[data-theme]` in `app/globals.css` (Tailwind's `stone` and `brand` read them), so every component follows the theme; drawings are inline SVG in `components/events/ThemeFrame.tsx`. Used on the join page, album, welcome page, printed cards and posters.
 - **Wording, directions, schedule, notes** (`events.page`, jsonb): shape and limits in `lib/events/page.ts` (`cleanPage` is the only way in). They become the invitation-style hero and action buttons (Directions with Google/Apple Maps/Waze, Schedule, Good to know, Send a gift) that open themed sheets.
 - **What's public:** before someone joins, `public_event()` returns only the invitation wording. The address, schedule and notes come from `events.events` under RLS, so only people who can see the album get them.
 - **People added on an event's page** get a message whose link is `/login?next=/album/<slug>`, so signing in lands them in that album.
@@ -192,8 +214,8 @@ Hosts write their event's page in one editor with a live preview (manage page, "
 i2w2i is a web app people can put on their home screen (Share → Add to Home Screen on iPhone; an install prompt on Android). It then opens full screen at `/`: the person's own landing page with the events they're on ("You're a guest/co-host"), albums published to the whole family, and a tile for each other app they've been given. Guests at a table never need to install anything.
 
 - `app/manifest.ts`, icons in `public/icons/`, and `public/sw.js`, which only shows notifications and opens the right page when one is tapped. It doesn't cache or intercept requests. `public/` must ship with the standalone server (the Dockerfile copies it).
-- **Notifications (web push):** people turn them on per phone (Manage page for hosts, Account page for everyone). On iPhone that only works from the home-screen app, and the page says so. Subscriptions are in `core.push_subscriptions`.
-- **What's sent:** when someone who isn't a host uploads, the event's hosts and helpers get "N new photos are waiting for your OK", batched per event (one alert per ~90 seconds at most; `PUSH_REVIEW_DELAY_MS`). Tapping it opens the review queue. `events.review_summary()` gives the notifier names and counts without a signed-in context.
+- **Notifications (web push):** people turn them on per phone (the event's Overview tab for hosts, Account page for everyone). On iPhone that only works from the home-screen app, and the page says so. Subscriptions are in `core.push_subscriptions`.
+- **What's sent:** when someone who isn't a host uploads, the event's co-hosts and editors get "N new photos are waiting for your OK", batched per event (one alert per ~90 seconds at most; `PUSH_REVIEW_DELAY_MS`). Tapping it opens the Photos tab. `events.review_summary()` gives the notifier names and counts without a signed-in context.
 - **Keys:** the server makes its VAPID keys on first use and keeps them in `core.settings`; `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` override. Nothing to configure.
 - **Safety:** the server only sends to the browsers' push services (Apple, Google, Mozilla, Microsoft; `isPushEndpoint`), so a subscription can't make it call other addresses. Dead subscriptions (404/410) are removed. Tests use a local HTTPS stand-in (`PUSH_ALLOW_ANY_ENDPOINT=1`, never in production).
 
@@ -221,14 +243,14 @@ Each record includes:
 - **Device:** language, timezone, screen, platform, connection type, as reported by the browser.
 - **For uploads:** file name, the phone's file date, and the camera make/model, capture time and GPS read from the original.
 
-Owners see this on the event's manage page: per photo (Details), per guest (with "same device also used"), and in an activity feed. Guests are told on the join form that their name, device and network details are recorded.
+Owners see this on the event's manage pages: per photo (Details, Photos tab), per guest (with "same device also used", People tab), and in the Activity tab. Guests are told on the join form that their name, device and network details are recorded.
 
 ## Database
 
 One Postgres, one schema per area:
 
 - `core`: users, families, apps, app roles, sessions, sign-in links, audit log
-- `events`: events, members, access codes, guests, uploads, messages, activity
+- `events`: events, members, access codes, guests, uploads, albums and album items, messages, activity
 - `rp`: Couples (later)
 
 Migrations are numbered SQL files in `db/migrations/`. They're applied on

@@ -3,7 +3,7 @@ import { sql } from '@/lib/server/db';
 import { nameOf, others, podMembers, sceneFor } from '@/lib/server/pods';
 import { notifySoon } from '@/lib/server/push';
 import { cancelTimers, scheduleCheckin, scheduleSceneStart, scheduleSendReminder } from '@/lib/server/scheduler';
-import { allAgreed, sceneRole, sceneTransition, startState, windowProblem, type SceneAction } from '@/lib/rules';
+import { allAgreed, ownsDraft, sceneRole, sceneTransition, startState, windowProblem, type SceneAction } from '@/lib/rules';
 import { CHECKIN_CHOICES } from '@/lib/plan';
 
 export const dynamic = 'force-dynamic';
@@ -64,6 +64,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const offerer = scene.offered_by === me.id;
   const next = sceneTransition(scene.status, action, role, offerer, scene.roleplay);
   if (!next) return bad('That can’t be done now.', 409);
+  if (!ownsDraft(scene.status, scene.created_by, me.id)) return bad('It’s their draft: only they can send or start it.', 403);
   const name = await nameOf(me.id);
   const url = `/scene/${id}`;
   const tell = async (body: string, onlyRole?: 'lead' | 'follow') =>

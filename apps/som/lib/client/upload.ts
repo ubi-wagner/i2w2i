@@ -52,6 +52,9 @@ async function drawScaled(src: CanvasImageSource, w: number, h: number, maxSide:
   return { blob: await canvasBlob(canvas, quality), width, height };
 }
 
+/** How long a voice note recorded in the app is, in seconds. */
+export const recordedLength = new WeakMap<Blob, number>();
+
 /** Photos are re-drawn as JPEG: no location, no camera details, sensible size. Anything else as is. */
 async function prepare(file: File): Promise<{ blob: Blob; meta: MediaMeta; thumb: Blob | null }> {
   const type = file.type || 'application/octet-stream';
@@ -82,7 +85,8 @@ async function prepare(file: File): Promise<{ blob: Blob; meta: MediaMeta; thumb
     }
   }
   if (kind === 'audio') {
-    const d = await mediaDuration(file, 'audio').catch(() => undefined);
+    // A recording made here says how long it is (Chrome's own files don't).
+    const d = (await mediaDuration(file, 'audio').catch(() => undefined)) ?? recordedLength.get(file);
     if (d) meta.duration = d;
   }
   return { blob: file, meta, thumb };

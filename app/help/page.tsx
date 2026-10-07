@@ -13,8 +13,8 @@ const GUIDES = [
   {
     href: '/help/hosting',
     title: 'Running an event',
-    who: 'For hosts and helpers',
-    text: 'Your event page, adding people, QR cards for the tables, approving photos and choosing who sees the album.',
+    who: 'For co-hosts and editors',
+    text: 'Your event page, adding people, QR cards and posters, approving photos into albums and choosing who sees them.',
   },
   {
     href: '/help/faq',

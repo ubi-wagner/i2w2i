@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/client/api';
-import { cantSend } from '@/lib/client/upload';
+import { cantSend, recordedLength } from '@/lib/client/upload';
 import { dismissUpload, startUpload, usePendingUploads } from '@/lib/client/uploads';
 import { usePod } from '../Pod';
 import { useDraft } from '../useDraft';
@@ -145,11 +145,14 @@ function VoiceNote({ onDone }: { onDone: (f: File) => void }) {
       const r = new MediaRecorder(stream);
       chunks.current = [];
       r.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
+      const began = Date.now();
       r.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         const type = r.mimeType || 'audio/webm';
         const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
-        onDone(new File(chunks.current, `voice-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.${ext}`, { type }));
+        const file = new File(chunks.current, `voice-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.${ext}`, { type });
+        recordedLength.set(file, Math.max(1, Math.round((Date.now() - began) / 1000)));
+        onDone(file);
         setRec(null);
       };
       r.start(1000);

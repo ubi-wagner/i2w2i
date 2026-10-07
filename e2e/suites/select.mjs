@@ -44,7 +44,7 @@ check(halPhoto && Number(halPhoto.split(' ')[0]) < Number(execSync(`stat -c %s $
 const ginaOrig = gFiles.find((l) => /Gina 0\d\.jpg/.test(l) && l.startsWith('88211 '));
 check(Boolean(ginaOrig), 'your own photos come as originals');
 
-await host.goto(ev.manage);
+await host.goto(`${ev.manage}/photos`);
 await host.getByRole('button', { name: 'Select', exact: true }).click();
 await host.getByLabel('Select everything from one person').selectOption('Hal');
 check(await host.getByText('2 selected').isVisible(), 'host selects everything from one person');

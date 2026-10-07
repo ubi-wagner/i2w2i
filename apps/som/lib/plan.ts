@@ -35,6 +35,8 @@ export interface Plan {
 export const CHECKIN_CHOICES = [15, 30, 45, 60, 90, 120];
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+/** Words as typed: the space or new line just typed at the end stays (it's trimmed when the plan is loaded or sent). */
+const typed = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
 const ID = /^[a-z0-9_-]{1,40}$/i;
 const KINDS = new Set(SECTION_KINDS.map((k) => k.kind));
 
@@ -58,13 +60,19 @@ export function emptyPlan(menu: Menu, hours?: number, capacity?: Capacity | null
   };
 }
 
-export function cleanPlan(raw: unknown): Plan {
+/**
+ * A plan with nothing out of place. `typing`: while someone types into it,
+ * keeps their words exactly as typed (trimming as they type would eat each
+ * space and new line before the next word arrives).
+ */
+export function cleanPlan(raw: unknown, { typing = false }: { typing?: boolean } = {}): Plan {
   const r = (raw ?? {}) as Record<string, unknown>;
+  const text = typing ? typed : str;
   const picks: Plan['picks'] = {};
   if (r.picks && typeof r.picks === 'object') {
     for (const [k, v] of Object.entries(r.picks as Record<string, unknown>).slice(0, 300)) {
       if (!ID.test(k)) continue;
-      const param = str((v as { param?: unknown })?.param, 60);
+      const param = text((v as { param?: unknown })?.param, 60);
       picks[k] = param ? { param } : {};
     }
   }
@@ -87,12 +95,12 @@ export function cleanPlan(raw: unknown): Plan {
   const every = r.checkinMinutes === 0 ? 0 : typeof r.checkinMinutes === 'number' && CHECKIN_CHOICES.includes(r.checkinMinutes) ? r.checkinMinutes : null;
   return {
     v: 1,
-    title: str(r.title, 80),
+    title: text(r.title, 80),
     pacing: typeof r.pacing === 'string' ? r.pacing.slice(0, 40) : null,
     picks,
     blocks,
     customs,
-    note: str(r.note, 2000),
+    note: text(r.note, 2000),
     checkinMinutes: every,
     roleplay: cleanRoleplay(r.roleplay),
     ...(arrival.length ? { arrival } : {}),

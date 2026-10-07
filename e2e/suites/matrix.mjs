@@ -49,6 +49,8 @@ check((await count(cara)) === 4, '…while the host sees all 4');
 check(await bo.getByText('waiting for the hosts').isVisible(), 'guests are told their photos wait for the hosts');
 await cara.goto(ev.manage);
 check(await cara.getByText('4 new photos are waiting for your OK').isVisible(), 'the manage page says what’s waiting');
+check(await cara.getByRole('navigation', { name: 'Manage' }).getByRole('link', { name: /Photos/ }).innerText().then((t) => t.includes('4')), '…and the Photos tab shows how many');
+await cara.goto(`${ev.manage}/photos`);
 check(await cara.locator('#review').getByText(/OK in \d+ min/).first().isVisible() && !(await cara.locator('#review').getByRole('button', { name: /^Approve (all|\d+)/ }).isVisible()),
   'fresh uploads can’t be approved until their upload links run out');
 await approveAll(cara, ev);
@@ -63,7 +65,7 @@ async function probe(p) {
   await p.goto(`${BASE}/album/${slug}`);
   await p.waitForLoadState('networkidle');
   const join = await p.locator('#code').isVisible().catch(() => false);
-  const heading = (await p.getByRole('heading', { name: 'Album', exact: true }).isVisible()) ? 'Album'
+  const heading = (await p.getByRole('heading', { name: 'All photos', exact: true }).isVisible()) ? 'All photos'
     : (await p.getByRole('heading', { name: 'Your uploads', exact: true }).isVisible()) ? 'Your uploads' : null;
   return {
     join,
@@ -75,8 +77,8 @@ async function probe(p) {
   };
 }
 
-const FULL = { join: false, upload: true, heading: 'Album', tiles: 4, chat: true };
-const VIEW = { join: false, upload: false, heading: 'Album', tiles: 4, chat: false };
+const FULL = { join: false, upload: true, heading: 'All photos', tiles: 4, chat: true };
+const VIEW = { join: false, upload: false, heading: 'All photos', tiles: 4, chat: false };
 const JOIN = { join: true, upload: false, heading: null, tiles: 0, chat: false };
 const expected = (state) => ({
   admin: { ...FULL, manage: true },
@@ -126,11 +128,16 @@ for (const [state, status, audience] of [['draft', 'draft', 'invitees'], ['invit
 // ── Management rights ──────────────────────────────────────────────────────
 await ivy.goto(ev.manage);
 check(ivy.url().endsWith(`/album/${slug}`), 'invitee is sent from the manage page to the album');
-await cody.goto(ev.manage);
-check(await cody.getByRole('heading', { name: 'Photos & videos' }).isVisible(), 'curator can open the manage page');
+await cody.goto(`${ev.manage}/photos`);
+check(await cody.getByRole('heading', { name: 'Photos & videos' }).isVisible(), 'curator (editor) can open the manage page');
+check(!(await cody.getByRole('navigation', { name: 'Manage' }).getByRole('link', { name: 'QR & posters' }).isVisible()), 'curator has no QR & posters tab');
+await cody.goto(`${ev.manage}/qr`);
 check(!(await cody.getByRole('heading', { name: /Guest codes/ }).isVisible()), 'curator does not see guest codes');
-check(!(await cody.locator('#user_id').isVisible()), 'curator cannot add people');
+await cody.goto(`${ev.manage}/people`);
+check(!(await cody.locator('#user_id').isVisible()) && !(await cody.getByLabel(/’s role$/).first().isVisible()), 'curator cannot add people or change roles');
+await cody.goto(`${ev.manage}/info`);
 check(!(await cody.getByRole('heading', { name: /Gifts/ }).isVisible()), 'curator does not manage gift links');
+await cody.goto(`${ev.manage}/photos`);
 await anon.goto(ev.manage);
 check(anon.url().includes('/login'), 'anonymous is sent to sign-in from the manage page');
 
@@ -148,12 +155,12 @@ await admin.locator('li.card', { hasText: user('dan') }).getByRole('button', { n
 await admin.waitForTimeout(700);
 check((await probe(dan)).join, 'deactivated account loses access immediately');
 
-await cara.goto(ev.manage);
+await cara.goto(`${ev.manage}/people`);
 await cara.locator('section', { has: cara.getByRole('heading', { name: /^Guests/ }) }).locator('li', { hasText: 'Bo Both' }).getByRole('button', { name: 'Remove' }).click();
 await cara.waitForTimeout(700);
 check((await probe(bo)).join, 'removed guest loses access immediately');
 
-await cara.goto(ev.manage);
+await cara.goto(`${ev.manage}/qr`);
 await cara.locator('li', { hasText: `VIEW${RUN}` }).getByRole('button', { name: 'Turn off typed code' }).click();
 await cara.waitForTimeout(700);
 check((await probe(vic)).join, 'turning off a code ends the sessions of guests who used it');

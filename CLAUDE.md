@@ -73,11 +73,22 @@ Family app platform on Railway. Read `docs/ARCHITECTURE.md` first.
 - **Uploads must survive interruption**: keep the multipart/resume path and
   the IndexedDB queue working; `e2e/suites/uploads.mjs` is the contract.
 - **Uploads are reviewed (migration 008):** nobody but the uploader and the
-  hosts (owners/helpers) sees an upload until a host approves it; hosts' own
+  hosts (co-hosts/editors) sees an upload until a host approves it; hosts' own
   uploads are approved automatically. An approval covers the exact bytes the
   host saw: it's only possible once every upload link for it has expired
   (`writable_until`), and the uploader can't change an approved upload. Never
   serve an upload to others without going through the uploads RLS policy.
+- **Albums (migrations 011, 012)** are hosts' picks from the approved photos,
+  drafts until published, then private (whoever can see the event) or public
+  (anyone with the album's link). Album pages read photos through the uploads
+  policy like everything else; an album never shows a waiting or hidden
+  photo, and a public one opens nothing else of the event. The slideshow is
+  for the big screen: only approved, unhidden photos (`toSlides`), even when
+  a host starts it.
+- **Manage is tabs** (`app/events/[id]/(manage)/`): each tab gets the event
+  from `loadManage()`; actions revalidate with `'layout'`. Screens call the
+  roles Co-host / Editor / Viewer (`ROLE_LABEL`); the database keeps
+  owner / curator / invitee.
 - **Guests are told** on the join form that name, device and network details
   are recorded. Keep that notice if you change the form.
 
@@ -104,6 +115,14 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
   scene role is meant.
 - **Deleting:** people delete their own content any time (bucket too); a
   whole scene needs every member's yes; an unsent draft is its author's.
+- **Drafts are seen, not shared:** both see a draft as it's built (say so
+  on both screens), but only its author changes, sends, offers or starts
+  it (`ownsDraft`, enforced by the server).
+- **Typing:** never clean or trim a text box's value on each keystroke
+  (`cleanPlan(…, { typing: true })` while editing; trim when it's sent),
+  and never define a component inside another's render: both eat spaces,
+  new lines or focus. Multi-line text gets a `<textarea>` and is shown
+  with `whitespace-pre-wrap`. `e2e/suites/drafting.mjs` types key by key.
 - **Pause** is a safety control: either can pause, only whoever paused
   resumes, and nothing moves while paused. Don't weaken it.
 - **Roleplays are asked for on their own** (🎭 Ask for a roleplay), apart

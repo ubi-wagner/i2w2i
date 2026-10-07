@@ -93,5 +93,5 @@ export function queueReviewNotice(eventId: string): void {
 async function sendReviewNotice(eventId: string): Promise<void> {
   const [s] = await sql<{ title: string; pending: number; reviewers: string[] }[]>`SELECT * FROM events.review_summary(${eventId})`;
   if (!s || s.pending === 0) return;
-  await notifyUsers(s.reviewers, { ...reviewMessage(s.title, s.pending), url: `/events/${eventId}#review`, tag: `review-${eventId}` });
+  await notifyUsers(s.reviewers, { ...reviewMessage(s.title, s.pending), url: `/events/${eventId}/photos`, tag: `review-${eventId}` });
 }

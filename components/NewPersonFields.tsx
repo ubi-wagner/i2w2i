@@ -25,7 +25,8 @@ export function NewPersonFields({ clearOn }: { clearOn: unknown }) {
   }, [clearOn]);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
+    // Name and username side by side; the password gets a row of its own so it's never cut off.
+    <div className="grid gap-3 sm:grid-cols-2">
       <div>
         <label className="label" htmlFor="display_name">Name</label>
         <input
@@ -41,7 +42,7 @@ export function NewPersonFields({ clearOn }: { clearOn: unknown }) {
           value={username} onChange={(e) => { setUsername(e.target.value.toLowerCase()); setEdited(true); }}
         />
       </div>
-      <div>
+      <div className="sm:col-span-2">
         <label className="label" htmlFor="new_password">Starting password</label>
         <div className="flex gap-1">
           <input

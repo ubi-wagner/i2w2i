@@ -13,15 +13,18 @@ interface Props {
   slug: string;
   hasGiftLinks: boolean;
   initial: Omit<PageInput, 'eventId' | 'page'> & { page: EventPage };
+  /** The landing page (look, invitation, welcome) or the event info (directions, schedule, notes, gifts). */
+  part: 'landing' | 'info';
 }
 
 type Draft = Props['initial'];
 
 /**
- * Everything guests see, edited in one place with a live preview of the
- * page in its theme. Saves in one go (no form reset to fight with).
+ * What guests see, with a live preview of the page in its theme: the landing
+ * page on one tab, the event info on another. Each saves the whole page in
+ * one go (no form reset to fight with), starting from what's saved now.
  */
-export function PageEditor({ eventId, slug, hasGiftLinks, initial }: Props) {
+export function PageEditor({ eventId, slug, hasGiftLinks, initial, part }: Props) {
   const [d, setD] = useState<Draft>(initial);
   const [saved, setSaved] = useState(JSON.stringify(initial));
   const [result, setResult] = useState<{ error?: string; message?: string }>({});
@@ -55,6 +58,7 @@ export function PageEditor({ eventId, slug, hasGiftLinks, initial }: Props) {
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-8">
+        {part === 'landing' && <>
         <Group title="Look" hint="Used on the album, the join page and your printed cards.">
           <div className="grid gap-2 sm:grid-cols-3">
             {THEMES.map((t) => (
@@ -91,7 +95,9 @@ export function PageEditor({ eventId, slug, hasGiftLinks, initial }: Props) {
         <Group title="Welcome message" hint="A few words under the invitation.">
           <textarea className="input" id="description" aria-label="Welcome message" rows={3} maxLength={2000} value={d.description} onChange={(e) => set('description', e.target.value)} placeholder="We’re so glad you’re here! Add your photos and videos from the day." />
         </Group>
+        </>}
 
+        {part === 'info' && <>
         <Group title="Directions" hint="Adds a Directions button that opens Google Maps, Apple Maps or Waze. Only people who can see the album get the address.">
           <Field id="address" label="Street address" value={d.page.address} onChange={(v) => setPage('address', v)} placeholder="1234 Farm Road, Cloverdale, CA 95425" max={200} />
           {d.page.address && (
@@ -107,12 +113,13 @@ export function PageEditor({ eventId, slug, hasGiftLinks, initial }: Props) {
           <InfoRows items={d.page.info} onChange={(v) => setPage('info', v)} />
         </Group>
 
-        <Group title="Gifts" hint={hasGiftLinks ? 'Shown above your Venmo and registry links.' : 'Add Venmo or a registry under Gifts below; this note shows above them.'}>
+        <Group title="Gifts" hint={hasGiftLinks ? 'Shown above your Venmo and registry links.' : 'Add Venmo or a registry under “Gifts & payments” below; this note shows above them.'}>
           <textarea className="input" id="gift_note" aria-label="Gift note" rows={2} maxLength={500} value={d.giftNote} onChange={(e) => set('giftNote', e.target.value)} placeholder="Your being here is the best gift. If you’d like to help us start our life together, thank you!" />
         </Group>
+        </>}
 
         <div className="sticky bottom-0 z-10 -mx-6 flex flex-wrap items-center gap-3 border-t border-stone-200 bg-white/95 px-6 py-3 backdrop-blur">
-          <button type="button" className="btn" disabled={pending || !dirty} onClick={save}>{pending ? 'Saving…' : 'Save page'}</button>
+          <button type="button" className="btn" disabled={pending || !dirty} onClick={save}>{pending ? 'Saving…' : part === 'landing' ? 'Save page' : 'Save event info'}</button>
           {result.error && <p className="text-sm text-red-600" role="alert">{result.error}</p>}
           {!result.error && (result.message && !dirty ? <p className="text-sm text-green-700" role="status">{result.message}</p> : dirty && <p className="text-sm text-amber-700">Unsaved changes</p>)}
           <Link href={`/album/${slug}`} className="ml-auto text-sm text-brand underline underline-offset-2">Open album</Link>

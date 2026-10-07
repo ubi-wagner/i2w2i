@@ -6,7 +6,8 @@ import { RUN, adminPage, check, createCode, createEvent, finish, phonePage } fro
 const host = await adminPage();
 const ev = await createEvent(host, `Cassie & Jordan ${RUN}`, `wedding-${RUN}`);
 const ADDRESS = '1600 Amphitheatre Parkway, Mountain View, CA';
-await host.goto(ev.manage);
+// The landing page (look and invitation) is one tab, the event info another.
+await host.goto(`${ev.manage}/landing`);
 const editor = host.locator('#page');
 await editor.locator('label', { hasText: 'Enchanted forest' }).click();
 await editor.getByRole('button', { name: 'Use wedding wording' }).click();
@@ -14,6 +15,14 @@ check((await host.inputValue('#kicker')) === 'With great joy', '“Use wedding w
 await host.fill('#kicker', 'With so much love');
 await host.fill('#starts_on', '2026-10-17');
 await host.fill('#location', 'Strauss Creek Farm');
+check(await editor.getByRole('complementary', { name: 'Preview' }).getByRole('img', { name: 'With so much love' }).isVisible(), 'the preview updates as the host types');
+check(await editor.getByText('Unsaved changes').isVisible(), 'unsaved changes are flagged');
+check((await host.locator('#address').count()) === 0, 'the landing page tab has only the look and the invitation');
+await editor.getByRole('button', { name: 'Save page' }).click();
+await editor.getByText('Saved. Guests see it now.').waitFor();
+await host.getByRole('navigation', { name: 'Manage' }).getByRole('link', { name: 'Event info' }).click();
+await host.waitForURL(`${ev.manage}/info`);
+check((await host.locator('#kicker').count()) === 0, 'the event info tab has the address, schedule, notes and gifts');
 await host.fill('#address', ADDRESS);
 await editor.getByRole('button', { name: '+ Add to schedule' }).click();
 await editor.getByLabel('Time 1').fill('4:00 PM');
@@ -29,12 +38,14 @@ await editor.getByRole('button', { name: '+ Add a note' }).click();
 await editor.getByLabel('Topic 1').fill('Dress code');
 await editor.getByLabel('Details 1').fill('Cocktail attire. Flats for the grass!');
 await host.fill('#gift_note', 'Your presence is our gift. If you’d like to help us start our life together…');
-check(await editor.getByRole('complementary', { name: 'Preview' }).getByRole('img', { name: 'With so much love' }).isVisible(), 'the preview updates as the host types');
-check(await editor.getByText('Unsaved changes').isVisible(), 'unsaved changes are flagged');
-await editor.getByRole('button', { name: 'Save page' }).click();
+check(await editor.getByRole('complementary', { name: 'Preview' }).getByText('Directions').isVisible(), 'the preview shows the buttons the info adds');
+await editor.getByRole('button', { name: 'Save event info' }).click();
 await editor.getByText('Saved. Guests see it now.').waitFor();
 await host.reload();
-check(await host.locator('input[name=theme][value=woodland]').isChecked() && (await host.inputValue('#address')) === ADDRESS, 'the page is saved (look and address survive a reload)');
+check((await host.inputValue('#address')) === ADDRESS, 'the event info is saved (the address survives a reload)');
+await host.goto(`${ev.manage}/landing`);
+check(await host.locator('input[name=theme][value=woodland]').isChecked() && (await host.inputValue('#kicker')) === 'With so much love', '…and saving it kept the landing page as it was');
+await host.goto(`${ev.manage}/info`);
 
 await host.getByLabel('Kind of link').selectOption('venmo');
 await host.getByLabel('Handle or link').fill('@cassmblake89');
@@ -44,11 +55,22 @@ const CODE = `WED${RUN}`.slice(0, 12).toUpperCase();
 await createCode(host, ev, CODE);
 
 // Printed table card is themed and still has a scannable QR on white
-await host.goto(ev.manage);
+await host.goto(`${ev.manage}/qr`);
 await host.getByRole('link', { name: 'Print card' }).first().click();
 await host.waitForURL(/\/codes\//);
 check((await host.locator('[data-theme=woodland]').count()) === 1, 'the printed QR card uses the event’s look');
 check(await host.getByText('10 · 17 · 26').isVisible(), '…with the date set like the invitation');
+// …and a full-page poster for the door, on US Letter or A4
+await host.goto(`${ev.manage}/qr`);
+await host.getByRole('link', { name: 'Print poster' }).first().click();
+await host.waitForURL(/\/poster\//);
+check(await host.getByText('Share your photos & videos').isVisible() && (await host.locator('[data-theme=woodland]').count()) === 1
+  && await host.getByText(CODE).isVisible() && (await host.locator('main svg').count()) > 0, 'a full-page poster: themed, with a big QR and the typed code');
+const sheets = async () => ((await host.pdf({ preferCSSPageSize: true, printBackground: true })).toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+check((await host.content()).includes('8.5in 11in') && (await sheets()) === 1, '…sized for US Letter, on one sheet');
+await host.getByRole('link', { name: 'use A4' }).click();
+await host.waitForURL(/size=a4/);
+check((await host.content()).includes('210mm 297mm') && (await sheets()) === 1, '…or A4, on one sheet');
 
 // A guest arrives: themed landing page, invitation wording, but no address yet
 const guest = await phonePage('iphone');

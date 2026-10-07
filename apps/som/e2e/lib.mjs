@@ -134,6 +134,19 @@ export async function newPod(deviceName) {
 }
 
 /**
+ * Types into a box key by key, as a person does (fill() sets it in one go,
+ * so it can't catch a box that eats a space or a new line between keys).
+ * Returns what the box holds afterwards.
+ */
+export async function typeIn(loc, text) {
+  await loc.click();
+  await loc.press('ControlOrMeta+a');
+  await loc.press('Backspace');
+  await loc.pressSequentially(text, { delay: 10 });
+  return loc.inputValue();
+}
+
+/**
  * Picks something for one part of a block in the scene builder: block 1's
  * "Two chores", say, and a menu item matching `label`.
  */
