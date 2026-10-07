@@ -117,6 +117,19 @@ await b.getByText('Saved').waitFor({ timeout: 10000 });
 const filled = await b.getByRole('group', { name: 'Block 1: Getting ready (30 min)' }).innerText();
 check(['Hair', 'Makeup', 'Shoes'].every((g) => (filled.match(new RegExp(`${g} \\d`, 'g')) ?? []).length === 1), 'Fill it for me puts together a whole look: one from each group');
 
+// A long day: the free hour's play break holds as many as fit its time.
+await b.goto(`${BASE}/`);
+await b.getByRole('button', { name: 'New scene' }).click();
+await b.waitForURL(/\/scene\//);
+await b.getByRole('button', { name: '8 hours' }).click();
+await b.getByRole('button', { name: /Fill it for me/ }).click();
+await b.getByText('Saved').waitFor({ timeout: 10000 });
+const playRow = b.getByRole('group', { name: /^Block 3: A play break/ });
+const playText = await playRow.innerText();
+const [, usedMin, freeMin] = /(\d+) of (\d+) min/.exec(playText) ?? [];
+check(Number(freeMin) === 60 && Number(usedMin) > 20 && Number(usedMin) <= 60 && (playText.match(/×/g) ?? []).length >= 2,
+  `the play break fills the free hour, more than one activity, without going over (${usedMin} of ${freeMin} min)`);
+
 const errors = [...b.errors, ...r.errors];
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
 await finish();

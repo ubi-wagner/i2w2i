@@ -31,12 +31,24 @@ export interface SlotSpec {
   minutes: number;
   /** At most this many from each group of its section, instead of `max` overall (getting ready: up to 3 of each kind of thing). */
   perGroup?: number;
+  /**
+   * Fills its time instead of a count (the play break: as many as fit the
+   * free time). Each thing takes its own countdown, or this many minutes.
+   */
+  byTime?: number;
 }
 
 const S = (slot: Slot, kind: SectionKind, min: number, max: number, fill: number, minutes: number): SlotSpec => ({ slot, kind, min, max, fill, minutes });
 
 export const BLOCK_MINUTES = 120;
 export const PREP_PER_GROUP = 3;
+/** A play activity with no countdown of its own is counted as this long. */
+export const PLAY_MINUTES = 20;
+
+/** How long one thing takes in a part that fills its time: its own countdown, or the part's usual length. */
+export function itemMinutes(s: SlotSpec, minutes?: number): number {
+  return minutes ?? s.byTime ?? s.minutes;
+}
 
 /**
  * Whether one more fits a slot: `picked` is how many it has, `inGroup` how
@@ -61,7 +73,7 @@ export function slotsFor(kind: BlockKind, first: boolean): SlotSpec[] {
   switch (kind) {
     case 'home': return [ready, S('chores', 'domain', 2, 2, 2, work), ...praise];
     case 'out': return [ready, S('errands', 'errands', 1, 2, 2, work), ...praise];
-    case 'free': return [S('play', 'play', 0, 1, 1, 60)];
+    case 'free': return [{ ...S('play', 'play', 0, Infinity, Infinity, 60), byTime: PLAY_MINUTES }];
     case 'welcome': return [S('welcome', 'changeover', 0, 1, 1, 60)];
   }
 }

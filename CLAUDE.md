@@ -135,9 +135,12 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
 - **The day is two-hour blocks** (`lib/blocks.ts`): getting ready (30
   min; up to 3 from each of its groups, `perGroup`) or a 15-minute change-over, exactly two chores at home (errands
   when out), then Devotion and For {lead}, 15 minutes each; 8 hours adds a
-  free hour and welcome home. Nothing twice in a day; check-ins at the end
-  of each block; demands any time. Keep the novelty: Fill it for me skips
-  what recent scenes used.
+  free hour and welcome home; the free hour's play break holds what fits
+  its minutes (`byTime`: each item's countdown, or `PLAY_MINUTES`).
+  Nothing twice in a day; check-ins at the end of each block; demands any
+  time. Fill it for me fills every part by those rules, spreading picks
+  over a section's groups (two chores never from one group) and skipping
+  what recent scenes used: keep the novelty.
 - **Both see the whole scene before it's agreed:** the answerer of an
   offer sees the staged scene (`SceneSummary`: what to get ready, what to
   wear, every block and task with its proof). Plans from older versions

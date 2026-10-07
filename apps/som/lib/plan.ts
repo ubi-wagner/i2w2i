@@ -3,7 +3,7 @@
 // scene alone. The follow usually drafts it, the lead adjusts and starts
 // or sends it; that turns it into the follow's tasks (planToTasks). Pure.
 
-import { blocksForWindow, checkinOffsets, schedule, slotsFor, BLOCK_KINDS, WELCOME_GROUP, type BlockKind, type Slot } from './blocks';
+import { blocksForWindow, checkinOffsets, itemMinutes, schedule, slotsFor, BLOCK_KINDS, WELCOME_GROUP, type BlockKind, type Slot } from './blocks';
 import { cleanProofs, cleanRoleplay, itemsById, NEEDS, section, SECTION_KINDS, type Menu, type MenuItem, type Need, type Pacing, type Proof, type Roleplay, type SectionKind } from './menu';
 import type { Capacity } from './rules';
 
@@ -360,32 +360,66 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
     into?.items.push(it.id);
     used.add(it.id);
   };
-  const pool = (kind: SectionKind, oneEachGroup: boolean, slot?: Slot) => {
+  const groupsFor = (kind: SectionKind, slot?: Slot) => {
     const all = section(menu, kind).groups.filter((g) => g.items.length);
     // A change-over is between blocks; the welcome home has its own looks (when the menu has some).
     const welcome = slot === 'welcome' || slot === 'changeover' ? all.filter((g) => WELCOME_GROUP.test(g.title)) : [];
-    const groups = slot === 'welcome' && welcome.length ? welcome : slot === 'changeover' && welcome.length < all.length ? all.filter((g) => !welcome.includes(g)) : all;
-    const free = (xs: MenuItem[]) => shuffle(xs.filter((i) => !used.has(i.id) && !next.picks[i.id]), (i) => i.id);
-    return oneEachGroup
-      ? shuffle(groups).map((g) => free(g.items)[0]).filter((i): i is MenuItem => !!i).sort((a, b) => Number(avoid.has(a.id)) - Number(avoid.has(b.id)))
-      : free(groups.flatMap((g) => g.items));
+    return slot === 'welcome' && welcome.length ? welcome : slot === 'changeover' && welcome.length < all.length ? all.filter((g) => !welcome.includes(g)) : all;
+  };
+  const free = (xs: MenuItem[]) => shuffle(xs.filter((i) => !used.has(i.id) && !next.picks[i.id]), (i) => i.id);
+  // Which groups each part has drawn from today: the next pick prefers one it hasn't, so the day varies.
+  const groupOf = new Map(menu.sections.flatMap((sec) => sec.groups.flatMap((g) => g.items.map((it) => [it.id, g.id] as const))));
+  const drawn = new Map<SectionKind, Set<string>>();
+  const mark = (kind: SectionKind, id: string) => {
+    const g = groupOf.get(id);
+    if (g) drawn.set(kind, (drawn.get(kind) ?? new Set()).add(g));
+  };
+  for (const id of next.blocks.flatMap((b) => b.items)) { const k = items.get(id)?.kind; if (k) mark(k, id); }
+  /**
+   * Candidates for a part, spread over its groups: one from each group in
+   * turn (groups not drawn from today first), what recent scenes didn't use
+   * first. The first few always come from different groups.
+   */
+  const spread = (kind: SectionKind, slot?: Slot, skip: ReadonlySet<string | undefined> = new Set()) => {
+    const groups = groupsFor(kind, slot).filter((g) => !skip.has(g.id));
+    const seen = drawn.get(kind) ?? new Set<string>();
+    const lists = [...shuffle(groups.filter((g) => !seen.has(g.id))), ...shuffle(groups.filter((g) => seen.has(g.id)))].map((g) => free(g.items));
+    const out: MenuItem[] = [];
+    // Within a round, what recent scenes didn't use still comes first.
+    for (let round = 0; lists.some((l) => l.length > round); round++) {
+      out.push(...lists.flatMap((l) => l[round] ? [l[round]!] : []).sort((a, b) => Number(avoid.has(a.id)) - Number(avoid.has(b.id))));
+    }
+    return out;
   };
 
-  const timed = schedule(next.blocks.map((b) => b.kind));
+  const timed = schedule(next.blocks.map((b) => b.kind), windowHours ? Math.round(windowHours * 60) : undefined);
   next.blocks.forEach((b, i) => {
     for (const s of slotsFor(b.kind, timed[i]?.first ?? false)) {
       const mine = b.items.filter((id) => items.get(id)?.kind === s.kind);
-      let picks = pool(s.kind, s.slot === 'prep', s.slot);
+      const add = (it: MenuItem) => { take(it, b); mark(s.kind, it.id); };
       if (s.perGroup) {
-        // One from each group that has nothing yet: a whole look, around what's already picked.
-        const groupOf = new Map(section(menu, s.kind).groups.flatMap((g) => g.items.map((it) => [it.id, g.id] as const)));
+        // Getting ready: one from each group that has nothing yet, a whole look around what's picked.
         const has = new Set(mine.map((id) => groupOf.get(id)));
-        picks = picks.filter((it) => !has.has(groupOf.get(it.id)));
-      } else picks = picks.slice(0, Math.max(0, s.fill - mine.length));
-      for (const it of picks) take(it, b);
+        for (const it of spread(s.kind, s.slot, has)) if (!has.has(groupOf.get(it.id))) { has.add(groupOf.get(it.id)); add(it); }
+      } else if (s.byTime) {
+        // The play break: as many as fit the free time (each its countdown, or the usual length).
+        const length = timed[i] ? timed[i]!.end - timed[i]!.start : s.minutes;
+        let usedMin = mine.reduce((n, id) => n + itemMinutes(s, items.get(id)?.minutes), 0);
+        for (const it of spread(s.kind, s.slot)) {
+          const m = itemMinutes(s, it.minutes);
+          if (usedMin + m <= length) { add(it); usedMin += m; }
+        }
+      } else {
+        // Each from a different group while there are others: two chores, say, and now and then a twist.
+        const has = new Set(mine.map((id) => groupOf.get(id)));
+        const want = Math.max(0, s.fill - mine.length);
+        const cands = spread(s.kind, s.slot);
+        const fresh = cands.filter((it) => !has.has(groupOf.get(it.id)));
+        for (const it of [...fresh, ...cands.filter((it) => !fresh.includes(it))].slice(0, want)) add(it);
+      }
     }
   });
-  if (!picked(menu, next, 'arrival').length) for (const it of pool('arrival', true).slice(0, 3)) take(it);
+  if (!picked(menu, next, 'arrival').length) for (const it of spread('arrival').slice(0, 3)) take(it);
   return cleanPlan(next);
 }
 

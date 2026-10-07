@@ -149,11 +149,18 @@ night out somewhere new, pick a date outfit). A block **out** swaps the
 chores for one or two errands, each with its proof. 2 hours is a block at
 home; 4 adds one out; 8 is home, out, a **free hour** (on call: the lead
 can still send a demand), home again, and **welcome home** (be ready, and
-the arrival routine). Time left over goes to free time. Each part has a
-picker: anything from that menu section (nothing twice in a day; getting
-ready takes up to three from each of its groups, and Fill it for me picks
-one from each, a whole look), or
-**write your own** for this scene. **Check-ins** come at the end of each
+the arrival routine). Time left over goes to free time. The free hour's
+**play break** takes as many activities as fit its time: each counts its
+own countdown, or about 20 minutes, and the picker shows "40 of 60 min"
+and greys out what won't fit (a 9-hour window has 120 minutes of it).
+Each part has a picker: anything from that menu section (nothing twice in
+a day; getting ready takes up to three from each of its groups), or
+**write your own** for this scene. **Fill it for me** fills each part the
+same way: a whole look for getting ready (one from each group), the two
+chores from two different groups (so a twist or an evidence chore comes up
+about half the time, when the chores section has them), devotions, For
+{lead} and errands from a group the day hasn't used yet where it can, and
+the play break up to its minutes. **Check-ins** come at the end of each
 block (or every so often, or none), and the lead can send a **demand**
 (a photo or a quick act, with proof) any time.
 

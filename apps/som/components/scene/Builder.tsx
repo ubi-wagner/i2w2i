@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
-import { blocksForWindow, BLOCK_NAME, isWork, slotHasRoom, slotLabel, slotsFor, type BlockKind, type SlotSpec } from '@/lib/blocks';
+import { blocksForWindow, BLOCK_NAME, isWork, itemMinutes, slotHasRoom, slotLabel, slotsFor, type BlockKind, type SlotSpec } from '@/lib/blocks';
 import { newId, proofText, section, type MenuItem, type Proof } from '@/lib/menu';
 import { arrivalChecklist, autoFill, blocksFor, cleanPlan, CHECKIN_CHOICES, pacingFor, pacingOf, picked, placeLoose, planCheckins, planItems, planToTasks, recentlyUsed, tidyPlan, withParam, type Plan, type PlanItem } from '@/lib/plan';
 import { ownsDraft, sceneTransition } from '@/lib/rules';
@@ -278,7 +278,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
 
       {plan.blocks.map((b, i) => (
         <BlockCard key={i} i={i} plan={plan} items={items} first={timed[i]?.first ?? false} time={timed[i] ? blockTime(timed[i]!, scene.starts_at) : ''}
-          edit={edit} editable={editable} onPick={(slot) => setPicking({ block: i, slot })} />
+          length={timed[i] ? timed[i]!.end - timed[i]!.start : 120} edit={edit} editable={editable} onPick={(slot) => setPicking({ block: i, slot })} />
       ))}
       {timed.length > plan.blocks.length && (
         <section className="card flex items-baseline justify-between gap-2 py-3" aria-label="Free time at the end">
@@ -332,7 +332,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
       </div>
 
       <Sheet open={picking !== null} onClose={() => setPicking(null)} title={picking ? `${picking.block + 1}. ${BLOCK_NAME[plan.blocks[picking.block]?.kind ?? 'home']}: ${slotLabel(picking.slot, lead).replace(/ \(.*\)$/, '')}` : ''}>
-        {picking && <Picker plan={plan} items={items} block={picking.block} slot={picking.slot} edit={edit} onDone={() => setPicking(null)} />}
+        {picking && <Picker plan={plan} items={items} block={picking.block} slot={picking.slot} length={timed[picking.block] ? timed[picking.block]!.end - timed[picking.block]!.start : picking.slot.minutes} edit={edit} onDone={() => setPicking(null)} />}
       </Sheet>
 
       <Sheet open={confirming !== null} onClose={() => setConfirm(null)} title={confirming === 'send' ? `Send to ${follow}?` : 'Start the scene?'}>
@@ -384,8 +384,8 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
 }
 
 /** One block: home or out (for a work block), its times, and what's in each part of it. */
-function BlockCard({ i, plan, items, first, time, edit, editable, onPick }: {
-  i: number; plan: Plan; items: Map<string, PlanItem>; first: boolean; time: string;
+function BlockCard({ i, plan, items, first, time, length, edit, editable, onPick }: {
+  i: number; plan: Plan; items: Map<string, PlanItem>; first: boolean; time: string; length: number;
   edit: Edit; editable: boolean; onPick: (slot: SlotSpec) => void;
 }) {
   const pod = usePod();
@@ -414,26 +414,29 @@ function BlockCard({ i, plan, items, first, time, edit, editable, onPick }: {
       )}
       {b.kind === 'free' && <p className="text-sm text-ink-soft">Free time, on call: {lead} may send a demand.</p>}
       {b.kind === 'welcome' && <p className="text-sm text-ink-soft">{lead} comes home: the arrival routine (below), and anything to be ready in.</p>}
-      {slots.map((s) => <SlotRow key={s.slot} block={i} slot={s} plan={plan} items={items} edit={edit} editable={editable} onPick={() => onPick(s)} />)}
+      {slots.map((s) => <SlotRow key={s.slot} block={i} slot={s} length={length} plan={plan} items={items} edit={edit} editable={editable} onPick={() => onPick(s)} />)}
     </section>
   );
 }
 
-function SlotRow({ block, slot, plan, items, edit, editable, onPick }: {
-  block: number; slot: SlotSpec; plan: Plan; items: Map<string, PlanItem>; edit: Edit; editable: boolean; onPick: () => void;
+function SlotRow({ block, slot, length, plan, items, edit, editable, onPick }: {
+  block: number; slot: SlotSpec; length: number; plan: Plan; items: Map<string, PlanItem>; edit: Edit; editable: boolean; onPick: () => void;
 }) {
   const pod = usePod();
   const lead = pod.title('lead');
   const here = plan.blocks[block]!.items.map((id) => items.get(id)).filter((x): x is PlanItem => x?.kind === slot.kind);
   const label = slotLabel(slot, lead);
   const short = here.length < slot.min;
-  // Getting ready takes up to so many from each group, so there's always room for one more of something.
-  const room = slot.perGroup ? true : here.length < slot.max;
+  // Getting ready takes up to so many from each group, so there's always room for one more of something;
+  // the play break fills the free time.
+  const usedMin = here.reduce((n, it) => n + itemMinutes(slot, it.minutes), 0);
+  const room = slot.perGroup ? true : slot.byTime ? usedMin < length : here.length < slot.max;
   return (
     <div className="space-y-1.5 border-t border-line pt-2.5" role="group" aria-label={`Block ${block + 1}: ${label}`}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium">{KIND_ICON[slot.kind]} {label}</span>
         {slot.perGroup ? <span className={`text-xs ${short ? 'text-warn' : 'text-ink-soft'}`}>{here.length} picked</span>
+          : slot.byTime ? <span className="text-xs text-ink-soft">{usedMin} of {length} min</span>
           : slot.max > 1 && <span className={`text-xs ${short ? 'text-warn' : 'text-ink-soft'}`}>{here.length}/{slot.max}</span>}
       </div>
       {here.length > 0 && (
@@ -482,14 +485,16 @@ function Picked({ item, plan, edit, editable, block }: { item: PlanItem; plan: P
 }
 
 /** Picking for one part of a block: the menu's section, each thing once a day, or something written for this scene. */
-function Picker({ plan, items, block, slot, edit, onDone }: { plan: Plan; items: Map<string, PlanItem>; block: number; slot: SlotSpec; edit: Edit; onDone: () => void }) {
+function Picker({ plan, items, block, slot, length, edit, onDone }: { plan: Plan; items: Map<string, PlanItem>; block: number; slot: SlotSpec; length: number; edit: Edit; onDone: () => void }) {
   const pod = usePod();
   const sec = section(pod.menu, slot.kind);
   const mine = plan.blocks[block]!.items.filter((id) => items.get(id)?.kind === slot.kind);
   const groupOf = new Map(sec.groups.flatMap((g) => g.items.map((it) => [it.id, g.id] as const)));
   const inGroup = (gid: string) => mine.filter((id) => groupOf.get(id) === gid).length;
   // Full: nothing more fits, not even something written for this scene.
-  const full = !slotHasRoom(slot, mine.length, null);
+  const usedMin = mine.reduce((n, id) => n + itemMinutes(slot, items.get(id)?.minutes), 0);
+  const fits = (minutes?: number) => !slot.byTime || usedMin + itemMinutes(slot, minutes) <= length;
+  const full = slot.byTime ? !fits() : !slotHasRoom(slot, mine.length, null);
   const where = (id: string) => plan.blocks.findIndex((b) => b.items.includes(id));
   const [writing, setWriting] = useState(false);
   const toggle = (it: MenuItem) => edit((p) => {
@@ -505,7 +510,9 @@ function Picker({ plan, items, block, slot, edit, onDone }: { plan: Plan; items:
   return (
     <div className="space-y-4">
       <p className="text-sm text-ink-soft" role="status">
-        {slot.perGroup ? `${mine.length} picked: up to ${slot.perGroup} from each group.` : `${mine.length} of ${slot.max === slot.min ? slot.max : `up to ${slot.max}`} picked${full ? ': take one out to swap' : ''}.`}
+        {slot.perGroup ? `${mine.length} picked: up to ${slot.perGroup} from each group.`
+          : slot.byTime ? `${mine.length} picked: ${usedMin} of ${length} minutes. Each takes its countdown, or about ${slot.byTime} minutes.`
+          : `${mine.length} of ${slot.max === slot.min ? slot.max : `up to ${slot.max}`} picked${full ? ': take one out to swap' : ''}.`}
       </p>
       {sec.groups.filter((g) => g.items.length).map((g) => (
         <div key={g.id} className="space-y-2" role="group" aria-label={g.title}>
@@ -516,10 +523,10 @@ function Picker({ plan, items, block, slot, edit, onDone }: { plan: Plan; items:
               const on = at === block;
               const elsewhere = at >= 0 && !on;
               return (
-                <button key={it.id} type="button" className="chip flex-col items-start gap-0.5 text-left" aria-pressed={on} disabled={elsewhere || (!on && !slotHasRoom(slot, mine.length, inGroup(g.id)))} title={it.detail} onClick={() => toggle(it)}>
+                <button key={it.id} type="button" className="chip flex-col items-start gap-0.5 text-left" aria-pressed={on} disabled={elsewhere || (!on && (!slotHasRoom(slot, mine.length, inGroup(g.id)) || !fits(it.minutes)))} title={it.detail} onClick={() => toggle(it)}>
                   <span>{on ? '✓ ' : ''}{it.label}</span>
-                  {(it.needs?.length || elsewhere) && (
-                    <span className="text-xs font-normal text-ink-soft">{elsewhere ? `In block ${at + 1}` : it.needs!.map(proofText).join(' · ')}</span>
+                  {(it.needs?.length || it.minutes || elsewhere) && (
+                    <span className="text-xs font-normal text-ink-soft">{elsewhere ? `In block ${at + 1}` : [...(it.needs ?? []).map(proofText), it.minutes ? `${it.minutes} min` : ''].filter(Boolean).join(' · ')}</span>
                   )}
                 </button>
               );
