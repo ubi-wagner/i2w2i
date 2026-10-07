@@ -23,10 +23,14 @@ const BUILT_IN: Record<SectionKind, Record<string, Idea[]>> = {
     Shoes: ['Barefoot', 'Slippers', 'Heels', 'Polished shoes'],
   },
   changeover: {
-    'Into the next thing': [
+    'Going out': [
       { label: 'Out of the cleaning clothes, into ___ for going out', param: 'what', needs: [P(1)] },
-      { label: 'Into ___ for the afternoon', param: 'what', needs: [P(1)] },
+    ],
+    'Back to the chores': [
       { label: 'Into your apron for the chores', needs: [P(1)] },
+    ],
+    'Into the next thing': [
+      { label: 'Into ___ for the afternoon', param: 'what', needs: [P(1)] },
       { label: 'Into what {lead} laid out', needs: [P(1)] },
     ],
     'Fresh up': [
@@ -258,11 +262,15 @@ const KINK: Record<SectionKind, Record<string, Idea[]>> = {
     'Posture & manners': ['Heels on the whole time', 'Hands clasped behind your back when standing', 'Eyes down unless spoken to', 'Every answer ends in “{lead}”', 'Curtsy when you enter a room', 'Ask permission before sitting'],
   },
   changeover: {
+    'Going out': [
+      { label: 'Uniform off, lingerie on under your clothes for going out', needs: [P(2, 'under and over')] },
+    ],
     'Into the next thing': [
       { label: 'Plug in for the next block', needs: [P(1)] },
       { label: 'Into heels for the rest of the day', needs: [P(1)] },
+    ],
+    'Welcome home': [
       { label: 'Into ___ for when {lead} walks in', param: 'what', needs: [P(1)] },
-      { label: 'Uniform off, lingerie on under your clothes for going out', needs: [P(2, 'under and over')] },
     ],
   },
   domain: {

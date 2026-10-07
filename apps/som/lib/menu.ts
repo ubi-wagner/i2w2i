@@ -347,7 +347,9 @@ export function starterMenu(): Menu {
       {
         id: newId(), kind: 'changeover', title: 'Change-overs',
         groups: [
-          g('Into the next thing', [{ label: 'Out of the cleaning clothes, into ___ for going out', param: 'what', needs: [photo] }, { label: 'Hair redone, fresh lipstick, a photo', needs: [photo] }, { label: 'Into your apron for the chores', needs: [photo] }]),
+          g('Going out', [{ label: 'Out of the cleaning clothes, into ___ for going out', param: 'what', needs: [photo] }]),
+          g('Back to the chores', [{ label: 'Into your apron for the chores', needs: [photo] }]),
+          g('Fresh up', [{ label: 'Hair redone, fresh lipstick, a photo', needs: [photo] }]),
           g('Welcome home', [{ label: 'Into your best outfit, waiting at the door', needs: [photo] }]),
         ],
       },

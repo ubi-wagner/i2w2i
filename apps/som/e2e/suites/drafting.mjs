@@ -90,6 +90,65 @@ await b.reload();
 const results = await b.getByRole('region', { name: 'Results' }).innerText();
 check(results.includes('A good day.\nThe picnic was perfect.') && results.includes('twenty, slow'), 'Sunny reads the notes as written and the reward as typed');
 
+// ── Getting ready: up to 3 from each group ──────────────────────────────────
+const looks = ['## Presentation: Getting ready', ...['Hair', 'Makeup', 'Shoes'].flatMap((g) => [`### ${g}`, ...[1, 2, 3, 4].map((n) => `- ${g} ${n} [1 photo]`)]),
+  '## Changeover: Change-overs', ...['Going out', 'Back to the chores', 'Fresh up', 'Welcome home'].flatMap((g) => [`### ${g}`, ...[1, 2].map((n) => `- ${g} look ${n} [1 photo]`)])].join('\n');
+await b.goto(`${BASE}/menu`);
+await b.getByLabel('Import a menu file').setInputFiles({ name: 'looks.txt', mimeType: 'text/plain', buffer: Buffer.from(looks) });
+await b.getByRole('button', { name: 'Save menu' }).first().click();
+await b.getByText('Saved.').waitFor();
+await b.goto(`${BASE}/`);
+await b.getByRole('button', { name: 'New scene' }).click();
+await b.waitForURL(/\/scene\//);
+const prep = b.getByRole('group', { name: 'Block 1: Getting ready (30 min)' });
+await prep.getByRole('button', { name: /^\+ / }).click();
+const inGroup = (g) => sheet(b).getByRole('group', { name: g, exact: true });
+for (const g of ['Hair', 'Makeup']) for (const n of [1, 2, 3]) await inGroup(g).getByRole('button', { name: new RegExp(`${g} ${n}`) }).click();
+check(await inGroup('Hair').getByRole('button', { name: /Hair 4/ }).isDisabled() && !(await inGroup('Shoes').getByRole('button', { name: /Shoes 1/ }).isDisabled()),
+  'getting ready takes up to 3 from a group: a 4th waits, other groups are still open');
+for (const n of [1, 2]) await inGroup('Shoes').getByRole('button', { name: new RegExp(`Shoes ${n}`) }).click();
+check((await sheet(b).getByRole('status').first().innerText()).includes('8 picked: up to 3 from each group'), '…so far more than six in all (8 here)');
+await sheet(b).getByRole('button', { name: 'Done', exact: true }).click();
+check((await prep.innerText()).includes('8 picked'), '…and the block says how many');
+await b.goto(`${BASE}/`);
+await b.getByRole('button', { name: 'New scene' }).click();
+await b.waitForURL(/\/scene\//);
+await b.getByRole('button', { name: /Fill it for me/ }).click();
+await b.getByText('Saved').waitFor({ timeout: 10000 });
+const filled = await b.getByRole('group', { name: 'Block 1: Getting ready (30 min)' }).innerText();
+check(['Hair', 'Makeup', 'Shoes'].every((g) => (filled.match(new RegExp(`${g} \\d`, 'g')) ?? []).length === 1), 'Fill it for me puts together a whole look: one from each group');
+check(filled.indexOf('Hair ') < filled.indexOf('Makeup ') && filled.indexOf('Makeup ') < filled.indexOf('Shoes '), '…listed in the menu’s order, whatever order it picked them in');
+
+// A long day: the free hour's play break holds as many as fit its time.
+await b.goto(`${BASE}/`);
+await b.getByRole('button', { name: 'New scene' }).click();
+await b.waitForURL(/\/scene\//);
+await b.getByRole('button', { name: '8 hours' }).click();
+await b.getByRole('button', { name: /Fill it for me/ }).click();
+await b.getByText('Saved').waitFor({ timeout: 10000 });
+const playRow = b.getByRole('group', { name: /^Block 3: A play break/ });
+const playText = await playRow.innerText();
+const [, usedMin, freeMin] = /(\d+) of (\d+) min/.exec(playText) ?? [];
+check(Number(freeMin) === 60 && Number(usedMin) > 20 && Number(usedMin) <= 60 && (playText.match(/×/g) ?? []).length >= 2,
+  `the play break fills the free hour, more than one activity, without going over (${usedMin} of ${freeMin} min)`);
+// Each change-over suits the block it leads into.
+const change = (n) => b.getByRole('group', { name: `Block ${n}: Change-over (15 min)` }).innerText();
+check((await change(2)).includes('Going out look'), 'the change-over into the block out is one for going out');
+check((await change(4)).includes('Back to the chores look'), '…and the one back into a block at home is for the chores');
+check((await b.getByRole('group', { name: `Block 5: Ready for ${TITLES.lead} (optional)` }).innerText()).includes('Welcome home look'), '…and the welcome home gets a welcome-home look');
+// Picking one by hand, what suits the block comes first.
+await b.goto(`${BASE}/`);
+await b.getByRole('button', { name: 'New scene' }).click();
+await b.waitForURL(/\/scene\//);
+await b.getByRole('button', { name: '8 hours' }).click();
+const firstGroup = async (n) => {
+  await b.getByRole('group', { name: `Block ${n}: Change-over (15 min)` }).getByRole('button', { name: '+ Pick' }).click();
+  const t = await sheet(b).getByRole('group').first().getAttribute('aria-label');
+  await sheet(b).getByRole('button', { name: 'Done', exact: true }).click();
+  return t;
+};
+check(await firstGroup(2) === 'Going out' && await firstGroup(4) === 'Back to the chores', 'picking a change-over by hand, the ones that suit the next block are listed first');
+
 const errors = [...b.errors, ...r.errors];
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join('; ')}` : ''}`);
 await finish();

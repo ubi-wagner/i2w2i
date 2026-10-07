@@ -149,9 +149,28 @@ night out somewhere new, pick a date outfit). A block **out** swaps the
 chores for one or two errands, each with its proof. 2 hours is a block at
 home; 4 adds one out; 8 is home, out, a **free hour** (on call: the lead
 can still send a demand), home again, and **welcome home** (be ready, and
-the arrival routine). Time left over goes to free time. Each part has a
-picker: anything from that menu section (nothing twice in a day), or
-**write your own** for this scene. **Check-ins** come at the end of each
+the arrival routine). Time left over goes to free time. The free hour's
+**play break** takes as many activities as fit its time: each counts its
+own countdown, or about 20 minutes, and the picker shows "40 of 60 min"
+and greys out what won't fit (a 9-hour window has 120 minutes of it).
+Each part has a picker: anything from that menu section (nothing twice in
+a day; getting ready takes up to three from each of its groups), or
+**write your own** for this scene. **Fill it for me** fills each part the
+same way: a whole look for getting ready (one from each group), the two
+chores from two different groups (so a twist or an evidence chore comes up
+about half the time, when the chores section has them), devotions, For
+{lead} and errands from a group the day hasn't used yet where it can,
+the play break up to its minutes, and the arrival routine one step from
+each of its groups (where you're found, how, the greeting, the service:
+however the menu splits it). A **change-over** suits the block it
+leads into: into a block out, Fill takes one from a "Going out" group;
+back into a block at home, one from a "Back to the chores" group; any
+other group (a fresh-up) does for either, and the welcome home takes
+its own "Welcome home" looks. The picker lists what suits the block
+first. Every part runs in the **menu's order**, however it was picked:
+getting ready is one checklist from the shower to the shoes, and a play
+break runs as the Play section is laid out, so order the menu as the day
+should go. **Check-ins** come at the end of each
 block (or every so often, or none), and the lead can send a **demand**
 (a photo or a quick act, with proof) any time.
 
@@ -305,6 +324,11 @@ Note: shown under the section's title
 - `[...]`: the proof, any number of photos, videos, voice notes and notes.
 - `(15 min)`: a countdown that starts when the task does.
 - `___` and `{mins}`: a blank filled in when it's picked, and what goes there.
+- Groups and items are listed in the order the day should run them.
+  Change-over groups named "Going out" (or with "errands" or "shops" in
+  the name) are for a block out, "Back to the chores" (or "cleaning",
+  "housework") for a block at home, and "Welcome home" (or "Ready for
+  {lead}") for the welcome home; anything else fits any block.
 
 An ideas pack is written the same way (sections, groups, items).
 

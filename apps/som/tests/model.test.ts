@@ -44,7 +44,7 @@ describe('plan → tasks', () => {
     return cleanPlan({ ...emptyPlan(menu), ...p });
   }
 
-  it('turns each block into tasks: getting ready as one checklist, then each thing picked', () => {
+  it('turns each block into tasks: getting ready as one checklist, then each thing picked, in the menu’s order', () => {
     const shower = find(menu, 'Shower');
     const hair = find(menu, 'Hair done');
     const deep = find(menu, 'Deep-clean the ___');
@@ -56,11 +56,11 @@ describe('plan → tasks', () => {
       blocks: [{ kind: 'home', items: [sonnet.id, fridge.id, shower.id, note.id, deep.id, hair.id] }],
     });
     const tasks = planToTasks(menu, p);
-    expect(tasks.map((t) => t.title)).toEqual(['Getting ready', 'Clean the refrigerator, inside and out', 'Deep-clean the Kitchen', 'Write a love note', 'Write me a sonnet about our marriage']);
+    expect(tasks.map((t) => t.title)).toEqual(['Getting ready', 'Deep-clean the Kitchen', 'Clean the refrigerator, inside and out', 'Write a love note', 'Write me a sonnet about our marriage']);
     expect(tasks.map((t) => t.kind)).toEqual(['presentation', 'domain', 'domain', 'tasks', 'wishes']);
     expect(tasks.every((t) => t.block === 0)).toBe(true);
     expect(tasks[0]).toMatchObject({ checklist: ['Shower', 'Hair done'], needs: [{ kind: 'photo', count: 1 }] });
-    expect(tasks[1]).toMatchObject({ needs: [{ kind: 'photo', count: 2, label: 'before & after' }] });
+    expect(tasks[2]).toMatchObject({ needs: [{ kind: 'photo', count: 2, label: 'before & after' }] });
     expect(tasks[3]).toMatchObject({ needs: [{ kind: 'text', count: 1 }], writing: true });
   });
 
@@ -385,15 +385,22 @@ describe('fill it for me', () => {
     const p = autoFill(menu, base, rand);
     const count = (i: number, k: string) => kinds(p, i).filter((x) => x === k).length;
     expect(p.blocks[0]!.items).toContain(shower.id);
-    expect(count(0, 'presentation')).toBe(3);
+    // Getting ready: one from each group that has nothing yet (Shower was picked; Shoes gets one).
+    const shoes = new Set(section(menu, 'presentation').groups.find((g) => g.title === 'Shoes')!.items.map((i) => i.id));
+    expect(count(0, 'presentation')).toBe(2);
+    expect(p.blocks[0]!.items.filter((id) => shoes.has(id))).toHaveLength(1);
     expect([count(0, 'domain'), count(0, 'tasks'), count(0, 'wishes')]).toEqual([2, 1, 1]);
     expect([count(1, 'changeover'), count(1, 'errands'), count(1, 'tasks'), count(1, 'wishes')]).toEqual([1, 2, 1, 1]);
-    expect(kinds(p, 2)).toEqual(['play']);
+    // The free hour fills with as many play activities as fit it (both of these: 2 min + about 20).
+    expect(kinds(p, 2)).toEqual(['play', 'play']);
     expect([count(3, 'changeover'), count(3, 'domain'), count(3, 'tasks'), count(3, 'wishes')]).toEqual([1, 2, 1, 1]);
     // The welcome home gets a look for the lead's return; change-overs don't.
     const welcome = new Set(section(menu, 'changeover').groups.find((g) => g.title === 'Welcome home')!.items.map((i) => i.id));
     expect(p.blocks[4]!.items.every((id) => welcome.has(id)) && p.blocks[4]!.items.length).toBe(1);
     expect([1, 3].flatMap((i) => p.blocks[i]!.items).some((id) => welcome.has(id))).toBe(false);
+    // Each change-over suits the block it leads into: out for the errands, back in for the chores.
+    expect(p.blocks[1]!.items.map((id) => itemsById(menu).get(id)!.item.label)).toContain('Out of the cleaning clothes, into ___ for going out');
+    expect(p.blocks[3]!.items.map((id) => itemsById(menu).get(id)!.item.label)).toContain('Into your apron for the chores');
     expect(arrivalChecklist(menu, p).length).toBeGreaterThan(0);
     // Nothing twice in a day; a room is cleaned once.
     const all = p.blocks.flatMap((b) => b.items);
@@ -419,13 +426,88 @@ describe('fill it for me', () => {
     const avoid = recentlyUsed([last, ...roomsUsed]);
     for (let i = 0; i < 5; i++) {
       const p = autoFill(menu, cleanPlan({ ...emptyPlan(menu, 8) }), rand, undefined, avoid);
-      expect(picked(menu, p, 'play').map((x) => x.item.id)).toEqual([play[0]!.id]);
+      expect(picked(menu, p, 'play').map((x) => x.item.id)[0]).toBe(play[0]!.id); // the new one first
       expect(picked(menu, p, 'tasks').map((x) => x.item.id)[0]).toBe(devotion[0]!.id);
-      if (p.picks[deep.id]) expect(p.picks[deep.id]!.param).toBe(keep);
+      // The one room not cleaned lately goes first (later room chores that day reuse others).
+      const rooms = Object.values(p.picks).map((x) => x.param).filter((r): r is string => !!r && menu.rooms.includes(r));
+      if (rooms.length) expect(rooms).toContain(keep);
     }
     // Nothing new left: it repeats rather than leaving a gap.
     const all = recentlyUsed([cleanPlan({ ...emptyPlan(menu), picks: Object.fromEntries(play.map((i) => [i.id, {}])) })]);
-    expect(picked(menu, autoFill(menu, cleanPlan({ ...emptyPlan(menu, 8) }), rand, undefined, all), 'play')).toHaveLength(1);
+    expect(picked(menu, autoFill(menu, cleanPlan({ ...emptyPlan(menu, 8) }), rand, undefined, all), 'play').length).toBeGreaterThan(0);
+  });
+
+  // A menu with several groups in each part, to see how Fill spreads its picks.
+  const groups = (kind: string, spec: Record<string, { label: string; minutes?: number }[]>) => ({ kind, groups: Object.entries(spec).map(([title, items]) => ({ id: title, title, items: items.map((it, n) => ({ id: `${title}-${n}`.replace(/\W+/g, '-').toLowerCase(), ...it })) })) });
+  const many = (title: string, n: number) => Array.from({ length: n }, (_, i) => ({ label: `${title} ${i + 1}` }));
+  const wide = cleanMenu({
+    ...menu,
+    sections: menu.sections.map((sec) => {
+      if (sec.kind === 'domain') return { ...sec, ...groups('domain', { Kitchen: many('Kitchen', 8), Bathrooms: many('Bath', 8), Laundry: many('Laundry', 8), 'With a twist': many('Twist', 8) }) };
+      if (sec.kind === 'tasks') return { ...sec, ...groups('tasks', { Praise: many('Praise', 6), Writing: many('Writing', 6), Voice: many('Voice', 6) }) };
+      if (sec.kind === 'play') return { ...sec, ...groups('play', { Tribute: [{ label: 'Tribute A' }, { label: 'Tribute B' }], Edging: [{ label: 'Edge 15', minutes: 15 }, { label: 'Edge 10', minutes: 10 }], Positions: [{ label: 'Kneel', minutes: 5 }, { label: 'Corner', minutes: 15 }] }) };
+      return sec;
+    }),
+  });
+  const groupOfIn = (m: typeof wide, kind: string) => new Map(section(m, kind as never).groups.flatMap((g) => g.items.map((i) => [i.id, g.title] as const)));
+
+  it('two chores come from two different groups, so a twist turns up now and then', () => {
+    const g = groupOfIn(wide, 'domain');
+    let twists = 0;
+    let blocks = 0;
+    for (let n = 0; n < 200; n++) {
+      const p = autoFill(wide, cleanPlan({ ...emptyPlan(wide, 2) }), Math.random);
+      const chores = p.blocks[0]!.items.filter((id) => g.has(id)).map((id) => g.get(id));
+      expect(chores).toHaveLength(2);
+      expect(new Set(chores).size).toBe(2);
+      blocks++;
+      if (chores.includes('With a twist')) twists++;
+    }
+    // Two groups out of four: a twist in about half the blocks.
+    expect(twists / blocks).toBeGreaterThan(0.3);
+    expect(twists / blocks).toBeLessThan(0.7);
+  });
+
+  it('across the day, each devotion comes from a group the day hasn’t had yet', () => {
+    const g = groupOfIn(wide, 'tasks');
+    for (let n = 0; n < 20; n++) {
+      const p = autoFill(wide, cleanPlan({ ...emptyPlan(wide, 6) }), Math.random, 6);
+      const devotions = p.blocks.flatMap((b) => b.items).filter((id) => g.has(id)).map((id) => g.get(id));
+      expect(devotions).toHaveLength(3);
+      expect(new Set(devotions).size).toBe(3);
+    }
+  });
+
+  it('the play break holds as many as fit the free time (countdowns, or about 20 minutes each)', () => {
+    const g = groupOfIn(wide, 'play');
+    const mins = (id: string) => ({ 'Edge 15': 15, 'Edge 10': 10, Kneel: 5, Corner: 15 } as Record<string, number>)[section(wide, 'play').groups.flatMap((x) => x.items).find((i) => i.id === id)!.label] ?? 20;
+    for (const [hours, free] of [[8, 60], [9, 120]] as const) {
+      for (let n = 0; n < 20; n++) {
+        const p = autoFill(wide, cleanPlan({ ...emptyPlan(wide, 8) }), Math.random, hours);
+        const play = p.blocks.find((b) => b.kind === 'free')!.items.filter((id) => g.has(id));
+        const total = play.reduce((t, id) => t + mins(id), 0);
+        expect(total).toBeLessThanOrEqual(free);
+        // Nothing else would have fit.
+        const left = section(wide, 'play').groups.flatMap((x) => x.items).filter((i) => !play.includes(i.id));
+        expect(left.every((i) => total + mins(i.id) > free)).toBe(true);
+        expect(new Set(play.slice(0, 3).map((id) => g.get(id))).size).toBe(Math.min(3, play.length)); // spread over the groups
+      }
+    }
+  });
+
+  it('the arrival routine takes one from each of its groups, in the menu’s order', () => {
+    const steps = ['Where', 'How', 'Greeting', 'Service'];
+    const m = cleanMenu({ ...menu, sections: menu.sections.map((s) => (s.kind === 'arrival' ? { ...s, groups: steps.map((t) => ({ id: t, title: t, items: [1, 2].map((n) => ({ id: `${t}${n}`, label: `${t} ${n}` })) })) } : s)) });
+    for (let n = 0; n < 10; n++) {
+      const list = arrivalChecklist(m, autoFill(m, cleanPlan({ ...emptyPlan(m, 2) }), Math.random));
+      expect(list.map((x) => x.split(' ')[0])).toEqual(steps);
+    }
+  });
+
+  it('each part runs in the menu’s order, however it was picked: the shower before the shoes', () => {
+    const [shower, outfit, slippers] = ['Shower', 'Outfit of your choosing', 'Slippers'].map((l) => find(menu, l));
+    const plan = cleanPlan({ ...emptyPlan(menu, 2), picks: { [shower!.id]: {}, [outfit!.id]: {}, [slippers!.id]: {} }, blocks: [{ kind: 'home', items: [slippers!.id, outfit!.id, shower!.id] }] });
+    expect(planToTasks(menu, plan).find((t) => t.kind === 'presentation')!.checklist).toEqual(['Shower', 'Outfit of your choosing', 'Slippers']);
   });
 
   it('knows which roleplays were played, how often and when last', () => {

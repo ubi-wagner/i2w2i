@@ -29,11 +29,36 @@ export interface SlotSpec {
   max: number;
   fill: number;
   minutes: number;
+  /** At most this many from each group of its section, instead of `max` overall (getting ready: up to 3 of each kind of thing). */
+  perGroup?: number;
+  /**
+   * Fills its time instead of a count (the play break: as many as fit the
+   * free time). Each thing takes its own countdown, or this many minutes.
+   */
+  byTime?: number;
 }
 
 const S = (slot: Slot, kind: SectionKind, min: number, max: number, fill: number, minutes: number): SlotSpec => ({ slot, kind, min, max, fill, minutes });
 
 export const BLOCK_MINUTES = 120;
+export const PREP_PER_GROUP = 3;
+/** A play activity with no countdown of its own is counted as this long. */
+export const PLAY_MINUTES = 20;
+
+/** How long one thing takes in a part that fills its time: its own countdown, or the part's usual length. */
+export function itemMinutes(s: SlotSpec, minutes?: number): number {
+  return minutes ?? s.byTime ?? s.minutes;
+}
+
+/**
+ * Whether one more fits a slot: `picked` is how many it has, `inGroup` how
+ * many of those come from the group the new one is in (null for something
+ * written for this scene, which belongs to no group).
+ */
+export function slotHasRoom(s: SlotSpec, picked: number, inGroup: number | null): boolean {
+  if (!s.perGroup) return picked < s.max;
+  return inGroup === null || inGroup < s.perGroup;
+}
 
 /**
  * What a block holds. The first work block starts with a full prep, later
@@ -41,13 +66,14 @@ export const BLOCK_MINUTES = 120;
  * block is two hours.
  */
 export function slotsFor(kind: BlockKind, first: boolean): SlotSpec[] {
-  const ready = first ? S('prep', 'presentation', 1, 6, 3, 30) : S('changeover', 'changeover', 1, 1, 1, 15);
+  // Getting ready: up to 3 from each group (hair, makeup, shoes…); Fill it for me picks one of each, a whole look.
+  const ready = first ? { ...S('prep', 'presentation', 1, Infinity, Infinity, 30), perGroup: PREP_PER_GROUP } : S('changeover', 'changeover', 1, 1, 1, 15);
   const work = BLOCK_MINUTES - ready.minutes - 30;
   const praise = [S('devotion', 'tasks', 1, 1, 1, 15), S('wishes', 'wishes', 1, 1, 1, 15)];
   switch (kind) {
     case 'home': return [ready, S('chores', 'domain', 2, 2, 2, work), ...praise];
     case 'out': return [ready, S('errands', 'errands', 1, 2, 2, work), ...praise];
-    case 'free': return [S('play', 'play', 0, 1, 1, 60)];
+    case 'free': return [{ ...S('play', 'play', 0, Infinity, Infinity, 60), byTime: PLAY_MINUTES }];
     case 'welcome': return [S('welcome', 'changeover', 0, 1, 1, 60)];
   }
 }
@@ -137,6 +163,26 @@ export function blockAt(timed: Timed[], minutes: number): number {
 
 /** Change-over groups meant for the welcome home ("Welcome home", "Ready for {lead}"). */
 export const WELCOME_GROUP = /welcome|ready for|home/i;
+/** Change-over groups for a block out ("Going out", "For the errands") and for one at home ("Back to the chores"). */
+export const OUT_GROUP = /\bout\b|errand|shops/i;
+export const CHORES_GROUP = /chore|cleaning|housework/i;
+
+/**
+ * The change-over groups that suit a part, best first: the welcome home
+ * takes the welcome groups; a change-over into a block out takes the
+ * going-out ones, then any that suit either (a fresh-up), and only then
+ * the back-to-the-chores ones; into a block at home, the other way round.
+ * A menu that doesn't sort its change-overs this way gets them all, as one.
+ */
+export function changeoverTiers<G extends { title: string }>(groups: G[], slot: Slot, into: BlockKind): G[][] {
+  const welcome = groups.filter((g) => WELCOME_GROUP.test(g.title));
+  if (slot === 'welcome') return [welcome.length ? welcome : groups];
+  const between = welcome.length < groups.length ? groups.filter((g) => !welcome.includes(g)) : groups;
+  const out = between.filter((g) => OUT_GROUP.test(g.title));
+  const chores = between.filter((g) => !out.includes(g) && CHORES_GROUP.test(g.title));
+  const either = between.filter((g) => !out.includes(g) && !chores.includes(g));
+  return (into === 'out' ? [out, either, chores] : [chores, either, out]).filter((t) => t.length);
+}
 
 export const BLOCK_NAME: Record<BlockKind, string> = { home: 'Home', out: 'Out', free: 'Free time', welcome: 'Welcome home' };
 
