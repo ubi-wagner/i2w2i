@@ -40,9 +40,12 @@ describe('the day in blocks', () => {
     expect(schedule(defaultBlocks(24), 1440).find((b) => b.kind === 'free')).toMatchObject({ start: 240, end: 780 });
   });
 
-  it('a work block is two hours: 30 minutes to get ready (15 to change after the first), the work, then 15 + 15 of praise', () => {
-    expect(slotsFor('home', true).map((s) => [s.slot, s.minutes])).toEqual([['prep', 30], ['chores', 60], ['devotion', 15], ['wishes', 15]]);
-    expect(slotsFor('out', false).map((s) => [s.slot, s.minutes])).toEqual([['changeover', 15], ['errands', 75], ['devotion', 15], ['wishes', 15]]);
+  it('a work block is two hours: 30 minutes to get ready (15 to change after the first), the work, 15 + 15 of praise and a 15-minute play break', () => {
+    expect(slotsFor('home', true).map((s) => [s.slot, s.minutes])).toEqual([['prep', 30], ['chores', 45], ['devotion', 15], ['wishes', 15], ['break', 15]]);
+    expect(slotsFor('out', false).map((s) => [s.slot, s.minutes])).toEqual([['changeover', 15], ['errands', 60], ['devotion', 15], ['wishes', 15], ['break', 15]]);
+    // The break is one thing from the Play section; the free hour still takes as many as fit.
+    expect(slotsFor('home', false).find((s) => s.slot === 'break')).toMatchObject({ kind: 'play', min: 1, max: 1 });
+    expect(slotsFor('free', false)[0]).toMatchObject({ slot: 'play', byTime: 20 });
     expect(blockMinutes('home', true)).toBe(120);
     expect(blockMinutes('home', false)).toBe(120);
     expect(slotsFor('home', true).find((s) => s.slot === 'chores')).toMatchObject({ min: 2, max: 4, perGroup: 2, maxGroups: 2 });
@@ -88,6 +91,6 @@ describe('the day in blocks', () => {
   });
 
   it('says what each part is, with the lead’s title', () => {
-    expect(slotsFor('home', false).map((s) => slotLabel(s, 'Captain Kay'))).toEqual(['Change-over (15 min)', 'Chores (two areas, two in each)', 'Devotion (15 min)', 'For Captain Kay (15 min)']);
+    expect(slotsFor('home', false).map((s) => slotLabel(s, 'Captain Kay'))).toEqual(['Change-over (15 min)', 'Chores (two areas, two in each)', 'Devotion (15 min)', 'For Captain Kay (15 min)', 'Play break (15 min)']);
   });
 });

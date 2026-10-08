@@ -146,8 +146,11 @@ the cleaning clothes and into something for the shops), then the
 the oven; a room from the room bank: dust it and mop it, both in the same
 room), then 15 minutes of **Devotion** (a praise act for the
 lead) and 15 minutes **For {lead}** (a sonnet about your marriage, plan a
-night out somewhere new, pick a date outfit). A block **out** swaps the
-chores for one or two errands, each with its proof. 2 hours is a block at
+night out somewhere new, pick a date outfit), and every block ends with a
+15-minute **play break** (one activity from the Play section), so even a
+2-hour day has playtime; the chores have 45 minutes in the first block and
+an hour after that. A block **out** swaps the chores for one or two
+errands, each with its proof. 2 hours is a block at
 home; 4 adds one out; 8 is home, out, a **free hour** (on call: the lead
 can still send a demand), home again, and **welcome home** (be ready, and
 the arrival routine). Time left over goes to free time. The free hour's
@@ -162,7 +165,8 @@ same way: a whole look for getting ready (one from each group), two jobs
 in each of two areas for the chores (areas the day hasn't had first, so a
 twist written into an area comes up now and then), devotions, For
 {lead} and errands from a group the day hasn't used yet where it can,
-the play break up to its minutes, and the arrival routine one step from
+each block's play break before the free hour takes as many as fit its
+minutes, and the arrival routine one step from
 each of its groups (where you're found, how, the greeting, the service:
 however the menu splits it). A **change-over** suits the block it
 leads into: into a block out, Fill takes one from a "Going out" group;

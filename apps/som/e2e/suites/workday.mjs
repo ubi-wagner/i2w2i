@@ -129,7 +129,7 @@ if (!(await chores.getByText(LAUNDRY).count())) {
 }
 await r.getByText('Saved').waitFor({ timeout: 10000 });
 const filled = Number((await r.getByText(/^\d+ tasks? ·/).innerText()).match(/^(\d+)/)[1]);
-check(filled === 7, `“Fill it for me” fills the block: getting ready, four chores (two areas, two in each), devotion and one for Kay (${filled} tasks)`);
+check(filled === 8, `“Fill it for me” fills the block: getting ready, four chores (two areas, two in each), devotion, one for Kay and a play break (${filled} tasks)`);
 check(await r.locator('#plan-checkin').inputValue() === 'blocks', '…with a check-in at the end of the block');
 await audit(r, 'builder, filled in');
 await r.getByRole('button', { name: `Send to ${TITLES.follow}` }).click();

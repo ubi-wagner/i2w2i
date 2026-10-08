@@ -131,6 +131,11 @@ const playText = await playRow.innerText();
 const [, usedMin, freeMin] = /(\d+) of (\d+) min/.exec(playText) ?? [];
 check(Number(freeMin) === 60 && Number(usedMin) > 20 && Number(usedMin) <= 60 && (playText.match(/×/g) ?? []).length >= 2,
   `the play break fills the free hour, more than one activity, without going over (${usedMin} of ${freeMin} min)`);
+// Every work block ends with a play break: one activity, 15 minutes.
+for (const n of [1, 2, 4]) {
+  const brk = b.getByRole('group', { name: `Block ${n}: Play break (15 min)` });
+  check(await brk.getByRole('button', { name: /^Take out/ }).count() === 1, `block ${n} ends with a 15-minute play break, filled in`);
+}
 // Each change-over suits the block it leads into.
 const change = (n) => b.getByRole('group', { name: `Block ${n}: Change-over (15 min)` }).innerText();
 check((await change(2)).includes('Going out look'), 'the change-over into the block out is one for going out');
