@@ -70,10 +70,10 @@ await r.getByText(`${TITLES.follow}’s tasks`).waitFor();
 const second = await filled(r);
 await closeSheet(r);
 check((await r.getByText('New first: it skips what your last few scenes used').count()) === 1, 'the builder says it fills with new things first');
-// Getting ready, four chores (two areas, two in each), the devotion and one for Kay. The starter menu has six chores,
+// Getting ready, four chores (two areas, two in each), the devotion, one for Kay and a play break. The starter menu has six chores,
 // so the second scene takes the two the first didn't use, and the devotion and one for Kay are new.
 const fresh = second.slice(1, 5).filter((t) => !first.includes(t));
-check(first.length === 7 && second.length === 7 && fresh.length >= 2 && !first.includes(second[5]) && !first.includes(second[6]),
+check(first.length === 8 && second.length === 8 && fresh.length >= 2 && !first.includes(second[5]) && !first.includes(second[6]),
   `new first: the chores last time didn’t have, a different devotion and one for Kay (${first.slice(1).join(', ')} → ${second.slice(1).join(', ')})`);
 
 // ── Roleplays: never played first ───────────────────────────────────────────

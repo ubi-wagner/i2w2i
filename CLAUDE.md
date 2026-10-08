@@ -135,9 +135,11 @@ running build (see `apps/som/e2e/run.mjs`). Read `apps/som/README.md` first.
 - **The day is two-hour blocks** (`lib/blocks.ts`): getting ready (30
   min; up to 3 from each of its groups, `perGroup`) or a 15-minute change-over, chores at home (two areas, up to two
   jobs in each: `maxGroups`/`perGroup`; two jobs in an area share a room, `sharedRoom`; errands when out),
-  then Devotion and For {lead}, 15 minutes each; 8 hours adds a
+  then Devotion, For {lead} and a play break (one activity), 15 minutes
+  each: every block ends with playtime, keep it. 8 hours adds a
   free hour and welcome home; the free hour's play break holds what fits
-  its minutes (`byTime`: each item's countdown, or `PLAY_MINUTES`).
+  its minutes (`byTime`: each item's countdown, or `PLAY_MINUTES`), filled
+  after every block's own break.
   Nothing twice in a day; check-ins at the end of each block; demands any
   time. Fill it for me fills every part by those rules, spreading picks
   over a section's groups (two areas for the chores) and skipping

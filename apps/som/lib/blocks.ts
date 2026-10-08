@@ -1,7 +1,7 @@
 // A scene's day, in blocks. Each work block is two hours: getting ready
 // (30 minutes for the first, a 15-minute change-over after that), the work
-// (chores at home: two areas, up to two jobs in each; or errands when out) and two short pieces of
-// praise: one of devotion, one for the lead. A long day adds a free hour
+// (chores at home: two areas, up to two jobs in each; or errands when out), two short pieces of
+// praise (one of devotion, one for the lead) and a short play break to end it. A long day adds a free hour
 // (on call) and a welcome-home hour at the end:
 //
 //   2 hours  home
@@ -18,7 +18,7 @@ export type BlockKind = 'home' | 'out' | 'free' | 'welcome';
 export const BLOCK_KINDS: BlockKind[] = ['home', 'out', 'free', 'welcome'];
 export const isWork = (k: BlockKind) => k === 'home' || k === 'out';
 
-export type Slot = 'prep' | 'changeover' | 'chores' | 'errands' | 'devotion' | 'wishes' | 'play' | 'welcome';
+export type Slot = 'prep' | 'changeover' | 'chores' | 'errands' | 'devotion' | 'wishes' | 'break' | 'play' | 'welcome';
 
 export interface SlotSpec {
   slot: Slot;
@@ -49,6 +49,8 @@ export const CHORE_AREAS = 2;
 export const CHORES_PER_AREA = 2;
 /** A play activity with no countdown of its own is counted as this long. */
 export const PLAY_MINUTES = 20;
+/** Every work block ends with a play break this long: one activity from the Play section. */
+export const BREAK_MINUTES = 15;
 
 /** How long one thing takes in a part that fills its time: its own countdown, or the part's usual length. */
 export function itemMinutes(s: SlotSpec, minutes?: number): number {
@@ -76,11 +78,12 @@ export function slotHasRoom(s: SlotSpec, picked: number, inGroup: number | null,
 export function slotsFor(kind: BlockKind, first: boolean): SlotSpec[] {
   // Getting ready: up to 3 from each group (hair, makeup, shoes…); Fill it for me picks one of each, a whole look.
   const ready = first ? { ...S('prep', 'presentation', 1, Infinity, Infinity, 30), perGroup: PREP_PER_GROUP } : S('changeover', 'changeover', 1, 1, 1, 15);
-  const work = BLOCK_MINUTES - ready.minutes - 30;
-  const praise = [S('devotion', 'tasks', 1, 1, 1, 15), S('wishes', 'wishes', 1, 1, 1, 15)];
+  // Then devotion and one for the lead (15 minutes each), and a play break to end the block.
+  const after = [S('devotion', 'tasks', 1, 1, 1, 15), S('wishes', 'wishes', 1, 1, 1, 15), S('break', 'play', 1, 1, 1, BREAK_MINUTES)];
+  const work = BLOCK_MINUTES - ready.minutes - after.reduce((n, s) => n + s.minutes, 0);
   switch (kind) {
-    case 'home': return [ready, { ...S('chores', 'domain', 2, CHORE_AREAS * CHORES_PER_AREA, CHORE_AREAS * CHORES_PER_AREA, work), perGroup: CHORES_PER_AREA, maxGroups: CHORE_AREAS }, ...praise];
-    case 'out': return [ready, S('errands', 'errands', 1, 2, 2, work), ...praise];
+    case 'home': return [ready, { ...S('chores', 'domain', 2, CHORE_AREAS * CHORES_PER_AREA, CHORE_AREAS * CHORES_PER_AREA, work), perGroup: CHORES_PER_AREA, maxGroups: CHORE_AREAS }, ...after];
+    case 'out': return [ready, S('errands', 'errands', 1, 2, 2, work), ...after];
     case 'free': return [{ ...S('play', 'play', 0, Infinity, Infinity, 60), byTime: PLAY_MINUTES }];
     case 'welcome': return [S('welcome', 'changeover', 0, 1, 1, 60)];
   }
@@ -203,6 +206,7 @@ export function slotLabel(s: SlotSpec, lead: string): string {
     case 'errands': return 'Errands (one or two)';
     case 'devotion': return 'Devotion (15 min)';
     case 'wishes': return `For ${lead} (15 min)`;
+    case 'break': return `Play break (${BREAK_MINUTES} min)`;
     case 'play': return 'A play break (optional)';
     case 'welcome': return `Ready for ${lead} (optional)`;
   }

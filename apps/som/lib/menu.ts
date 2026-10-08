@@ -49,7 +49,7 @@ export type SectionKind =
   | 'errands' // out of the house, in an "out" block
   | 'tasks' // devotion: praise acts for the lead
   | 'wishes' // for the lead: things about the two of you
-  | 'play' // a play break in the free hour
+  | 'play' // a play break to end each block, and the free hour
   | 'arrival' // what happens when the lead arrives (a checklist, not tasks)
   | 'inspection' // categories scored 1–5
   | 'outcomes' // consequences and rewards, chosen at inspection
@@ -63,7 +63,7 @@ export const SECTION_KINDS: { kind: SectionKind; title: string; help: string }[]
   { kind: 'errands', title: 'Errands', help: 'Out of the house: one or two to an “out” block, proof and all.' },
   { kind: 'tasks', title: 'Devotion', help: 'Praise acts for the lead: one to a block, about 15 minutes.' },
   { kind: 'wishes', title: 'For {lead}', help: 'Things for the lead and the two of you: one to a block, about 15 minutes.' },
-  { kind: 'play', title: 'Play break', help: 'A break in the free hour, proof recorded.' },
+  { kind: 'play', title: 'Play break', help: 'A short break to end each block, and the free hour on a long day, proof recorded.' },
   { kind: 'arrival', title: 'Arrival routine', help: 'Shown when the lead says they’re on the way.' },
   { kind: 'inspection', title: 'Inspection & scorecard', help: 'Each item is a 1–5 score at inspection.' },
   { kind: 'outcomes', title: 'Consequences & rewards', help: 'Chosen by the lead after inspection.' },
@@ -380,7 +380,13 @@ export function starterMenu(): Menu {
           { label: 'Pick an outfit for a date, underwear to shoes, and surprise me with it this week', needs: [photo] },
         ])],
       },
-      { id: newId(), kind: 'play', title: 'Play break', groups: [g('Breaks', [{ label: 'A dance, on video', needs: [{ kind: 'video', count: 1 }], minutes: 2 }, { label: 'A voice note telling me about your day', needs: [{ kind: 'audio', count: 1 }] }])] },
+      {
+        id: newId(), kind: 'play', title: 'Play break',
+        groups: [
+          g('Moving & posing', [{ label: 'A dance, on video', needs: [{ kind: 'video', count: 1 }], minutes: 2 }, { label: 'Strike three poses for me', needs: [{ kind: 'photo', count: 3 }] }, { label: 'A selfie in your outfit', needs: [{ kind: 'photo', count: 2 }] }, { label: 'Stretch for ten minutes', needs: [photo], minutes: 10 }]),
+          g('Stillness & focus', [{ label: 'A voice note telling me about your day', needs: [{ kind: 'audio', count: 1 }] }, { label: 'Five minutes of breathing', needs: [{ kind: 'audio', count: 1, label: 'how it went' }], minutes: 5 }, { label: 'Write me a flirty message', needs: [{ kind: 'text', count: 1 }] }]),
+        ],
+      },
       { id: newId(), kind: 'arrival', title: 'Arrival routine', groups: [g('The greeting', ['Meet at the door with a drink']), g('The service', ['Take my coat and shoes'])] },
       { id: newId(), kind: 'inspection', title: 'Inspection & scorecard', groups: [g('Categories', ['Presentation', 'Task completion', 'Quality of work', 'Attitude'])] },
       { id: newId(), kind: 'outcomes', title: 'Consequences & rewards', groups: [g('Consequences', [{ label: 'An extra chore' }, { label: 'Early night', param: 'mins early' }]), g('Rewards', [{ label: 'Movie pick' }, { label: 'Massage', param: 'mins' }])] },

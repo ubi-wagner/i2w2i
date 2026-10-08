@@ -258,7 +258,7 @@ export function Builder({ data, reload }: { data: SceneData; reload: () => Promi
           </div>
         )}
         <p className="text-sm text-ink-soft">
-          Two-hour blocks: getting ready (or a 15-minute change-over), chores at home (two areas, up to two jobs in each) or errands out, then devotion and one for {lead}, 15 minutes each.
+          Two-hour blocks: getting ready (or a 15-minute change-over), chores at home (two areas, up to two jobs in each) or errands out, then devotion, one for {lead} and a play break, 15 minutes each.
           {plan.blocks.some((b) => b.kind === 'free') ? ' A long day has a free hour, on call, and ends with welcome home.' : ''}
         </p>
         {editable && (

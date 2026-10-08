@@ -422,46 +422,46 @@ export function autoFill(menu: Menu, plan: Plan, rand: () => number = Math.rando
   };
 
   const timed = schedule(next.blocks.map((b) => b.kind), windowHours ? Math.round(windowHours * 60) : undefined);
-  next.blocks.forEach((b, i) => {
-    for (const s of slotsFor(b.kind, timed[i]?.first ?? false)) {
-      const mine = b.items.filter((id) => items.get(id)?.kind === s.kind);
-      const add = (it: MenuItem) => { take(it, b); mark(s.kind, it.id); };
-      if (s.perGroup && s.maxGroups) {
-        // Chores: two areas (the one already started counts), up to two jobs in each, the areas the day hasn't had first.
-        const has = new Map<string, number>();
-        for (const id of mine) { const g = groupOf.get(id); if (g) has.set(g, (has.get(g) ?? 0) + 1); }
-        let n = mine.length;
-        for (const it of spread(s.kind, s.slot, undefined, b.kind)) {
-          const g = groupOf.get(it.id)!;
-          const k = has.get(g) ?? 0;
-          if (n >= s.fill) break;
-          if (k >= s.perGroup || (!k && has.size >= s.maxGroups)) continue;
-          has.set(g, k + 1);
-          add(it);
-          n++;
-        }
-      } else if (s.perGroup) {
-        // Getting ready: one from each group that has nothing yet, a whole look around what's picked.
-        const has = new Set(mine.map((id) => groupOf.get(id)));
-        for (const it of spread(s.kind, s.slot, has)) if (!has.has(groupOf.get(it.id))) { has.add(groupOf.get(it.id)); add(it); }
-      } else if (s.byTime) {
-        // The play break: as many as fit the free time (each its countdown, or the usual length).
-        const length = timed[i] ? timed[i]!.end - timed[i]!.start : s.minutes;
-        let usedMin = mine.reduce((n, id) => n + itemMinutes(s, items.get(id)?.minutes), 0);
-        for (const it of spread(s.kind, s.slot)) {
-          const m = itemMinutes(s, it.minutes);
-          if (usedMin + m <= length) { add(it); usedMin += m; }
-        }
-      } else {
-        // Each from a different group while there are others: one way to go and one place to go on errands, say.
-        const has = new Set(mine.map((id) => groupOf.get(id)));
-        const want = Math.max(0, s.fill - mine.length);
-        const cands = spread(s.kind, s.slot, undefined, b.kind);
-        const fresh = cands.filter((it) => !has.has(groupOf.get(it.id)));
-        for (const it of [...fresh, ...cands.filter((it) => !fresh.includes(it))].slice(0, want)) add(it);
+  // Every part, block by block; the free hour's play last, so each block's own play break gets one first.
+  const parts = next.blocks.flatMap((b, i) => slotsFor(b.kind, timed[i]?.first ?? false).map((s) => ({ b, i, s })));
+  for (const { b, i, s } of [...parts.filter((x) => !x.s.byTime), ...parts.filter((x) => x.s.byTime)]) {
+    const mine = b.items.filter((id) => items.get(id)?.kind === s.kind);
+    const add = (it: MenuItem) => { take(it, b); mark(s.kind, it.id); };
+    if (s.perGroup && s.maxGroups) {
+      // Chores: two areas (the one already started counts), up to two jobs in each, the areas the day hasn't had first.
+      const has = new Map<string, number>();
+      for (const id of mine) { const g = groupOf.get(id); if (g) has.set(g, (has.get(g) ?? 0) + 1); }
+      let n = mine.length;
+      for (const it of spread(s.kind, s.slot, undefined, b.kind)) {
+        const g = groupOf.get(it.id)!;
+        const k = has.get(g) ?? 0;
+        if (n >= s.fill) break;
+        if (k >= s.perGroup || (!k && has.size >= s.maxGroups)) continue;
+        has.set(g, k + 1);
+        add(it);
+        n++;
       }
+    } else if (s.perGroup) {
+      // Getting ready: one from each group that has nothing yet, a whole look around what's picked.
+      const has = new Set(mine.map((id) => groupOf.get(id)));
+      for (const it of spread(s.kind, s.slot, has)) if (!has.has(groupOf.get(it.id))) { has.add(groupOf.get(it.id)); add(it); }
+    } else if (s.byTime) {
+      // The play break: as many as fit the free time (each its countdown, or the usual length).
+      const length = timed[i] ? timed[i]!.end - timed[i]!.start : s.minutes;
+      let usedMin = mine.reduce((n, id) => n + itemMinutes(s, items.get(id)?.minutes), 0);
+      for (const it of spread(s.kind, s.slot)) {
+        const m = itemMinutes(s, it.minutes);
+        if (usedMin + m <= length) { add(it); usedMin += m; }
+      }
+    } else {
+      // Each from a different group while there are others: one way to go and one place to go on errands, say.
+      const has = new Set(mine.map((id) => groupOf.get(id)));
+      const want = Math.max(0, s.fill - mine.length);
+      const cands = spread(s.kind, s.slot, undefined, b.kind);
+      const fresh = cands.filter((it) => !has.has(groupOf.get(it.id)));
+      for (const it of [...fresh, ...cands.filter((it) => !fresh.includes(it))].slice(0, want)) add(it);
     }
-  });
+  }
   // The arrival routine: one from each of its groups, in its order (where, how, the greeting, the service…), and at least three.
   const steps = Math.max(3, section(menu, 'arrival').groups.filter((g) => g.items.length).length);
   if (!picked(menu, next, 'arrival').length) for (const it of spread('arrival').slice(0, steps)) take(it);

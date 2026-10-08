@@ -379,7 +379,7 @@ describe('fill it for me', () => {
     expect(pacingForHours(menu, 30)?.hours).toBe(8);
   });
 
-  it('fills every block: getting ready, chores from two areas (or errands), devotion and one for the lead', () => {
+  it('fills every block: getting ready, chores from two areas (or errands), devotion, one for the lead and a play break', () => {
     const shower = find(menu, 'Shower');
     const base = cleanPlan({ ...emptyPlan(menu, 8), picks: { [shower.id]: {} }, blocks: [{ kind: 'home', items: [shower.id] }, { kind: 'out', items: [] }, { kind: 'free', items: [] }, { kind: 'home', items: [] }, { kind: 'welcome', items: [] }] });
     const p = autoFill(menu, base, rand);
@@ -390,12 +390,14 @@ describe('fill it for me', () => {
     expect(count(0, 'presentation')).toBe(2);
     expect(p.blocks[0]!.items.filter((id) => shoes.has(id))).toHaveLength(1);
     // Chores: two areas, two jobs in each (four).
-    expect([count(0, 'domain'), count(0, 'tasks'), count(0, 'wishes')]).toEqual([4, 1, 1]);
-    expect([count(1, 'changeover'), count(1, 'errands'), count(1, 'tasks'), count(1, 'wishes')]).toEqual([1, 2, 1, 1]);
-    // The free hour fills with as many play activities as fit it (both of these: 2 min + about 20).
-    expect(kinds(p, 2)).toEqual(['play', 'play']);
+    expect([count(0, 'domain'), count(0, 'tasks'), count(0, 'wishes'), count(0, 'play')]).toEqual([4, 1, 1, 1]);
+    expect([count(1, 'changeover'), count(1, 'errands'), count(1, 'tasks'), count(1, 'wishes'), count(1, 'play')]).toEqual([1, 2, 1, 1, 1]);
+    // The free hour fills with as many play activities as fit it (each its countdown, or about 20 minutes).
+    const mins = (id: string) => itemsById(menu).get(id)!.item.minutes ?? 20;
+    expect(kinds(p, 2).length).toBeGreaterThan(1);
+    expect(kinds(p, 2).every((k) => k === 'play') && p.blocks[2]!.items.reduce((n, id) => n + mins(id), 0) <= 60).toBe(true);
     // Only one area is left by then (nothing twice in a day): its two jobs.
-    expect([count(3, 'changeover'), count(3, 'domain'), count(3, 'tasks'), count(3, 'wishes')]).toEqual([1, 2, 1, 1]);
+    expect([count(3, 'changeover'), count(3, 'domain'), count(3, 'tasks'), count(3, 'wishes'), count(3, 'play')]).toEqual([1, 2, 1, 1, 1]);
     // The welcome home gets a look for the lead's return; change-overs don't.
     const welcome = new Set(section(menu, 'changeover').groups.find((g) => g.title === 'Welcome home')!.items.map((i) => i.id));
     expect(p.blocks[4]!.items.every((id) => welcome.has(id)) && p.blocks[4]!.items.length).toBe(1);
@@ -490,8 +492,9 @@ describe('fill it for me', () => {
         const play = p.blocks.find((b) => b.kind === 'free')!.items.filter((id) => g.has(id));
         const total = play.reduce((t, id) => t + mins(id), 0);
         expect(total).toBeLessThanOrEqual(free);
-        // Nothing else would have fit.
-        const left = section(wide, 'play').groups.flatMap((x) => x.items).filter((i) => !play.includes(i.id));
+        // Nothing else would have fit (of what the blocks' own play breaks didn't take).
+        const day = new Set(p.blocks.flatMap((b) => b.items));
+        const left = section(wide, 'play').groups.flatMap((x) => x.items).filter((i) => !day.has(i.id));
         expect(left.every((i) => total + mins(i.id) > free)).toBe(true);
         expect(new Set(play.slice(0, 3).map((id) => g.get(id))).size).toBe(Math.min(3, play.length)); // spread over the groups
       }
@@ -507,15 +510,15 @@ describe('fill it for me', () => {
     }
   });
 
-  it('a full day keeps every pick: eight looks, four chores, the devotion and one for the lead in one block', () => {
+  it('a full day keeps every pick: eight looks, four chores, the devotion, one for the lead and the play break in one block', () => {
     const looks = cleanMenu({ ...menu, sections: menu.sections.map((sec) => (sec.kind === 'presentation' ? { ...sec, groups: Array.from({ length: 8 }, (_, g) => ({ id: `look${g}`, title: `Look ${g}`, items: [1, 2, 3].map((n) => ({ id: `look${g}-${n}`, label: `Look ${g}.${n}` })) })) } : sec)) });
     const p = autoFill(looks, cleanPlan({ ...emptyPlan(looks, 2) }), Math.random);
     const kindsIn = p.blocks[0]!.items.map((id) => itemsById(looks).get(id)?.section.kind);
-    expect(['presentation', 'domain', 'tasks', 'wishes'].map((k) => kindsIn.filter((x) => x === k).length)).toEqual([8, 4, 1, 1]);
+    expect(['presentation', 'domain', 'tasks', 'wishes', 'play'].map((k) => kindsIn.filter((x) => x === k).length)).toEqual([8, 4, 1, 1, 1]);
     // By hand, three of each look as well: still all there after saving.
     const all = section(looks, 'presentation').groups.flatMap((g) => g.items.map((i) => i.id));
     const big = cleanPlan({ ...p, blocks: [{ kind: 'home', items: [...new Set([...all, ...p.blocks[0]!.items])] }] });
-    expect(big.blocks[0]!.items).toHaveLength(24 + 6);
+    expect(big.blocks[0]!.items).toHaveLength(24 + 7);
   });
 
   it('two jobs in one area are in the same room, whether Fill or the lead picks the second', () => {
@@ -534,6 +537,17 @@ describe('fill it for me', () => {
     const [shower, outfit, slippers] = ['Shower', 'Outfit of your choosing', 'Slippers'].map((l) => find(menu, l));
     const plan = cleanPlan({ ...emptyPlan(menu, 2), picks: { [shower!.id]: {}, [outfit!.id]: {}, [slippers!.id]: {} }, blocks: [{ kind: 'home', items: [slippers!.id, outfit!.id, shower!.id] }] });
     expect(planToTasks(menu, plan).find((t) => t.kind === 'presentation')!.checklist).toEqual(['Shower', 'Outfit of your choosing', 'Slippers']);
+  });
+
+  it('every block’s play break gets one before the free hour takes the rest, even from a short list', () => {
+    const g = groupOfIn(wide, 'play'); // six activities
+    for (let n = 0; n < 20; n++) {
+      const p = autoFill(wide, cleanPlan({ ...emptyPlan(wide, 12) }), Math.random, 12);
+      const work = p.blocks.filter((b) => b.kind === 'home' || b.kind === 'out');
+      expect(work.length).toBe(5);
+      expect(work.every((b) => b.items.filter((id) => g.has(id)).length === 1)).toBe(true);
+      expect(p.blocks.find((b) => b.kind === 'free')!.items.filter((id) => g.has(id)).length).toBe(1);
+    }
   });
 
   it('knows which roleplays were played, how often and when last', () => {
