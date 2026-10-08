@@ -64,11 +64,14 @@ await b.reload();
 await b.getByText('would like to delete this scene').waitFor();
 check(true, 'asking shows the request on the other phone; nothing is deleted yet');
 await r.getByRole('button', { name: 'Take it back' }).click();
+// Once it's taken back Kay's screen offers to delete again; only then look on Sunny's.
+await r.getByRole('button', { name: 'Delete this scene…' }).waitFor();
 await b.reload();
 await b.getByText('Your tasks').waitFor();
 check((await b.getByText('would like to delete this scene').count()) === 0, 'taking it back withdraws the request');
 await r.getByRole('button', { name: 'Delete this scene…' }).click();
 await r.getByRole('button', { name: 'Ask to delete' }).click();
+await r.getByText('You asked to delete this scene').waitFor();
 await b.reload();
 await b.getByRole('button', { name: 'Agree and delete' }).click();
 await b.waitForURL(`${BASE}/`);
